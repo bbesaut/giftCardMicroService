@@ -13,7 +13,7 @@ import com.finovago.p2p.service.GiftCardService;
 
 
 @RestController
-@RequestMapping("/redeem")
+@RequestMapping("/api/giftcards")
 @CrossOrigin(origins = "http://localhost:3000")
 public class GiftCardController
 {
@@ -23,13 +23,13 @@ public class GiftCardController
         this.giftCardService = giftCardService;
     }
     
-    @PostMapping("/giftcard/{giftCardCode}")
+    @PostMapping("/redeem/{giftCardCode}")
     public String redeemGiftCard(@PathVariable String giftCardCode,@RequestParam double amount)
     {
         return "Amount to pay after applying gift card: " + giftCardService.redeemGiftCard(giftCardCode, amount);
     }
 
-    @PostMapping("/giftcard/create")
+    @PostMapping("/create")
     @ResponseStatus(HttpStatus.CREATED)
     public String createGiftCard(@RequestParam String giftCardCode,@RequestParam double balance, @RequestParam boolean active)
     {
