@@ -1,5 +1,5 @@
 # Étape d'exécution (ultra légère)
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 # On copie le .jar généré par l'étape de build de GitHub Actions
 COPY target/*.jar app.jar
