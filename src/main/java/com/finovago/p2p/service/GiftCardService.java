@@ -1,49 +1,97 @@
 package com.finovago.p2p.service;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.exception.InactiveGiftCardException;
 import com.finovago.p2p.exception.UnknownGiftCardException;
 import com.finovago.p2p.model.GiftCard;
-import com.finovago.p2p.repository.GiftCardRepository;  
+import com.finovago.p2p.repository.GiftCardRepository;
+
+import jakarta.transaction.Transactional;
 
 @Service
 public class GiftCardService {
-    private GiftCardRepository giftCardRepository;
+    private final GiftCardRepository giftCardRepository;
+    private final Executor taskExecutor;
+    private static final Logger log = LoggerFactory.getLogger(GiftCardService.class);
 
-    public GiftCardService(GiftCardRepository giftCardRepository) {
+    public GiftCardService(GiftCardRepository giftCardRepository, @Qualifier("taskExecutor") Executor taskExecutor) {
         this.giftCardRepository = giftCardRepository;
+        this.taskExecutor = taskExecutor;
     }
 
-    public double redeemGiftCard(String cardCode, double amount)
-    {
-        if(cardCode == null || cardCode.isEmpty()) throw new IllegalArgumentException("Card code cannot be null or empty");
-        if(amount <= 0) throw new IllegalArgumentException("Amount must be greater than zero");
+    @Async("taskExecutor")
+    public CompletableFuture<RedemptionResponse> redeemGiftCardAsync(String code,double amount) {
+        return CompletableFuture.supplyAsync(() -> {
+                return executeRedemptionSync(code, amount);
+        }, taskExecutor);
+    }
 
-        GiftCard giftCard = giftCardRepository.findByCardCode(cardCode).orElseThrow(() -> new UnknownGiftCardException("Gift card with code " + cardCode + " not found"));
+    @Transactional
+    public RedemptionResponse executeRedemptionSync(String code, double amount) {
 
-        if(!giftCard.isActive()) throw new InactiveGiftCardException("Gift card with code " + cardCode + " is inactive");
+        log.info("Processing database validation for card code: {}", code);
 
-        double remainingToPay;
+        long startTime = System.currentTimeMillis();
+
+        if (code == null || code.isEmpty()) {
+            throw new IllegalArgumentException("Card code invalid");
+        }
+
+        if (amount <= 0) {
+            throw new IllegalArgumentException("Amount must be greater than zero");
+        }
+
+        GiftCard giftCard = giftCardRepository.findByCardCode(code)
+                .orElseThrow(() -> new UnknownGiftCardException("Gift card not found"));
+
+        if (!giftCard.isActive()) {
+            throw new InactiveGiftCardException("Card is already inactive");
+        }
+
+        double deducted;
+        double remainingToPay = 0;
 
         if (giftCard.getBalance() > amount) {
             giftCard.deductBalance(amount);
-            remainingToPay = 0.0;
+            deducted = amount;
         } else {
-            amount = amount - giftCard.getBalance();
+            deducted = giftCard.getBalance();
+            remainingToPay = amount - giftCard.getBalance();
             giftCard.drainCard();
-            remainingToPay = amount;
         }
 
         giftCardRepository.save(giftCard);
-        return remainingToPay;
+
+        long duration = System.currentTimeMillis() - startTime;
+
+        log.info("Redemption done in {}ms. Remaining balance: {}", duration, giftCard.getBalance());
+
+        return new RedemptionResponse(
+                "SUCCESS",
+                deducted,
+                giftCard.getBalance(),
+                remainingToPay
+        );
     }
 
-    public void createGiftCard(String cardCode, double balance, boolean active)
-    {
-        if(cardCode == null || cardCode.isEmpty()) throw new IllegalArgumentException("Card code cannot be null or empty");
-        if(balance < 0) throw new IllegalArgumentException("Balance cannot be negative");
+    @Transactional
+    public void createGiftCard(String cardCode, double balance, boolean active) {
+        if (cardCode == null || cardCode.isEmpty()) throw new IllegalArgumentException("Card code cannot be null or empty");
+        if (balance < 0) throw new IllegalArgumentException("Balance cannot be negative");
+
+        log.debug("Database command issued: Instantiating new entity record for code: {}", cardCode);
 
         GiftCard giftCard = new GiftCard(cardCode, balance, active);
         giftCardRepository.save(giftCard);
+
+        log.info("Administrative Event: Gift card [{}] successfully registered into database vault.", cardCode);
     }
 }
