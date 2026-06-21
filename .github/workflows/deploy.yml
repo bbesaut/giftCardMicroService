@@ -38,7 +38,7 @@ jobs:
       with:
         context: .
         push: true
-        tags: ${{ secrets.DOCKERHUB_USERNAME }}/mini-microservice:latest
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/giftcard-microservice:latest
 
     # 6. Déploiement automatique sur Render
     - name: Deploy to Render
