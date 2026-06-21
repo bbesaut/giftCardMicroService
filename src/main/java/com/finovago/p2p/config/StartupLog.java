@@ -10,7 +10,6 @@ import org.springframework.stereotype.Component;
 public class StartupLog {
     private static final Logger log = LoggerFactory.getLogger(StartupLog.class);
 
-    @Autowired
     public StartupLog(Environment env) {
         String[] profiles = env.getActiveProfiles();
         String activeProfile = profiles.length > 0 ? profiles[0] : "default";
