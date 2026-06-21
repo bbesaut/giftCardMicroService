@@ -3,6 +3,7 @@ import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,6 +52,17 @@ class GiftCardServiceIntegrationTest
         GiftCard giftCard = giftCardRepository.findByCardCode(giftCardCode).orElseThrow(() -> new RuntimeException("Gift card not found"));
         assertEquals(0.0, giftCard.getBalance());
         assertFalse(giftCard.isActive());
+    }
+
+    @Test
+    void should_throw_exception_when_creating_duplicate_gift_card_code() {
+        String duplicateCode = "DUPLICATE_CODE";
+        
+        giftCardService.createGiftCard(duplicateCode, 100.0, true);
+
+        assertThrows(IllegalArgumentException.class, () -> {
+            giftCardService.createGiftCard(duplicateCode, 50.0, true);
+        });
     }
 
     @Test

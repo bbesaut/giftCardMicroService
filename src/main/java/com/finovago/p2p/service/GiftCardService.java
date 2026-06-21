@@ -1,4 +1,5 @@
 package com.finovago.p2p.service;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
@@ -86,6 +87,8 @@ public class GiftCardService {
     public void createGiftCard(String cardCode, double balance, boolean active) {
         if (cardCode == null || cardCode.isEmpty()) throw new IllegalArgumentException("Card code cannot be null or empty");
         if (balance < 0) throw new IllegalArgumentException("Balance cannot be negative");
+        Optional<GiftCard> existingCard = giftCardRepository.findByCardCode(cardCode);
+        if (existingCard.isPresent()) throw new IllegalArgumentException("Gift card with this code already exists");
 
         log.debug("Database command issued: Instantiating new entity record for code: {}", cardCode);
 
