@@ -74,6 +74,18 @@ class GiftCardServiceUnitTest
     }
 
     @Test
+    void should_throw_exception_when_code_already_exists() {
+        String existingCode = "ALREADY_EXISTS";
+        GiftCard fakeExistingCard = new GiftCard(existingCode, 100.0, true);
+        
+        when(giftCardRepository.findByCardCode(existingCode)).thenReturn(Optional.of(fakeExistingCard));
+
+        assertThrows(IllegalArgumentException.class, () -> 
+            giftCardService.createGiftCard(existingCode, 100.0, true)
+        );
+    }
+
+    @Test
     void should_drain_card_when_insufficient_funds()
     {
         String cardCode = "VALID456";
