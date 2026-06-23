@@ -39,5 +39,8 @@
             <appender-ref ref="LOKI" />
         </root>
         <logger name="com.finovago.p2p" level="INFO" />
+
+        <logger name="org.springframework.web" level="WARN" />
+        <logger name="org.apache.tomcat" level="WARN" />
     </springProfile>
 </configuration>
