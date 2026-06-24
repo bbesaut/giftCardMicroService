@@ -10,6 +10,7 @@ import org.mockito.Mock;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.exception.InactiveGiftCardException;
 import com.finovago.p2p.exception.UnknownGiftCardException;
@@ -81,7 +82,7 @@ class GiftCardServiceUnitTest
         when(giftCardRepository.findByCardCode(existingCode)).thenReturn(Optional.of(fakeExistingCard));
 
         assertThrows(IllegalArgumentException.class, () -> 
-            giftCardService.createGiftCard(existingCode, 100.0, true)
+            giftCardService.createGiftCard(new GiftCardCreateRequest(existingCode, 0, false))
         );
     }
 

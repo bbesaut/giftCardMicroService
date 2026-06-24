@@ -1,4 +1,5 @@
 package com.finovago.p2p.service;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -9,6 +10,8 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import org.springframework.transaction.annotation.Transactional;
+
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.GiftCardResponse;
 import com.finovago.p2p.dto.RedemptionResponse;
@@ -16,8 +19,6 @@ import com.finovago.p2p.exception.InactiveGiftCardException;
 import com.finovago.p2p.exception.UnknownGiftCardException;
 import com.finovago.p2p.model.GiftCard;
 import com.finovago.p2p.repository.GiftCardRepository;
-
-import jakarta.transaction.Transactional;
 
 @Service
 public class GiftCardService {
@@ -101,5 +102,15 @@ public class GiftCardService {
         log.info("Administrative Event: Gift card [{}] successfully registered into database vault.", request.giftCardCode());
 
         return new GiftCardResponse(savedCard.getCardCode(), savedCard.getBalance(), savedCard.isActive());
+    }
+
+    @Transactional(readOnly = true)
+    public List<GiftCardResponse> getAllGiftCards() {
+        log.info("Fetching all gift cards from database");
+        
+        return giftCardRepository.findAll()
+                .stream()
+                .map(card -> new GiftCardResponse(card.getCardCode(), card.getBalance(), card.isActive()))
+                .toList();
     }
 }
