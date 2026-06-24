@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import com.finovago.p2p.dto.GiftCardCreateRequest;
+import com.finovago.p2p.dto.RedemptionRequest;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.model.GiftCard;
 import com.finovago.p2p.repository.GiftCardRepository;
@@ -30,7 +32,9 @@ class GiftCardServiceIntegrationTest
         double balance = 100.0;
         boolean active = true;
 
-        giftCardService.createGiftCard(giftCardCode, balance, active);
+        GiftCardCreateRequest request = new GiftCardCreateRequest(giftCardCode, balance, active);
+
+        giftCardService.createGiftCard(request);
 
         assertTrue(giftCardRepository.findByCardCode(giftCardCode).isPresent());
     }
@@ -42,7 +46,8 @@ class GiftCardServiceIntegrationTest
         double balance = 30.0;
         boolean active = true;
 
-        giftCardService.createGiftCard(giftCardCode, balance, active);
+        GiftCardCreateRequest createRequest = new GiftCardCreateRequest(giftCardCode, balance, active);
+        giftCardService.createGiftCard(createRequest);
 
         double amountToRedeem = 30.0;
         CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(giftCardCode, amountToRedeem);
@@ -58,10 +63,12 @@ class GiftCardServiceIntegrationTest
     void should_throw_exception_when_creating_duplicate_gift_card_code() {
         String duplicateCode = "DUPLICATE_CODE";
         
-        giftCardService.createGiftCard(duplicateCode, 100.0, true);
+        GiftCardCreateRequest createRequest = new GiftCardCreateRequest(duplicateCode, 100.0, true);
+        giftCardService.createGiftCard(createRequest);
 
         assertThrows(IllegalArgumentException.class, () -> {
-            giftCardService.createGiftCard(duplicateCode, 50.0, true);
+            GiftCardCreateRequest duplicateRequest = new GiftCardCreateRequest(duplicateCode, 50.0, true);
+            giftCardService.createGiftCard(duplicateRequest);
         });
     }
 
@@ -72,7 +79,8 @@ class GiftCardServiceIntegrationTest
         double balance = 50.0;
         boolean active = true;
 
-        giftCardService.createGiftCard(giftCardCode, balance, active);
+        GiftCardCreateRequest createRequest = new GiftCardCreateRequest(giftCardCode, balance, active);
+        giftCardService.createGiftCard(createRequest);
 
         double amountToRedeem = 100.0;
         CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(giftCardCode, amountToRedeem);
