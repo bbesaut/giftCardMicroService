@@ -8,13 +8,17 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.service.GiftCardService;
+
+import jakarta.validation.Valid;
 
 
 @RestController
@@ -45,9 +49,13 @@ public class GiftCardController
 
     @PostMapping("/create")
     @ResponseStatus(HttpStatus.CREATED)
-    public String createGiftCard(@RequestParam String giftCardCode,@RequestParam double balance, @RequestParam boolean active)
-    {
-        giftCardService.createGiftCard(giftCardCode, balance, active);
+    public String createGiftCard(@Valid @RequestBody GiftCardCreateRequest request) {
+        
+        log.info("Received gift card creation request. Code: {}, Balance: {}, Active: {}", 
+        request.giftCardCode(), request.balance(), request.active());
+        
+        giftCardService.createGiftCard(request);
+        
         return "Gift card created successfully";
     }
 }

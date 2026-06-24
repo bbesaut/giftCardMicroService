@@ -9,6 +9,8 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import com.finovago.p2p.dto.GiftCardCreateRequest;
+import com.finovago.p2p.dto.GiftCardResponse;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.exception.InactiveGiftCardException;
 import com.finovago.p2p.exception.UnknownGiftCardException;
@@ -83,18 +85,21 @@ public class GiftCardService {
         );
     }
 
+
     @Transactional
-    public void createGiftCard(String cardCode, double balance, boolean active) {
-        if (cardCode == null || cardCode.isEmpty()) throw new IllegalArgumentException("Card code cannot be null or empty");
-        if (balance < 0) throw new IllegalArgumentException("Balance cannot be negative");
-        Optional<GiftCard> existingCard = giftCardRepository.findByCardCode(cardCode);
-        if (existingCard.isPresent()) throw new IllegalArgumentException("Gift card with this code already exists");
+    public GiftCardResponse createGiftCard(GiftCardCreateRequest request) {
+        Optional<GiftCard> existingCard = giftCardRepository.findByCardCode(request.giftCardCode());
+        if (existingCard.isPresent()) {
+            throw new IllegalArgumentException("Gift card with this code already exists");
+        }
 
-        log.debug("Database command issued: Instantiating new entity record for code: {}", cardCode);
+        log.debug("Database command issued: Instantiating new entity record for code: {}", request.giftCardCode());
 
-        GiftCard giftCard = new GiftCard(cardCode, balance, active);
-        giftCardRepository.save(giftCard);
+        GiftCard giftCard = new GiftCard(request.giftCardCode(), request.balance(), request.active());
+        GiftCard savedCard = giftCardRepository.save(giftCard);
 
-        log.info("Administrative Event: Gift card [{}] successfully registered into database vault.", cardCode);
+        log.info("Administrative Event: Gift card [{}] successfully registered into database vault.", request.giftCardCode());
+
+        return new GiftCardResponse(savedCard.getCardCode(), savedCard.getBalance(), savedCard.isActive());
     }
 }
