@@ -1,4 +1,5 @@
 package com.finovago.p2p.service;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -9,13 +10,15 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import org.springframework.transaction.annotation.Transactional;
+
+import com.finovago.p2p.dto.GiftCardCreateRequest;
+import com.finovago.p2p.dto.GiftCardResponse;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.exception.InactiveGiftCardException;
 import com.finovago.p2p.exception.UnknownGiftCardException;
 import com.finovago.p2p.model.GiftCard;
 import com.finovago.p2p.repository.GiftCardRepository;
-
-import jakarta.transaction.Transactional;
 
 @Service
 public class GiftCardService {
@@ -83,18 +86,31 @@ public class GiftCardService {
         );
     }
 
+
     @Transactional
-    public void createGiftCard(String cardCode, double balance, boolean active) {
-        if (cardCode == null || cardCode.isEmpty()) throw new IllegalArgumentException("Card code cannot be null or empty");
-        if (balance < 0) throw new IllegalArgumentException("Balance cannot be negative");
-        Optional<GiftCard> existingCard = giftCardRepository.findByCardCode(cardCode);
-        if (existingCard.isPresent()) throw new IllegalArgumentException("Gift card with this code already exists");
+    public GiftCardResponse createGiftCard(GiftCardCreateRequest request) {
+        Optional<GiftCard> existingCard = giftCardRepository.findByCardCode(request.giftCardCode());
+        if (existingCard.isPresent()) {
+            throw new IllegalArgumentException("Gift card with this code already exists");
+        }
 
-        log.debug("Database command issued: Instantiating new entity record for code: {}", cardCode);
+        log.debug("Database command issued: Instantiating new entity record for code: {}", request.giftCardCode());
 
-        GiftCard giftCard = new GiftCard(cardCode, balance, active);
-        giftCardRepository.save(giftCard);
+        GiftCard giftCard = new GiftCard(request.giftCardCode(), request.balance(), request.active());
+        GiftCard savedCard = giftCardRepository.save(giftCard);
 
-        log.info("Administrative Event: Gift card [{}] successfully registered into database vault.", cardCode);
+        log.info("Administrative Event: Gift card [{}] successfully registered into database vault.", request.giftCardCode());
+
+        return new GiftCardResponse(savedCard.getCardCode(), savedCard.getBalance(), savedCard.isActive());
+    }
+
+    @Transactional(readOnly = true)
+    public List<GiftCardResponse> getAllGiftCards() {
+        log.info("Fetching all gift cards from database");
+        
+        return giftCardRepository.findAll()
+                .stream()
+                .map(card -> new GiftCardResponse(card.getCardCode(), card.getBalance(), card.isActive()))
+                .toList();
     }
 }
