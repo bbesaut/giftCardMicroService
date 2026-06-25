@@ -31,7 +31,7 @@ import jakarta.validation.Valid;
 @RestController
 @RequestMapping("/api/v1/giftcards")
 @CrossOrigin(origins = "http://localhost:3000")
-@Tag(name = "GiftCard Management", description = "Endpoints to manage gift cards, including creation, listing, and redemption.")
+@Tag(name = "Gift Cards", description = "Gift card management endpoints.")
 public class GiftCardController
 {
     private static final Logger log = LoggerFactory.getLogger(GiftCardController.class);
