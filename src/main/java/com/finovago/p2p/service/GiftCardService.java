@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.GiftCardResponse;
 import com.finovago.p2p.dto.RedemptionResponse;
+import com.finovago.p2p.dto.RedemptionRequest;
 import com.finovago.p2p.exception.InactiveGiftCardException;
 import com.finovago.p2p.exception.UnknownGiftCardException;
 import com.finovago.p2p.model.GiftCard;
