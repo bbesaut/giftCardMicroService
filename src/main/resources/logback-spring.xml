@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
+    <springProperty scope="context" name="LOKI_USER" source="loki.username"/>
+    <springProperty scope="context" name="LOKI_TOKEN" source="loki.password"/>
+    
     <include resource="org/springframework/boot/logging/logback/defaults.xml" />
     <include resource="org/springframework/boot/logging/logback/console-appender.xml" />
 
@@ -35,6 +38,11 @@
             <appender-ref ref="CONSOLE" />
             <appender-ref ref="LOKI" />
         </root>
+
         <logger name="com.finovago.p2p" level="INFO" />
+
+        <logger name="org.springframework.web" level="WARN" />
+        <logger name="org.springframework.web.servlet" level="WARN" />
+        <logger name="org.springframework.web.servlet.DispatcherServlet" level="WARN" />
     </springProfile>
 </configuration>
