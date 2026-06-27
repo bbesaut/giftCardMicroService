@@ -35,7 +35,7 @@ public class GlobalExceptionHandler {
         log.warn(ex.getMessage()); // log the throw message
 
         return ResponseEntity
-                .status(HttpStatus.UNPROCESSABLE_CONTENT) 
+                .status(HttpStatus.UNPROCESSABLE_ENTITY) 
                 .body(Map.of(
                     "error", "Unprocessable Entity",
                     "message", ex.getMessage(), 
