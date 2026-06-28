@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.MDC;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -27,7 +28,12 @@ public class MdcFilter extends OncePerRequestFilter {
 
             MDC.put("correlationId", correlationId);
 
-            filterChain.doFilter(request, response); 
+            String authHeader = request.getHeader("Authorization");
+            
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                filterChain.doFilter(request, response);
+                return;
+            } 
 
         } finally {
             MDC.clear();
