@@ -32,10 +32,9 @@ public class GiftCardService {
         this.taskExecutor = taskExecutor;
     }
 
-    @Async("taskExecutor")
-    public CompletableFuture<RedemptionResponse> redeemGiftCardAsync(String code,double amount) {
+    public CompletableFuture<RedemptionResponse> redeemGiftCardAsync(RedemptionRequest request) {
         return CompletableFuture.supplyAsync(() -> {
-                return executeRedemptionSync(code, amount);
+                return executeRedemptionSync(request.giftCardCode(), request.amount());
         }, taskExecutor);
     }
 
