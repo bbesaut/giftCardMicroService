@@ -46,13 +46,6 @@
         }
 
         @Bean
-        public UserDetailsService userDetailsService() {
-            return username -> {
-                throw new UsernameNotFoundException("No local users");
-            };
-        }
-
-        @Bean
         public PasswordEncoder passwordEncoder() {
             return new BCryptPasswordEncoder();
         }
