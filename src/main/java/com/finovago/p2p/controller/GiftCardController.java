@@ -51,10 +51,7 @@ public class GiftCardController
     public CompletableFuture<RedemptionResponse> redeemGiftCard(@Valid @RequestBody RedemptionRequest request) {
         log.info("Received redemption request. Code: {}, Amount: {}", request.giftCardCode(), request.amount());
 
-        return giftCardService.redeemGiftCardAsync(
-                request.giftCardCode(),
-                request.amount()
-        );
+        return giftCardService.redeemGiftCardAsync(request);
     }
 
     @Operation(summary = "List all gift cards", description = "Retrieve a list of all available gift cards. Each gift card's details, including its code and balance, will be included in the response.")
