@@ -18,16 +18,24 @@ public class MdcFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
 
         try {
-            String correlationId = UUID.randomUUID().toString(); // generate a correlationId for each HTTP request
+            String correlationId = response.getHeader("X-Correlation-Id");
+            
+            if (correlationId == null || correlationId.isEmpty()) {
+                correlationId = UUID.randomUUID().toString();
+                response.addHeader("X-Correlation-Id", correlationId);
+            }
 
-            MDC.put("correlationId", correlationId); // inject it into the MDC context map (for the HTTP thread)
-
-            response.addHeader("X-Correlation-Id", correlationId); // send it in the HTTP response header
+            MDC.put("correlationId", correlationId);
 
             filterChain.doFilter(request, response); 
 
         } finally {
-            MDC.clear(); // clear the MDC context map when the HTTP request is finished
+            MDC.clear();
         }
+    }
+
+    @Override
+    protected boolean shouldNotFilterAsyncDispatch() {
+        return false; 
     }
 }

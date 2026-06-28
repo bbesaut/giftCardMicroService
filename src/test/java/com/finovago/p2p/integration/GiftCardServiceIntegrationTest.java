@@ -50,7 +50,8 @@ class GiftCardServiceIntegrationTest
         giftCardService.createGiftCard(createRequest);
 
         double amountToRedeem = 30.0;
-        CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(giftCardCode, amountToRedeem);
+        RedemptionRequest redemptionRequest = new RedemptionRequest(amountToRedeem, giftCardCode);
+        CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(redemptionRequest);
         RedemptionResponse response = future.join();
 
         assertEquals(0.0, response.remainingToPay());
@@ -83,7 +84,8 @@ class GiftCardServiceIntegrationTest
         giftCardService.createGiftCard(createRequest);
 
         double amountToRedeem = 100.0;
-        CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(giftCardCode, amountToRedeem);
+        RedemptionRequest request = new RedemptionRequest(amountToRedeem, giftCardCode);
+        CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(request);
         RedemptionResponse response = future.join();
 
         assertEquals(50.0, response.remainingToPay());
