@@ -12,6 +12,10 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.MalformedJwtException;
+import io.jsonwebtoken.security.SignatureException;
+
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -58,6 +62,28 @@ public class GlobalExceptionHandler {
                     "error", "Bad Request",
                     "message", errorMessage,
                     "code", MDC.get("correlationId")
+                ));
+    }
+
+    @ExceptionHandler(ExpiredJwtException.class)
+    public ResponseEntity<Map<String, Object>> handleExpiredJwt(ExpiredJwtException ex) {
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of(
+                    "status", 401,
+                    "error", "Unauthorized",
+                    "message", "Token has expired. Please log in again to obtain a new token."
+                ));
+    }
+
+    @ExceptionHandler({MalformedJwtException.class, SignatureException.class})
+    public ResponseEntity<Map<String, Object>> handleInvalidJwt() {
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of(
+                    "status", 401,
+                    "error", "Unauthorized",
+                    "message", "Invalid token, altered or corrupted."
                 ));
     }
 
