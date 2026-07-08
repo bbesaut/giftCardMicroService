@@ -1,7 +1,6 @@
 package com.finovago.p2p.controller;
 
 import com.finovago.p2p.dto.LoginRequest;
-import com.finovago.p2p.security.JwtService;
 import com.finovago.p2p.service.AuthService;
 
 import jakarta.validation.Valid;
