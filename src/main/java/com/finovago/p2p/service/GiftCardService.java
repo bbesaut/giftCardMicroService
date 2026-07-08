@@ -1,4 +1,5 @@
 package com.finovago.p2p.service;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -7,7 +8,6 @@ import java.util.concurrent.Executor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import org.springframework.transaction.annotation.Transactional;
@@ -16,6 +16,7 @@ import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.GiftCardResponse;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.dto.RedemptionRequest;
+import com.finovago.p2p.exception.ExpiredGiftCardException;
 import com.finovago.p2p.exception.InactiveGiftCardException;
 import com.finovago.p2p.exception.UnknownGiftCardException;
 import com.finovago.p2p.model.GiftCard;
@@ -60,6 +61,10 @@ public class GiftCardService {
             throw new InactiveGiftCardException("Card is already inactive");
         }
 
+        if (giftCard.getExpirationDate().isBefore(LocalDate.now())) {
+            throw new ExpiredGiftCardException("Gift card has expired");
+        }
+
         double deducted;
         double remainingToPay = 0;
 
@@ -96,21 +101,21 @@ public class GiftCardService {
 
         log.debug("Database command issued: Instantiating new entity record for code: {}", request.giftCardCode());
 
-        GiftCard giftCard = new GiftCard(request.giftCardCode(), request.balance(), request.active());
+        GiftCard giftCard = new GiftCard(request.giftCardCode(), request.balance(), request.active(), request.expirationDate());
         GiftCard savedCard = giftCardRepository.save(giftCard);
 
         log.info("Administrative Event: Gift card [{}] successfully registered into database vault.", request.giftCardCode());
 
-        return new GiftCardResponse(savedCard.getCardCode(), savedCard.getBalance(), savedCard.isActive());
+        return new GiftCardResponse(savedCard.getCardCode(), savedCard.getBalance(), savedCard.isActive(), savedCard.getExpirationDate());
     }
 
     @Transactional(readOnly = true)
     public List<GiftCardResponse> getAllGiftCards() {
         log.info("Fetching all gift cards from database");
-        
+
         return giftCardRepository.findAll()
                 .stream()
-                .map(card -> new GiftCardResponse(card.getCardCode(), card.getBalance(), card.isActive()))
+                .map(card -> new GiftCardResponse(card.getCardCode(), card.getBalance(), card.isActive(), card.getExpirationDate()))
                 .toList();
     }
 }

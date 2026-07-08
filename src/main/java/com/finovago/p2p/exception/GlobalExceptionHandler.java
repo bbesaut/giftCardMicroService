@@ -39,10 +39,23 @@ public class GlobalExceptionHandler {
         log.warn(ex.getMessage()); // log the throw message
 
         return ResponseEntity
-                .status(HttpStatus.UNPROCESSABLE_ENTITY) 
+                .status(HttpStatus.UNPROCESSABLE_ENTITY)
                 .body(Map.of(
                     "error", "Unprocessable Entity",
-                    "message", ex.getMessage(), 
+                    "message", ex.getMessage(),
+                    "code", MDC.get("correlationId")
+                ));
+    }
+
+    @ExceptionHandler(ExpiredGiftCardException.class)
+    public ResponseEntity<Object> handleExpiredGiftCardException(ExpiredGiftCardException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(Map.of(
+                    "error", "Unprocessable Entity",
+                    "message", ex.getMessage(),
                     "code", MDC.get("correlationId")
                 ));
     }
