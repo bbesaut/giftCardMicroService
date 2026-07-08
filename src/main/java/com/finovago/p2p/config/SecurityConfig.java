@@ -23,7 +23,10 @@ public class SecurityConfig {
 
     private static final String[] PUBLIC_ROUTES = {
             "/api/v1/auth/**",
-            "/"
+            "/",
+            "/swagger-ui.html",
+            "/swagger-ui/**",
+            "/api-docs/**"
     };
 
     private static final String[] ADMIN_ROUTES = {
