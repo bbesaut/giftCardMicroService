@@ -6,7 +6,9 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.dto.LoginRequest;
+import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.model.User;
 import com.finovago.p2p.repository.UserRepository;
 import com.finovago.p2p.security.JwtService;
@@ -17,14 +19,20 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final RefreshTokenService refreshTokenService;
 
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtService jwtService) {
+    public AuthService(
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            JwtService jwtService,
+            RefreshTokenService refreshTokenService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
+        this.refreshTokenService = refreshTokenService;
     }
 
-    public String login(LoginRequest request) {
+    public AuthResponse login(LoginRequest request) {
         User user = userRepository.findByEmail(request.email())
                 .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
 
@@ -32,7 +40,22 @@ public class AuthService {
             throw new BadCredentialsException("Invalid credentials");
         }
 
+        return issueTokens(user);
+    }
+
+    public AuthResponse refresh(RefreshTokenRequest request) {
+        User user = refreshTokenService.validateAndRotate(request.refreshToken());
+        return issueTokens(user);
+    }
+
+    public void logout(RefreshTokenRequest request) {
+        refreshTokenService.revoke(request.refreshToken());
+    }
+
+    private AuthResponse issueTokens(User user) {
         List<String> roles = List.of(user.getRole().name());
-        return jwtService.generateToken(user.getEmail(), roles);
+        String accessToken = jwtService.generateToken(user.getEmail(), roles);
+        String refreshToken = refreshTokenService.createRefreshToken(user);
+        return new AuthResponse(accessToken, refreshToken);
     }
 }
