@@ -3,6 +3,8 @@ package com.finovago.p2p.controller;
 import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.RefreshTokenRequest;
+import com.finovago.p2p.dto.RegisterRequest;
+import com.finovago.p2p.exception.UserAlreadyExistsException;
 import com.finovago.p2p.service.AuthService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -51,6 +53,31 @@ public class AuthController {
             return ResponseEntity.ok(response);
         } catch (BadCredentialsException e) {
             log.warn("Login failed - invalid credentials for email: {}", sanitizeEmail(request.email()));
+            throw e;
+        }
+    }
+
+    @Operation(
+        summary = "User registration",
+        description = "Creates a new user account with email and password. New users are automatically assigned the CLIENT role."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Registration successful",
+            content = @Content(schema = @Schema(implementation = AuthResponse.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid request body (missing or invalid fields)"),
+        @ApiResponse(responseCode = "409", description = "Email already registered"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @PostMapping("/register")
+    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
+        log.info("Registration attempt for email: {}", sanitizeEmail(request.email()));
+
+        try {
+            AuthResponse response = authService.register(request);
+            log.info("Registration successful for email: {}", sanitizeEmail(request.email()));
+            return ResponseEntity.ok(response);
+        } catch (UserAlreadyExistsException e) {
+            log.warn("Registration failed - email already exists: {}", sanitizeEmail(request.email()));
             throw e;
         }
     }
