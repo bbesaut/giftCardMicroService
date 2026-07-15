@@ -39,6 +39,140 @@ Two Maven profiles for different workflows:
 - **Async**: Custom TaskExecutor with MdcTaskDecorator for MDC propagation
 - **Exception handling**: GlobalExceptionHandler with custom exceptions
 
+## 🔐 Authentication Endpoints
+
+### POST /api/v1/auth/register
+**Description**: Create a new user account. New users are automatically assigned CLIENT role.
+
+**Request** (RegisterRequest):
+```json
+{
+  "email": "user@example.com",
+  "password": "securePassword123"
+}
+```
+
+**Response** (AuthResponse - HTTP 200):
+```json
+{
+  "accessToken": "eyJhbGc...",
+  "refreshToken": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+**Error Responses**:
+- `400 Bad Request`: Invalid email format or blank fields
+- `409 Conflict`: Email already registered
+- `500 Internal Server Error`: Server error
+
+**Logging**:
+- `INFO`: "Registration attempt for email: u***@example.com"
+- `INFO`: "User registered successfully: user@example.com (role: CLIENT)"
+- `WARN`: "Registration failed - email already exists: u***@example.com"
+
+**Field Validation**:
+- `email`: Required, must be valid email format, must be unique in database
+- `password`: Required, non-blank
+
+### POST /api/v1/auth/login
+**Description**: Authenticate user with credentials and obtain JWT tokens.
+
+**Request** (LoginRequest):
+```json
+{
+  "email": "user@example.com",
+  "password": "securePassword123"
+}
+```
+
+**Response** (AuthResponse - HTTP 200):
+```json
+{
+  "accessToken": "eyJhbGc...",
+  "refreshToken": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+**Error Responses**:
+- `400 Bad Request`: Invalid email format or blank fields
+- `401 Unauthorized`: Invalid email or password
+- `500 Internal Server Error`: Server error
+
+### POST /api/v1/auth/refresh
+**Description**: Rotate refresh token and issue new access token. Old refresh token is automatically revoked.
+
+**Request** (RefreshTokenRequest):
+```json
+{
+  "refreshToken": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+**Response** (AuthResponse - HTTP 200):
+```json
+{
+  "accessToken": "eyJhbGc...",
+  "refreshToken": "a1b2c3d4-e5f6-47g8-h9i0-j1k2l3m4n5o6"
+}
+```
+
+**Error Responses**:
+- `400 Bad Request`: Missing or blank refresh token
+- `401 Unauthorized`: Token expired, revoked, or invalid
+- `500 Internal Server Error`: Server error
+
+### POST /api/v1/auth/logout
+**Description**: Revoke refresh token and invalidate future refresh attempts.
+
+**Request** (RefreshTokenRequest):
+```json
+{
+  "refreshToken": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+**Response**: HTTP 204 No Content
+
+**Error Responses**:
+- `400 Bad Request`: Missing or blank refresh token
+- `401 Unauthorized`: Token not found or already revoked
+- `500 Internal Server Error`: Server error
+
+## 📦 DTOs
+
+### RegisterRequest
+Used for user registration (POST /api/v1/auth/register)
+- `email` (String): User's email, must be unique, validated with @Email
+- `password` (String): User's password, non-blank
+
+### LoginRequest
+Used for authentication (POST /api/v1/auth/login)
+- `email` (String): User's registered email
+- `password` (String): User's password
+
+### AuthResponse
+Response containing JWT tokens
+- `accessToken` (String): JWT access token (bearer token for API requests)
+- `refreshToken` (String): UUID refresh token (used to obtain new access tokens)
+
+### RefreshTokenRequest
+Used for token refresh and logout operations
+- `refreshToken` (String): The refresh token to process
+
+## ⚠️ Exceptions
+
+### UserAlreadyExistsException
+**HTTP Status**: 409 Conflict
+**When**: Attempt to register with email that already exists in database
+**Response Body**:
+```json
+{
+  "error": "Conflict",
+  "message": "Email already registered",
+  "code": "correlation-id"
+}
+```
+
 ## 📌 Conventions
 - Use `@Valid` for DTO validation
 - Async operations return CompletableFuture or HTTP 202 (Accepted)
