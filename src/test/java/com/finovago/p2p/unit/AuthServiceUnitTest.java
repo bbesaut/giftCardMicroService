@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
@@ -20,6 +21,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.RefreshTokenRequest;
+import com.finovago.p2p.dto.RegisterRequest;
+import com.finovago.p2p.exception.UserAlreadyExistsException;
 import com.finovago.p2p.model.Role;
 import com.finovago.p2p.model.User;
 import com.finovago.p2p.repository.UserRepository;
@@ -102,5 +105,31 @@ class AuthServiceUnitTest {
         authService.logout(request);
 
         verify(refreshTokenService).revoke("some-refresh-token");
+    }
+
+    @Test
+    void should_returnAuthResponse_when_registrationSucceeds() {
+        RegisterRequest request = new RegisterRequest("newuser@example.com", "password123");
+
+        when(userRepository.findByEmail("newuser@example.com")).thenReturn(Optional.empty());
+        when(passwordEncoder.encode("password123")).thenReturn("hashed");
+        when(jwtService.generateToken(eq("newuser@example.com"), anyList())).thenReturn("access-token");
+        when(refreshTokenService.createRefreshToken(any(User.class))).thenReturn("refresh-token");
+
+        AuthResponse response = authService.register(request);
+
+        assertEquals("access-token", response.accessToken());
+        assertEquals("refresh-token", response.refreshToken());
+        verify(userRepository).save(any(User.class));
+    }
+
+    @Test
+    void should_throwUserAlreadyExistsException_when_emailAlreadyExists() {
+        RegisterRequest request = new RegisterRequest("existing@example.com", "password123");
+        User existingUser = new User("existing@example.com", "hashed", Role.CLIENT);
+
+        when(userRepository.findByEmail("existing@example.com")).thenReturn(Optional.of(existingUser));
+
+        assertThrows(UserAlreadyExistsException.class, () -> authService.register(request));
     }
 }

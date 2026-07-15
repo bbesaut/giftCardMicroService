@@ -115,16 +115,29 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Object> handleIllegalArgumentException(IllegalArgumentException ex) {
-    
+
     log.warn("Illegal argument provided: {}", ex.getMessage());
 
     return ResponseEntity
-            .status(HttpStatus.CONFLICT) 
+            .status(HttpStatus.CONFLICT)
             .body(Map.of(
                 "error", "Conflict",
-                "message", ex.getMessage(), 
+                "message", ex.getMessage(),
                 "code", MDC.get("correlationId")
             ));
 }
+
+    @ExceptionHandler(UserAlreadyExistsException.class)
+    public ResponseEntity<Object> handleUserAlreadyExistsException(UserAlreadyExistsException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(Map.of(
+                    "error", "Conflict",
+                    "message", ex.getMessage(),
+                    "code", MDC.get("correlationId")
+                ));
+    }
 
 }
