@@ -9,7 +9,10 @@ import org.springframework.stereotype.Service;
 import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.RefreshTokenRequest;
+import com.finovago.p2p.dto.RegisterRequest;
 import com.finovago.p2p.exception.InvalidRefreshTokenException;
+import com.finovago.p2p.exception.UserAlreadyExistsException;
+import com.finovago.p2p.model.Role;
 import com.finovago.p2p.model.User;
 import com.finovago.p2p.repository.UserRepository;
 import com.finovago.p2p.security.JwtService;
@@ -72,6 +75,18 @@ public class AuthService {
             log.warn("Logout failed - refresh token not found or invalid");
             throw e;
         }
+    }
+
+    public AuthResponse register(RegisterRequest request) {
+        if (userRepository.findByEmail(request.email()).isPresent()) {
+            log.warn("Registration failed - email already exists: {}", request.email());
+            throw new UserAlreadyExistsException("Email already registered");
+        }
+
+        User user = new User(request.email(), passwordEncoder.encode(request.password()), Role.CLIENT);
+        userRepository.save(user);
+        log.info("User registered successfully: {} (role: CLIENT)", user.getEmail());
+        return issueTokens(user);
     }
 
     private AuthResponse issueTokens(User user) {

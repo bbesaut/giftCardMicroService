@@ -276,4 +276,63 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         // Refresh tokens should be different (they are UUIDs)
         assertEquals(false, auth1.refreshToken().equals(auth2.refreshToken()));
     }
+
+    @Test
+    void should_registerSuccessfully_and_returnAccessAndRefreshTokens() throws Exception {
+        String newEmail = "newuser@example.com";
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.accessToken", notNullValue()))
+                .andExpect(jsonPath("$.refreshToken", notNullValue()));
+
+        // Verify user was created
+        assertNotNull(userRepository.findByEmail(newEmail));
+    }
+
+    @Test
+    void should_returnConflict_when_emailAlreadyExists() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void should_returnBadRequest_when_registrationEmailIsBlank() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void should_returnBadRequest_when_registrationPasswordIsBlank() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"newuser@example.com\",\"password\":\"\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void should_returnBadRequest_when_registrationEmailIsInvalid() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"not-an-email\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void should_createNewUserWithClientRoleOnRegistration() throws Exception {
+        String newEmail = "clientuser@example.com";
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isOk());
+
+        User createdUser = userRepository.findByEmail(newEmail).orElseThrow();
+        assertEquals(Role.CLIENT, createdUser.getRole());
+    }
 }
