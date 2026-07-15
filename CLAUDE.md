@@ -179,7 +179,19 @@ Used for token refresh and logout operations
 - All endpoints require JWT (except /api/v1/auth/**)
 - Profiles: dev (H2, DEBUG), prod (PostgreSQL, INFO), test (H2, random port)
 
+## 👥 Admin User Setup
+
+**Production**: Admin user is automatically created via V4 Flyway migration:
+- Email: `admin@finovago.com`
+- Password: `admin123` (⚠️ **Change immediately after first login**)
+- See [docs/PRODUCTION_SETUP.md](docs/PRODUCTION_SETUP.md) for customization
+
+**Development**: Admin + Client users created by DataInitializer on startup:
+- `admin@finovago.com` / `admin123`
+- `client@finovago.com` / `client123`
+
 ## ⛔ DO NOT
 - Modify files in `src/main/resources/db/migration/` directly
 - Commit `.env` or JWT_SECRET_KEY
 - Push to main without tests passing
+- Use default admin password in production (change it!)
