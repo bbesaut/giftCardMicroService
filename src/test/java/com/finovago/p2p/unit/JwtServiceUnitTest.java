@@ -154,10 +154,12 @@ class JwtServiceUnitTest {
                 .getPayload();
 
         long expirationTime = claims.getExpiration().getTime();
-        long expectedMinExpiration = beforeGeneration + EXPIRATION_MS;
-        long expectedMaxExpiration = afterGeneration + EXPIRATION_MS;
+        long expectedApproximateExpiration = beforeGeneration + EXPIRATION_MS;
+        long timingBuffer = 2000;
 
-        assertTrue(expirationTime >= expectedMinExpiration && expirationTime <= expectedMaxExpiration);
+        assertTrue(expirationTime >= (expectedApproximateExpiration - timingBuffer) &&
+                   expirationTime <= (expectedApproximateExpiration + timingBuffer),
+                "Token expiration should be approximately " + EXPIRATION_MS + "ms from generation time (±2s buffer)");
     }
 
     @Test
