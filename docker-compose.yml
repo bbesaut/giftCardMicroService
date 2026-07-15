@@ -1,0 +1,15 @@
+services:
+  postgres-dev:
+    image: postgres:17-alpine
+    container_name: p2p-postgres-dev
+    environment:
+      POSTGRES_DB: p2p_dev
+      POSTGRES_USER: p2p
+      POSTGRES_PASSWORD: p2p
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-dev-data:/var/lib/postgresql/data
+
+volumes:
+  postgres-dev-data:
