@@ -1,46 +1,44 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <springProperty scope="context" name="LOKI_USER" source="loki.username"/>
-    <springProperty scope="context" name="LOKI_TOKEN" source="loki.password"/>
-    
     <include resource="org/springframework/boot/logging/logback/defaults.xml" />
     <include resource="org/springframework/boot/logging/logback/console-appender.xml" />
-
-    <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
-        <http>
-            <url>https://logs-prod-039.grafana.net/loki/api/v1/push</url>
-            <auth>
-                <username>${GRAFANA_LOKI_USER}</username>
-                <password>${GRAFANA_LOKI_TOKEN}</password>
-            </auth>
-        </http>
-        <format>
-            <label>
-                <pattern>app=p2p,env=${SPRING_PROFILES_ACTIVE:-dev}</pattern>
-            </label>
-            <message class="com.github.loki4j.logback.JsonLayout">
-                <includeMdc>true</includeMdc>
-            </message>
-        </format>
-    </appender>
 
     <springProfile name="dev">
         <root level="INFO">
             <appender-ref ref="CONSOLE" />
-            <appender-ref ref="LOKI" />
         </root>
         <logger name="com.finovago.p2p" level="DEBUG" />
         <logger name="org.springframework.web" level="DEBUG" />
     </springProfile>
 
     <springProfile name="prod,production">
+        <springProperty scope="context" name="LOKI_USER" source="loki.username"/>
+        <springProperty scope="context" name="LOKI_TOKEN" source="loki.password"/>
+
+        <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
+            <http>
+                <url>https://logs-prod-039.grafana.net/loki/api/v1/push</url>
+                <auth>
+                    <username>${LOKI_USER}</username>
+                    <password>${LOKI_TOKEN}</password>
+                </auth>
+            </http>
+            <format>
+                <label>
+                    <pattern>app=p2p,env=prod</pattern>
+                </label>
+                <message class="com.github.loki4j.logback.JsonLayout">
+                    <includeMdc>true</includeMdc>
+                </message>
+            </format>
+        </appender>
+
         <root level="WARN">
             <appender-ref ref="CONSOLE" />
             <appender-ref ref="LOKI" />
         </root>
 
         <logger name="com.finovago.p2p" level="INFO" />
-
         <logger name="org.springframework.web" level="WARN" />
         <logger name="org.springframework.web.servlet" level="WARN" />
         <logger name="org.springframework.web.servlet.DispatcherServlet" level="WARN" />

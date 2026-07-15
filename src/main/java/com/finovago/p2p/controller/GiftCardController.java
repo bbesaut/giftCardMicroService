@@ -21,7 +21,10 @@ import com.finovago.p2p.dto.RedemptionRequest;
 import com.finovago.p2p.service.GiftCardService;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
@@ -39,11 +42,20 @@ public class GiftCardController
         this.giftCardService = giftCardService;
     }
     
-    // Filter(creates the MDC context & correlationId) -> Controllers Thread has the MDC context and calls redeemGiftCardAsync 
-    // -> MdcTaskDecorator called and copies the MDC context to his thread -> do the stuff -> clear MDC from the async thread 
-    // -> returns the result to the controller thread -> controller thread returns the result to the client -> Filter clears the MDC context from Controllers Thread
-    @Operation(summary = "Redeem a gift card", description = "Redeem a specified amount from a gift card using its code. The request will be processed asynchronously, and the response will indicate the success or failure of the redemption.")
-    @ApiResponse(responseCode = "202", description = "Accepted: The redemption request has been accepted and is being processed.")
+    @Operation(
+        summary = "Redeem a gift card",
+        description = "Redeem a specified amount from a gift card using its code. The request will be processed asynchronously and returns a CompletableFuture. "
+                    + "Requires authentication (JWT token). MDC correlation ID is automatically propagated to async threads."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "202", description = "Accepted - Redemption request accepted and being processed asynchronously",
+            content = @Content(schema = @Schema(implementation = RedemptionResponse.class))),
+        @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request body (missing or invalid fields)"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token"),
+        @ApiResponse(responseCode = "404", description = "Not Found - Gift card with specified code does not exist"),
+        @ApiResponse(responseCode = "422", description = "Unprocessable Entity - Insufficient balance or other business logic error"),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error - Unexpected server error")
+    })
     @PostMapping("/redeem")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public CompletableFuture<RedemptionResponse> redeemGiftCard(@Valid @RequestBody RedemptionRequest request) {
@@ -52,23 +64,46 @@ public class GiftCardController
         return giftCardService.redeemGiftCardAsync(request);
     }
 
-    @Operation(summary = "List all gift cards", description = "Retrieve a list of all available gift cards. Each gift card's details, including its code and balance, will be included in the response.")
-    @ApiResponse(responseCode = "200", description = "OK: Successfully retrieved the list of gift cards.")
+    @Operation(
+        summary = "List all gift cards",
+        description = "Retrieve a list of all available gift cards with their details (code, balance, creation date, etc.). "
+                    + "Requires authentication (JWT token)."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "OK - Successfully retrieved the list of gift cards",
+            content = @Content(schema = @Schema(implementation = GiftCardResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token"),
+        @ApiResponse(responseCode = "403", description = "Forbidden - User role not permitted to list gift cards"),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error")
+    })
     @GetMapping("/list")
-    @ResponseStatus(HttpStatus.OK) 
+    @ResponseStatus(HttpStatus.OK)
     public List<GiftCardResponse> listGiftCards() {
         log.info("Received request to list all gift cards");
         return giftCardService.getAllGiftCards();
     }
 
-    @Operation(summary = "Create a new gift card", description = "Create a new gift card with the specified code and balance.")
-    @ApiResponse(responseCode = "201", description = "Created: The gift card was successfully created.")
+    @Operation(
+        summary = "Create a new gift card",
+        description = "Create a new gift card with the specified code and initial balance. "
+                    + "Requires authentication (JWT token) and ADMIN role. "
+                    + "Gift card code must be unique."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "201", description = "Created - Gift card successfully created",
+            content = @Content(schema = @Schema(implementation = GiftCardResponse.class))),
+        @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request body (missing or invalid fields)"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token"),
+        @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions (ADMIN role required)"),
+        @ApiResponse(responseCode = "409", description = "Conflict - Gift card code already exists"),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error")
+    })
     @PostMapping("/create")
     @ResponseStatus(HttpStatus.CREATED)
     public GiftCardResponse createGiftCard(@Valid @RequestBody GiftCardCreateRequest request) {
-        log.info("Received gift card creation request. Code: {}, Balance: {}", 
+        log.info("Received gift card creation request. Code: {}, Balance: {}",
                 request.giftCardCode(), request.balance());
-        
+
         return giftCardService.createGiftCard(request);
     }
 }
