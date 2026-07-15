@@ -7,16 +7,23 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
 /**
- * Integration test initializer for PostgreSQL container.
+ * Integration test initializer using PostgreSQL TestContainer.
  *
- * PRODUCTION READY: Requires Docker for integration tests.
- * This ensures tests run against the exact same database as production (Neon PostgreSQL 18).
+ * Part of the unified testing strategy:
+ * ✅ Unit tests: Mockito mocks (fast, no Docker)
+ * ✅ Integration tests: Real PostgreSQL 17 via TestContainers (Docker required)
  *
- * For developers without Docker:
- * - Use unit tests only
+ * Runs ONLY with: mvn test -P integration-tests
+ *
+ * PRODUCTION PARITY:
+ * - Matches Neon PostgreSQL 18.4 in production
+ * - Validates Flyway migrations exactly as they run in prod
+ * - Catches SQL dialect issues before deployment
+ *
+ * DOCKER REQUIREMENT:
  * - CI/CD pipelines always have Docker available
- *
- * PostgreSQL version must match production (see application-test.properties)
+ * - Local dev: use `mvn test` for unit tests (no Docker needed)
+ * - Or: install Docker Desktop for full integration test suite
  */
 public class PostgresTestcontainerInitializer implements ApplicationContextInitializer<ConfigurableApplicationContext> {
 

@@ -8,9 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 
+import com.finovago.p2p.AbstractIntegrationTest;
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.RedemptionRequest;
 import com.finovago.p2p.dto.RedemptionResponse;
@@ -19,9 +18,7 @@ import com.finovago.p2p.model.GiftCard;
 import com.finovago.p2p.repository.GiftCardRepository;
 import com.finovago.p2p.service.GiftCardService;
 
-@SpringBootTest
-@ActiveProfiles("test")
-class GiftCardServiceIntegrationTest
+class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
 {
     @Autowired
     private GiftCardRepository giftCardRepository;
