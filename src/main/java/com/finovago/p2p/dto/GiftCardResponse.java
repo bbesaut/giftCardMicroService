@@ -1,5 +1,7 @@
 package com.finovago.p2p.dto;
 
+import java.time.LocalDate;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 
 @Schema(description = "Response object for gift card details.")
@@ -11,5 +13,8 @@ public record GiftCardResponse(
     double balance,
 
     @Schema(description = "Indicates if the gift card is active", example = "true")
-    boolean active
+    boolean active,
+
+    @Schema(description = "Expiration date", example = "2025-12-31")
+    LocalDate expirationDate
 ) {}

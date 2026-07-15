@@ -1,4 +1,5 @@
 package com.finovago.p2p.integration;
+import java.time.LocalDate;
 import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -12,6 +13,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.RedemptionRequest;
 import com.finovago.p2p.dto.RedemptionResponse;
+import com.finovago.p2p.exception.ExpiredGiftCardException;
 import com.finovago.p2p.model.GiftCard;
 import com.finovago.p2p.repository.GiftCardRepository;
 import com.finovago.p2p.service.GiftCardService;
@@ -31,8 +33,9 @@ class GiftCardServiceIntegrationTest
         String giftCardCode = "TEST123";
         double balance = 100.0;
         boolean active = true;
+        LocalDate expirationDate = LocalDate.now().plusYears(1);
 
-        GiftCardCreateRequest request = new GiftCardCreateRequest(giftCardCode, balance, active);
+        GiftCardCreateRequest request = new GiftCardCreateRequest(giftCardCode, balance, active, expirationDate);
 
         giftCardService.createGiftCard(request);
 
@@ -45,8 +48,9 @@ class GiftCardServiceIntegrationTest
         String giftCardCode = "TEST789";
         double balance = 30.0;
         boolean active = true;
+        LocalDate expirationDate = LocalDate.now().plusYears(1);
 
-        GiftCardCreateRequest createRequest = new GiftCardCreateRequest(giftCardCode, balance, active);
+        GiftCardCreateRequest createRequest = new GiftCardCreateRequest(giftCardCode, balance, active, expirationDate);
         giftCardService.createGiftCard(createRequest);
 
         double amountToRedeem = 30.0;
@@ -63,12 +67,13 @@ class GiftCardServiceIntegrationTest
     @Test
     void should_throw_exception_when_creating_duplicate_gift_card_code() {
         String duplicateCode = "DUPLICATE_CODE";
-        
-        GiftCardCreateRequest createRequest = new GiftCardCreateRequest(duplicateCode, 100.0, true);
+        LocalDate expirationDate = LocalDate.now().plusYears(1);
+
+        GiftCardCreateRequest createRequest = new GiftCardCreateRequest(duplicateCode, 100.0, true, expirationDate);
         giftCardService.createGiftCard(createRequest);
 
         assertThrows(IllegalArgumentException.class, () -> {
-            GiftCardCreateRequest duplicateRequest = new GiftCardCreateRequest(duplicateCode, 50.0, true);
+            GiftCardCreateRequest duplicateRequest = new GiftCardCreateRequest(duplicateCode, 50.0, true, expirationDate);
             giftCardService.createGiftCard(duplicateRequest);
         });
     }
@@ -79,8 +84,9 @@ class GiftCardServiceIntegrationTest
         String giftCardCode = "TEST456";
         double balance = 50.0;
         boolean active = true;
+        LocalDate expirationDate = LocalDate.now().plusYears(1);
 
-        GiftCardCreateRequest createRequest = new GiftCardCreateRequest(giftCardCode, balance, active);
+        GiftCardCreateRequest createRequest = new GiftCardCreateRequest(giftCardCode, balance, active, expirationDate);
         giftCardService.createGiftCard(createRequest);
 
         double amountToRedeem = 100.0;
@@ -91,5 +97,45 @@ class GiftCardServiceIntegrationTest
         assertEquals(50.0, response.remainingToPay());
         GiftCard giftCard = giftCardRepository.findByCardCode(giftCardCode).orElseThrow(() -> new RuntimeException("Gift card not found"));
         assertEquals(0.0, giftCard.getBalance());
+    }
+
+    @Test
+    void should_throw_exception_when_redeeming_expired_gift_card() {
+        String expiredCardCode = "EXPIRED_CARD";
+        double balance = 100.0;
+        boolean active = true;
+        LocalDate expirationDate = LocalDate.now().minusDays(1);
+
+        GiftCardCreateRequest createRequest = new GiftCardCreateRequest(expiredCardCode, balance, active, expirationDate);
+        giftCardService.createGiftCard(createRequest);
+
+        double amountToRedeem = 50.0;
+        RedemptionRequest request = new RedemptionRequest(amountToRedeem, expiredCardCode);
+        CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(request);
+
+        try {
+            future.join();
+            throw new AssertionError("Expected ExpiredGiftCardException to be thrown");
+        } catch (Exception e) {
+            if (e.getCause() instanceof ExpiredGiftCardException) {
+                return;
+            }
+            throw e;
+        }
+    }
+
+    @Test
+    void should_set_default_expiration_date_when_not_provided() {
+        String cardCode = "DEFAULT_EXPIRATION";
+        double balance = 100.0;
+        boolean active = true;
+
+        GiftCardCreateRequest createRequest = new GiftCardCreateRequest(cardCode, balance, active, null);
+        giftCardService.createGiftCard(createRequest);
+
+        var savedCard = giftCardRepository.findByCardCode(cardCode).orElseThrow();
+        LocalDate expectedExpiration = LocalDate.now().plusYears(2);
+
+        assertEquals(expectedExpiration, savedCard.getExpirationDate());
     }
 }

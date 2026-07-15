@@ -1,5 +1,8 @@
 package com.finovago.p2p.model;
 
+import java.time.LocalDate;
+
+import jakarta.annotation.Nullable;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -20,11 +23,13 @@ public class GiftCard
     private String cardCode;
     private double balance;
     private boolean active;
+    private LocalDate expirationDate;
 
-    public GiftCard(String cardCode, double balance, boolean active) {
+    public GiftCard(String cardCode, double balance, boolean active, @Nullable LocalDate expirationDate) {
         this.cardCode = cardCode;
         this.balance = balance;
         this.active = active;
+        this.expirationDate = expirationDate != null ? expirationDate : LocalDate.now().plusYears(2);
     }
 
     public void deductBalance(double amount) {

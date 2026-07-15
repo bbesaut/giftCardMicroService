@@ -12,6 +12,10 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.MalformedJwtException;
+import io.jsonwebtoken.security.SignatureException;
+
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -35,10 +39,23 @@ public class GlobalExceptionHandler {
         log.warn(ex.getMessage()); // log the throw message
 
         return ResponseEntity
-                .status(HttpStatus.UNPROCESSABLE_ENTITY) 
+                .status(HttpStatus.UNPROCESSABLE_ENTITY)
                 .body(Map.of(
                     "error", "Unprocessable Entity",
-                    "message", ex.getMessage(), 
+                    "message", ex.getMessage(),
+                    "code", MDC.get("correlationId")
+                ));
+    }
+
+    @ExceptionHandler(ExpiredGiftCardException.class)
+    public ResponseEntity<Object> handleExpiredGiftCardException(ExpiredGiftCardException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(Map.of(
+                    "error", "Unprocessable Entity",
+                    "message", ex.getMessage(),
                     "code", MDC.get("correlationId")
                 ));
     }
@@ -57,6 +74,41 @@ public class GlobalExceptionHandler {
                 .body(Map.of(
                     "error", "Bad Request",
                     "message", errorMessage,
+                    "code", MDC.get("correlationId")
+                ));
+    }
+
+    @ExceptionHandler(ExpiredJwtException.class)
+    public ResponseEntity<Map<String, Object>> handleExpiredJwt(ExpiredJwtException ex) {
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of(
+                    "status", 401,
+                    "error", "Unauthorized",
+                    "message", "Token has expired. Please log in again to obtain a new token."
+                ));
+    }
+
+    @ExceptionHandler({MalformedJwtException.class, SignatureException.class})
+    public ResponseEntity<Map<String, Object>> handleInvalidJwt() {
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of(
+                    "status", 401,
+                    "error", "Unauthorized",
+                    "message", "Invalid token, altered or corrupted."
+                ));
+    }
+
+    @ExceptionHandler(InvalidRefreshTokenException.class)
+    public ResponseEntity<Object> handleInvalidRefreshTokenException(InvalidRefreshTokenException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of(
+                    "error", "Unauthorized",
+                    "message", ex.getMessage(),
                     "code", MDC.get("correlationId")
                 ));
     }

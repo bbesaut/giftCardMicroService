@@ -27,7 +27,7 @@ public class MdcFilter extends OncePerRequestFilter {
 
             MDC.put("correlationId", correlationId);
 
-            filterChain.doFilter(request, response); 
+            filterChain.doFilter(request, response);
 
         } finally {
             MDC.clear();
