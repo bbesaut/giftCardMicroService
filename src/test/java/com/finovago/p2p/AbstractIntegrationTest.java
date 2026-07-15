@@ -8,20 +8,21 @@ import org.springframework.test.context.ContextConfiguration;
 import com.finovago.p2p.config.PostgresTestcontainerInitializer;
 
 /**
- * Base class for integration tests using real PostgreSQL container.
+ * Base class for integration tests using real PostgreSQL container via TestContainers.
  *
  * REQUIRES: Docker installed and running
  *
  * Run with: mvn test -P integration-tests
  *
- * Benefits over unit tests:
- * - Tests against real PostgreSQL 17 (matches production PostgreSQL 18)
- * - Validates Flyway migrations
- * - Tests actual database constraints and behavior
+ * Benefits:
+ * - Tests against real PostgreSQL 17 (matches production PostgreSQL 18.4)
+ * - Validates Flyway migrations and constraints
+ * - Tests actual database behavior and edge cases
  * - Detects SQL/transaction issues before production
  *
- * For developers without Docker, use unit tests only:
- *   mvn test  (default, runs unit tests with H2)
+ * All tests now use TestContainers:
+ * - Unit tests: Mockito mocks (no Spring Boot, fastest)
+ * - Integration tests: Real PostgreSQL via Docker
  */
 @SpringBootTest
 @AutoConfigureMockMvc
