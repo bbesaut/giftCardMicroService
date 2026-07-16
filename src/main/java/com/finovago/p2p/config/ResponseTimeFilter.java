@@ -4,6 +4,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletResponseWrapper;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -17,16 +18,31 @@ public class ResponseTimeFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         long startTime = System.currentTimeMillis();
 
+        ResponseWrapper wrappedResponse = new ResponseWrapper(response);
+
         try {
-            filterChain.doFilter(request, response);
+            filterChain.doFilter(request, wrappedResponse);
         } finally {
             long duration = System.currentTimeMillis() - startTime;
-            response.setHeader("X-Response-Time", String.valueOf(duration));
+            wrappedResponse.addHeader("X-Response-Time", String.valueOf(duration));
         }
     }
 
     @Override
     protected boolean shouldNotFilterAsyncDispatch() {
         return false;
+    }
+
+    private static class ResponseWrapper extends HttpServletResponseWrapper {
+        public ResponseWrapper(HttpServletResponse response) {
+            super(response);
+        }
+
+        @Override
+        public void addHeader(String name, String value) {
+            if (!isCommitted()) {
+                super.addHeader(name, value);
+            }
+        }
     }
 }
