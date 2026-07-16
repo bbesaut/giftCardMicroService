@@ -2,54 +2,38 @@ package com.finovago.p2p.config;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 
 import java.io.IOException;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
-import static org.mockito.ArgumentMatchers.eq;
 
 @DisplayName("ResponseTimeFilter Tests")
 class ResponseTimeFilterTest {
 
     private ResponseTimeFilter filter;
-
-    @Mock
-    private HttpServletRequest request;
-
-    @Mock
-    private HttpServletResponse response;
-
-    @Mock
-    private FilterChain filterChain;
+    private MockHttpServletRequest request;
+    private MockHttpServletResponse response;
 
     @BeforeEach
     void setUp() {
-        MockitoAnnotations.openMocks(this);
         filter = new ResponseTimeFilter();
+        request = new MockHttpServletRequest();
+        response = new MockHttpServletResponse();
     }
 
     @Test
     @DisplayName("Should add X-Response-Time header to response")
     void testResponseTimeHeaderIsAdded() throws IOException, ServletException {
-        ArgumentCaptor<String> headerNameCaptor = ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<String> headerValueCaptor = ArgumentCaptor.forClass(String.class);
+        FilterChain filterChain = (req, res) -> res.getOutputStream().write("{}".getBytes());
 
         filter.doFilterInternal(request, response, filterChain);
 
-        verify(response).addHeader(headerNameCaptor.capture(), headerValueCaptor.capture());
-
-        assertEquals("X-Response-Time", headerNameCaptor.getValue());
-
-        String headerValue = headerValueCaptor.getValue();
+        String headerValue = response.getHeader("X-Response-Time");
         assertNotNull(headerValue);
         assertTrue(headerValue.matches("\\d+"), "Header value should be a number (milliseconds)");
 
@@ -58,14 +42,18 @@ class ResponseTimeFilterTest {
     }
 
     @Test
-    @DisplayName("Should measure response time and include it in header value")
-    void testResponseTimeMeasurement() throws IOException, ServletException {
+    @DisplayName("Should still set the header after the response body has already been written")
+    void testResponseTimeHeaderSetAfterBodyWritten() throws IOException, ServletException {
+        FilterChain filterChain = (req, res) -> {
+            res.getOutputStream().write("{\"accessToken\":\"abc\"}".getBytes());
+            res.getOutputStream().flush();
+        };
+
         filter.doFilterInternal(request, response, filterChain);
 
-        ArgumentCaptor<String> headerValueCaptor = ArgumentCaptor.forClass(String.class);
-        verify(response).addHeader(eq("X-Response-Time"), headerValueCaptor.capture());
-
-        String duration = headerValueCaptor.getValue();
-        assertTrue(duration.matches("\\d+"), "Duration should be numeric milliseconds");
+        String headerValue = response.getHeader("X-Response-Time");
+        assertNotNull(headerValue, "X-Response-Time must be set even if the body was flushed inside the chain");
+        assertTrue(headerValue.matches("\\d+"), "Duration should be numeric milliseconds");
+        assertEquals("{\"accessToken\":\"abc\"}", response.getContentAsString());
     }
 }
