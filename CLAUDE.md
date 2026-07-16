@@ -38,6 +38,24 @@ Two Maven profiles for different workflows:
 - **Observability**: Correlation IDs in MDC, Loki logging in prod
 - **Async**: Custom TaskExecutor with MdcTaskDecorator for MDC propagation
 - **Exception handling**: GlobalExceptionHandler with custom exceptions
+- **Response timing**: ResponseTimeFilter adds `X-Response-Time` header to all responses (in milliseconds)
+
+### Response Timing Header (X-Response-Time)
+Every response includes an `X-Response-Time` header with the request processing time in milliseconds. This is a best practice for:
+- **Monitoring**: Track endpoint performance and identify bottlenecks
+- **Observability**: Integrate with APM tools and dashboards
+- **Separation of concerns**: Timing is HTTP metadata (header), not business data (body)
+
+**Implementation**: Automatically added by `ResponseTimeFilter` for all endpoints.
+
+**Example**:
+```
+HTTP/1.1 200 OK
+X-Response-Time: 125
+Content-Type: application/json
+
+{ "accessToken": "eyJ...", "refreshToken": "..." }
+```
 
 ## 🔐 Authentication Endpoints
 
@@ -178,6 +196,7 @@ Used for token refresh and logout operations
 - Async operations return CompletableFuture or HTTP 202 (Accepted)
 - All endpoints require JWT (except /api/v1/auth/**)
 - Profiles: dev (H2, DEBUG), prod (PostgreSQL, INFO), test (H2, random port)
+- **Response timing**: All responses include `X-Response-Time` header (milliseconds). This is HTTP metadata only—never add timing to DTOs.
 
 ## 👥 Admin User Setup
 
