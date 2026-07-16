@@ -2,17 +2,18 @@
 
 ## 📋 Stack
 - Spring Boot 3.4.2 + Java 21
-- PostgreSQL (prod) / H2 (dev/test)
+- PostgreSQL everywhere (dev via docker-compose, test via Testcontainers, prod on Neon)
 - JWT authentication (JJWT)
 - JPA with Lombok
 - Swagger/OpenAPI
 
 ## ⚙️ Commands
 ```bash
+docker-compose up -d postgres-dev    # Start local PostgreSQL for dev mode
 mvn clean install                    # Full build with tests
 mvn spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=dev"  # Dev mode
-mvn test                             # Run unit tests (H2, fast, no Docker)
-mvn test -P integration-tests        # Run all tests with real PostgreSQL 17 (requires Docker)
+mvn test                             # Run unit tests (Mockito-based, no DB, no Docker)
+mvn test -P integration-tests        # Run all tests with real PostgreSQL 17 via Testcontainers (requires Docker)
 ```
 
 ## 🧪 Testing Strategy
@@ -20,7 +21,7 @@ mvn test -P integration-tests        # Run all tests with real PostgreSQL 17 (re
 Two Maven profiles for different workflows:
 
 **Unit Tests (default)** - `mvn test`
-- 34 unit tests with H2 in-memory database
+- 34 unit tests, pure Mockito (no database at all)
 - Fast (~30s), no external dependencies
 - Best for: Local TDD, quick feedback loops
 - No Docker required
@@ -38,6 +39,24 @@ Two Maven profiles for different workflows:
 - **Observability**: Correlation IDs in MDC, Loki logging in prod
 - **Async**: Custom TaskExecutor with MdcTaskDecorator for MDC propagation
 - **Exception handling**: GlobalExceptionHandler with custom exceptions
+- **Response timing**: ResponseTimeFilter adds `X-Response-Time` header to all responses (in milliseconds)
+
+### Response Timing Header (X-Response-Time)
+Every response includes an `X-Response-Time` header with the request processing time in milliseconds. This is a best practice for:
+- **Monitoring**: Track endpoint performance and identify bottlenecks
+- **Observability**: Integrate with APM tools and dashboards
+- **Separation of concerns**: Timing is HTTP metadata (header), not business data (body)
+
+**Implementation**: Automatically added by `ResponseTimeFilter` for all endpoints.
+
+**Example**:
+```
+HTTP/1.1 200 OK
+X-Response-Time: 125
+Content-Type: application/json
+
+{ "accessToken": "eyJ...", "refreshToken": "..." }
+```
 
 ## 🔐 Authentication Endpoints
 
@@ -177,7 +196,8 @@ Used for token refresh and logout operations
 - Use `@Valid` for DTO validation
 - Async operations return CompletableFuture or HTTP 202 (Accepted)
 - All endpoints require JWT (except /api/v1/auth/**)
-- Profiles: dev (H2, DEBUG), prod (PostgreSQL, INFO), test (H2, random port)
+- Profiles: dev (PostgreSQL via docker-compose, DEBUG), prod (PostgreSQL, INFO), test (PostgreSQL via Testcontainers, random port)
+- **Response timing**: All responses include `X-Response-Time` header (milliseconds). This is HTTP metadata only—never add timing to DTOs.
 
 ## 👥 Admin User Setup
 
