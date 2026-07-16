@@ -2,7 +2,7 @@ package com.finovago.p2p.config;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
-import jakarta.servlet.ServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,13 +23,13 @@ class ResponseTimeFilterTest {
     private ResponseTimeFilter filter;
 
     @Mock
-    private FilterChain filterChain;
+    private HttpServletRequest request;
 
     @Mock
     private HttpServletResponse response;
 
     @Mock
-    private ServletResponse servletResponse;
+    private FilterChain filterChain;
 
     @BeforeEach
     void setUp() {
@@ -43,7 +43,7 @@ class ResponseTimeFilterTest {
         ArgumentCaptor<String> headerNameCaptor = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> headerValueCaptor = ArgumentCaptor.forClass(String.class);
 
-        filter.doFilter(null, response, filterChain);
+        filter.doFilterInternal(request, response, filterChain);
 
         verify(response).setHeader(headerNameCaptor.capture(), headerValueCaptor.capture());
 
@@ -60,9 +60,9 @@ class ResponseTimeFilterTest {
     @Test
     @DisplayName("Should execute filter chain even if exception occurs")
     void testFilterChainExecutionOnException() throws IOException, ServletException {
-        doThrow(new RuntimeException("Test exception")).when(filterChain).doFilter(null, response);
+        doThrow(new RuntimeException("Test exception")).when(filterChain).doFilter(request, response);
 
-        assertThrows(RuntimeException.class, () -> filter.doFilter(null, response, filterChain));
+        assertThrows(RuntimeException.class, () -> filter.doFilterInternal(request, response, filterChain));
 
         verify(response).setHeader(eq("X-Response-Time"), anyString());
     }
@@ -73,9 +73,9 @@ class ResponseTimeFilterTest {
         doAnswer(invocation -> {
             Thread.sleep(50);
             return null;
-        }).when(filterChain).doFilter(null, response);
+        }).when(filterChain).doFilter(request, response);
 
-        filter.doFilter(null, response, filterChain);
+        filter.doFilterInternal(request, response, filterChain);
 
         ArgumentCaptor<String> headerValueCaptor = ArgumentCaptor.forClass(String.class);
         verify(response).setHeader(eq("X-Response-Time"), headerValueCaptor.capture());
