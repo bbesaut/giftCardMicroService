@@ -205,7 +205,7 @@ Content-Type: application/json
 - `400 Bad Request`: Invalid request body (missing or invalid fields)
 - `401 Unauthorized`: Missing or invalid JWT token
 - `404 Not Found`: Gift card with specified code does not exist
-- `422 Unprocessable Entity`: Insufficient balance, card inactive, or card expired
+- `422 Unprocessable Entity`: Card is inactive or has expired (an amount exceeding the balance is NOT an error — the response returns `SUCCESS` with a non-zero `remainingToPay`)
 - `500 Internal Server Error`: Server error
 
 ### POST /api/v1/giftcards/create
@@ -311,7 +311,27 @@ Response for redemption operations
 - `remainingBalance` (double): Balance after deduction
 - `remainingToPay` (double): Amount still owed if balance was insufficient
 
-## ⚠️ Exceptions
+## ⚠️ Error Responses
+
+All error responses follow this standard structure:
+```json
+{
+  "error": "Error Type",
+  "message": "Detailed description of what went wrong",
+  "code": "correlation-id-for-tracking"
+}
+```
+
+The `code` field contains the correlation ID from the request context, useful for tracing requests in logs and monitoring systems.
+
+### Common HTTP Status Codes
+- **400 Bad Request**: Invalid request body or validation failure
+- **401 Unauthorized**: Missing or invalid JWT token
+- **403 Forbidden**: Insufficient permissions (role-based access denied)
+- **404 Not Found**: Resource doesn't exist
+- **409 Conflict**: Resource already exists (e.g., duplicate email or gift card code)
+- **422 Unprocessable Entity**: Business logic error (e.g., expired card, insufficient balance)
+- **500 Internal Server Error**: Server-side error
 
 ### UserAlreadyExistsException
 **HTTP Status**: 409 Conflict

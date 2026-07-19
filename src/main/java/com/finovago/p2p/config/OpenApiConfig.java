@@ -19,7 +19,7 @@ public class OpenApiConfig {
     GroupedOpenApi customerApi() {
         return GroupedOpenApi.builder()
                 .group("customer-api")
-                .pathsToMatch("/", "/api/v1/giftcards/create", "/api/v1/giftcards/redeem")
+                .pathsToMatch("/", "/api/v1/giftcards/create", "/api/v1/giftcards/redeem","/api/v1/giftcards/lookup/**")
                 .build();
     }
 

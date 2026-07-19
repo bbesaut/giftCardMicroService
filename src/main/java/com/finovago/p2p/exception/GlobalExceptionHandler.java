@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -136,6 +137,19 @@ public class GlobalExceptionHandler {
                 .body(Map.of(
                     "error", "Conflict",
                     "message", ex.getMessage(),
+                    "code", MDC.get("correlationId")
+                ));
+    }
+
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<Object> handleBadCredentialsException(BadCredentialsException ex) {
+        log.warn("Authentication failed - invalid credentials");
+
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of(
+                    "error", "Unauthorized",
+                    "message", "Invalid email or password",
                     "code", MDC.get("correlationId")
                 ));
     }

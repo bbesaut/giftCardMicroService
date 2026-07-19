@@ -39,9 +39,12 @@ public class AuthController {
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Login successful",
             content = @Content(schema = @Schema(implementation = AuthResponse.class))),
-        @ApiResponse(responseCode = "400", description = "Invalid request body (missing or invalid fields)"),
-        @ApiResponse(responseCode = "401", description = "Invalid email or password"),
-        @ApiResponse(responseCode = "500", description = "Internal server error")
+        @ApiResponse(responseCode = "400", description = "Invalid request body (missing or invalid fields)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"Email cannot be blank\",\"code\":\"correlation-id\"}"))),
+        @ApiResponse(responseCode = "401", description = "Invalid email or password",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid email or password\",\"code\":\"correlation-id\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\",\"code\":\"correlation-id\"}")))
     })
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
@@ -64,9 +67,12 @@ public class AuthController {
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Registration successful",
             content = @Content(schema = @Schema(implementation = AuthResponse.class))),
-        @ApiResponse(responseCode = "400", description = "Invalid request body (missing or invalid fields)"),
-        @ApiResponse(responseCode = "409", description = "Email already registered"),
-        @ApiResponse(responseCode = "500", description = "Internal server error")
+        @ApiResponse(responseCode = "400", description = "Invalid request body (missing or invalid fields)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"Email should be valid\",\"code\":\"correlation-id\"}"))),
+        @ApiResponse(responseCode = "409", description = "Email already registered",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Conflict\",\"message\":\"Email already registered\",\"code\":\"correlation-id\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\",\"code\":\"correlation-id\"}")))
     })
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
@@ -90,9 +96,12 @@ public class AuthController {
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Token refreshed successfully",
             content = @Content(schema = @Schema(implementation = AuthResponse.class))),
-        @ApiResponse(responseCode = "400", description = "Invalid request body (missing refresh token)"),
-        @ApiResponse(responseCode = "401", description = "Refresh token expired, revoked, or invalid"),
-        @ApiResponse(responseCode = "500", description = "Internal server error")
+        @ApiResponse(responseCode = "400", description = "Invalid request body (missing refresh token)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"Refresh token cannot be blank\",\"code\":\"correlation-id\"}"))),
+        @ApiResponse(responseCode = "401", description = "Refresh token expired, revoked, or invalid",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Refresh token has expired\",\"code\":\"correlation-id\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\",\"code\":\"correlation-id\"}")))
     })
     @PostMapping("/refresh")
     public ResponseEntity<AuthResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
@@ -115,9 +124,12 @@ public class AuthController {
     )
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "Logout successful - refresh token revoked"),
-        @ApiResponse(responseCode = "400", description = "Invalid request body (missing refresh token)"),
-        @ApiResponse(responseCode = "401", description = "Refresh token not found or already revoked"),
-        @ApiResponse(responseCode = "500", description = "Internal server error")
+        @ApiResponse(responseCode = "400", description = "Invalid request body (missing refresh token)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"Refresh token cannot be blank\",\"code\":\"correlation-id\"}"))),
+        @ApiResponse(responseCode = "401", description = "Refresh token not found or already revoked",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Refresh token not found\",\"code\":\"correlation-id\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\",\"code\":\"correlation-id\"}")))
     })
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(@Valid @RequestBody RefreshTokenRequest request) {

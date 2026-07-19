@@ -51,11 +51,17 @@ public class GiftCardController
     @ApiResponses({
         @ApiResponse(responseCode = "202", description = "Accepted - Redemption request accepted and being processed asynchronously",
             content = @Content(schema = @Schema(implementation = RedemptionResponse.class))),
-        @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request body (missing or invalid fields)"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token"),
-        @ApiResponse(responseCode = "404", description = "Not Found - Gift card with specified code does not exist"),
-        @ApiResponse(responseCode = "422", description = "Unprocessable Entity - Insufficient balance or other business logic error"),
-        @ApiResponse(responseCode = "500", description = "Internal Server Error - Unexpected server error")
+        @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request body (missing or invalid fields)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"The gift card code cannot be blank\",\"code\":\"correlation-id\"}"))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\",\"code\":\"unknown\"}"))),
+        @ApiResponse(responseCode = "404", description = "Not Found - Gift card with specified code does not exist",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Not Found\",\"message\":\"Gift card not found\",\"code\":\"correlation-id\"}"))),
+        @ApiResponse(responseCode = "422", description = "Unprocessable Entity - Gift card is inactive or has expired. "
+                    + "Note: an amount exceeding the balance is NOT an error - the response returns a SUCCESS status with a non-zero remainingToPay.",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unprocessable Entity\",\"message\":\"Gift card has expired\",\"code\":\"correlation-id\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error - Unexpected server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\",\"code\":\"correlation-id\"}")))
     })
     @PostMapping("/redeem")
     @ResponseStatus(HttpStatus.ACCEPTED)
@@ -73,9 +79,12 @@ public class GiftCardController
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "OK - Successfully retrieved the list of gift cards",
             content = @Content(schema = @Schema(implementation = GiftCardResponse.class))),
-        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token"),
-        @ApiResponse(responseCode = "403", description = "Forbidden - User role not permitted to list gift cards"),
-        @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error")
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\",\"code\":\"unknown\"}"))),
+        @ApiResponse(responseCode = "403", description = "Forbidden - User role not permitted to list gift cards",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Forbidden\",\"message\":\"Insufficient permissions for this resource\",\"code\":\"correlation-id\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\",\"code\":\"correlation-id\"}")))
     })
     @GetMapping("/list")
     @ResponseStatus(HttpStatus.OK)
@@ -93,11 +102,16 @@ public class GiftCardController
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "Created - Gift card successfully created",
             content = @Content(schema = @Schema(implementation = GiftCardResponse.class))),
-        @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request body (missing or invalid fields)"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token"),
-        @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions (ADMIN role required)"),
-        @ApiResponse(responseCode = "409", description = "Conflict - Gift card code already exists"),
-        @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error")
+        @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request body (missing or invalid fields)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"The card code cannot be blank\",\"code\":\"correlation-id\"}"))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\",\"code\":\"unknown\"}"))),
+        @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions (ADMIN role required)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Forbidden\",\"message\":\"Insufficient permissions for this resource\",\"code\":\"correlation-id\"}"))),
+        @ApiResponse(responseCode = "409", description = "Conflict - Gift card code already exists",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Conflict\",\"message\":\"Gift card with this code already exists\",\"code\":\"correlation-id\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\",\"code\":\"correlation-id\"}")))
     })
     @PostMapping("/create")
     @ResponseStatus(HttpStatus.CREATED)
@@ -117,9 +131,12 @@ public class GiftCardController
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "OK - Successfully retrieved gift card details",
             content = @Content(schema = @Schema(implementation = GiftCardResponse.class))),
-        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token"),
-        @ApiResponse(responseCode = "404", description = "Not Found - Gift card with specified code does not exist"),
-        @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error")
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\",\"code\":\"unknown\"}"))),
+        @ApiResponse(responseCode = "404", description = "Not Found - Gift card with specified code does not exist",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Not Found\",\"message\":\"Gift card not found\",\"code\":\"correlation-id\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\",\"code\":\"correlation-id\"}")))
     })
     @GetMapping("/lookup/{code}")
     @ResponseStatus(HttpStatus.OK)

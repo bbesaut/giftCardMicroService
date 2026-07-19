@@ -1,9 +1,8 @@
 package com.finovago.p2p.config;
 
+import com.finovago.p2p.security.JwtAccessDeniedHandler;
 import com.finovago.p2p.security.JwtAuthenticationEntryPoint;
 import com.finovago.p2p.security.JwtAuthenticationFilter;
-
-import jakarta.servlet.http.HttpServletResponse;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -44,10 +43,12 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthFilter;
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
+    private final JwtAccessDeniedHandler accessDeniedHandler;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter, JwtAuthenticationEntryPoint authenticationEntryPoint) {
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter, JwtAuthenticationEntryPoint authenticationEntryPoint, JwtAccessDeniedHandler accessDeniedHandler) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.authenticationEntryPoint = authenticationEntryPoint;
+        this.accessDeniedHandler = accessDeniedHandler;
     }
 
     @Bean
@@ -78,8 +79,7 @@ public class SecurityConfig {
 
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint(authenticationEntryPoint)
-                        .accessDeniedHandler(
-                                (req, res, ex) -> res.sendError(HttpServletResponse.SC_FORBIDDEN, "Access Denied")))
+                        .accessDeniedHandler(accessDeniedHandler))
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
