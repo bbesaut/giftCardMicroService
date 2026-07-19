@@ -62,13 +62,18 @@ public class AuthController {
 
     @Operation(
         summary = "User registration",
-        description = "Creates a new user account with email and password. New users are automatically assigned the CLIENT role."
+        description = "Creates a new user account with email and password. New users are automatically assigned the CLIENT role. "
+                    + "Requires authentication (JWT token) and ADMIN role."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Registration successful",
             content = @Content(schema = @Schema(implementation = AuthResponse.class))),
         @ApiResponse(responseCode = "400", description = "Invalid request body (missing or invalid fields)",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"Email should be valid\",\"code\":\"correlation-id\"}"))),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Full authentication is required to access this resource\",\"code\":\"correlation-id\"}"))),
+        @ApiResponse(responseCode = "403", description = "Insufficient permissions (ADMIN role required)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Forbidden\",\"message\":\"Access is denied\",\"code\":\"correlation-id\"}"))),
         @ApiResponse(responseCode = "409", description = "Email already registered",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Conflict\",\"message\":\"Email already registered\",\"code\":\"correlation-id\"}"))),
         @ApiResponse(responseCode = "500", description = "Internal server error",

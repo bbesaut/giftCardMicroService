@@ -20,6 +20,7 @@ import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.http.HttpHeaders.AUTHORIZATION;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -277,10 +278,23 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         assertEquals(false, auth1.refreshToken().equals(auth2.refreshToken()));
     }
 
+    private String loginAndGetAccessToken(String email, String password) throws Exception {
+        MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + email + "\",\"password\":\"" + password + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String loginResponse = loginResult.getResponse().getContentAsString();
+        return objectMapper.readValue(loginResponse, AuthResponse.class).accessToken();
+    }
+
     @Test
     void should_registerSuccessfully_and_returnAccessAndRefreshTokens() throws Exception {
+        String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
         String newEmail = "newuser@example.com";
         mockMvc.perform(post("/api/v1/auth/register")
+                        .header(AUTHORIZATION, "Bearer " + adminAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isOk())
@@ -293,8 +307,28 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void should_returnConflict_when_emailAlreadyExists() throws Exception {
+    void should_returnUnauthorized_when_registeringWithoutToken() throws Exception {
         mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"anonymous@example.com\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_returnForbidden_when_registeringAsClient() throws Exception {
+        String clientAccessToken = loginAndGetAccessToken(EMAIL, PASSWORD);
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .header(AUTHORIZATION, "Bearer " + clientAccessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"blockedclient@example.com\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void should_returnConflict_when_emailAlreadyExists() throws Exception {
+        String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .header(AUTHORIZATION, "Bearer " + adminAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isConflict());
@@ -302,7 +336,9 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_returnBadRequest_when_registrationEmailIsBlank() throws Exception {
+        String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
         mockMvc.perform(post("/api/v1/auth/register")
+                        .header(AUTHORIZATION, "Bearer " + adminAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isBadRequest());
@@ -310,7 +346,9 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_returnBadRequest_when_registrationPasswordIsBlank() throws Exception {
+        String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
         mockMvc.perform(post("/api/v1/auth/register")
+                        .header(AUTHORIZATION, "Bearer " + adminAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"newuser@example.com\",\"password\":\"\"}"))
                 .andExpect(status().isBadRequest());
@@ -318,7 +356,9 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_returnBadRequest_when_registrationEmailIsInvalid() throws Exception {
+        String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
         mockMvc.perform(post("/api/v1/auth/register")
+                        .header(AUTHORIZATION, "Bearer " + adminAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"not-an-email\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isBadRequest());
@@ -326,8 +366,10 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_createNewUserWithClientRoleOnRegistration() throws Exception {
+        String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
         String newEmail = "clientuser@example.com";
         mockMvc.perform(post("/api/v1/auth/register")
+                        .header(AUTHORIZATION, "Bearer " + adminAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isOk());

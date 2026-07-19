@@ -23,7 +23,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private static final String[] PUBLIC_ROUTES = {
-            "/api/v1/auth/**",
+            "/api/v1/auth/login",
+            "/api/v1/auth/refresh",
+            "/api/v1/auth/logout",
             "/",
             "/swagger-ui.html",
             "/swagger-ui/**",
@@ -31,6 +33,7 @@ public class SecurityConfig {
     };
 
     private static final String[] ADMIN_ROUTES = {
+            "/api/v1/auth/register",
             "/api/v1/giftcards/list",
             "/api/v1/giftcards/list/**"
     };

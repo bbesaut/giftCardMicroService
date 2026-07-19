@@ -61,7 +61,7 @@ Content-Type: application/json
 ## 🔐 Authentication Endpoints
 
 ### POST /api/v1/auth/register
-**Description**: Create a new user account. New users are automatically assigned CLIENT role.
+**Description**: Create a new user account. New users are automatically assigned CLIENT role. Requires authentication (ADMIN role).
 
 **Request** (RegisterRequest):
 ```json
@@ -81,6 +81,8 @@ Content-Type: application/json
 
 **Error Responses**:
 - `400 Bad Request`: Invalid email format or blank fields
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Insufficient permissions (ADMIN role required)
 - `409 Conflict`: Email already registered
 - `500 Internal Server Error`: Server error
 
@@ -348,7 +350,7 @@ The `code` field contains the correlation ID from the request context, useful fo
 ## 📌 Conventions
 - Use `@Valid` for DTO validation
 - Async operations return CompletableFuture or HTTP 202 (Accepted)
-- All endpoints require JWT (except /api/v1/auth/**)
+- All endpoints require JWT (except /api/v1/auth/login, /api/v1/auth/refresh, /api/v1/auth/logout). `/api/v1/auth/register` requires JWT + ADMIN role.
 - Profiles: dev (PostgreSQL via docker-compose, DEBUG), prod (PostgreSQL, INFO), test (PostgreSQL via Testcontainers, random port)
 - **Response timing**: All responses include `X-Response-Time` header (milliseconds). This is HTTP metadata only—never add timing to DTOs.
 
