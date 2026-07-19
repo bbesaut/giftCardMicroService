@@ -118,4 +118,19 @@ public class GiftCardService {
                 .map(card -> new GiftCardResponse(card.getCardCode(), card.getBalance(), card.isActive(), card.getExpirationDate()))
                 .toList();
     }
+
+    @Transactional(readOnly = true)
+    public GiftCardResponse lookupGiftCard(String code) {
+        log.info("Looking up gift card with code: {}", code);
+
+        GiftCard giftCard = giftCardRepository.findByCardCode(code)
+                .orElseThrow(() -> new UnknownGiftCardException("Gift card not found"));
+
+        return new GiftCardResponse(
+                giftCard.getCardCode(),
+                giftCard.getBalance(),
+                giftCard.isActive(),
+                giftCard.getExpirationDate()
+        );
+    }
 }

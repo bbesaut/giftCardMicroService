@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.finovago.p2p.dto.GiftCardCreateRequest;
+import com.finovago.p2p.dto.GiftCardResponse;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.exception.ExpiredGiftCardException;
 import com.finovago.p2p.exception.InactiveGiftCardException;
@@ -127,5 +128,31 @@ class GiftCardServiceUnitTest
         assertEquals(20.0, response.deductedAmount());
         assertEquals(0.0, response.remainingBalance());
         assertEquals(30.0, response.remainingToPay());
+    }
+
+    @Test
+    void should_return_gift_card_details_on_lookup()
+    {
+        String cardCode = "LOOKUP123";
+        LocalDate expirationDate = LocalDate.now().plusDays(30);
+        GiftCard giftCard = new GiftCard(cardCode, 150.0, true, expirationDate);
+
+        when(giftCardRepository.findByCardCode(cardCode)).thenReturn(Optional.of(giftCard));
+
+        GiftCardResponse response = giftCardService.lookupGiftCard(cardCode);
+
+        assertEquals(cardCode, response.giftCardCode());
+        assertEquals(150.0, response.balance());
+        assertEquals(true, response.active());
+        assertEquals(expirationDate, response.expirationDate());
+    }
+
+    @Test
+    void should_throw_exception_when_looking_up_non_existent_card()
+    {
+        String nonExistentCode = "NONEXISTENT";
+        when(giftCardRepository.findByCardCode(nonExistentCode)).thenReturn(Optional.empty());
+
+        assertThrows(UnknownGiftCardException.class, () -> giftCardService.lookupGiftCard(nonExistentCode));
     }
 }

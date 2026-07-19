@@ -38,6 +38,7 @@ public class SecurityConfig {
 
     private static final String[] CLIENT_ROUTES = {
             "/api/v1/giftcards/redeem/**",
+            "/api/v1/giftcards/lookup/**",
             "/api/v1/giftcards/create/**"
     };
 

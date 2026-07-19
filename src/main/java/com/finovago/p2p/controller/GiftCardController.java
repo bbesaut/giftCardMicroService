@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -105,6 +106,26 @@ public class GiftCardController
                 request.giftCardCode(), request.balance());
 
         return giftCardService.createGiftCard(request);
+    }
+
+    @Operation(
+        summary = "Lookup gift card details",
+        description = "Retrieve detailed information about a specific gift card by its code. "
+                    + "Returns the card's current balance, active status, and expiration date. "
+                    + "Requires authentication (JWT token)."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "OK - Successfully retrieved gift card details",
+            content = @Content(schema = @Schema(implementation = GiftCardResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token"),
+        @ApiResponse(responseCode = "404", description = "Not Found - Gift card with specified code does not exist"),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error")
+    })
+    @GetMapping("/lookup/{code}")
+    @ResponseStatus(HttpStatus.OK)
+    public GiftCardResponse lookupGiftCard(@PathVariable String code) {
+        log.info("Received gift card lookup request. Code: {}", code);
+        return giftCardService.lookupGiftCard(code);
     }
 }
 
