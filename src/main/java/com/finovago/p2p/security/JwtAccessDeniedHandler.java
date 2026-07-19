@@ -5,7 +5,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Map;
 
-import org.jboss.logging.MDC;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.stereotype.Component;
@@ -20,11 +19,9 @@ public class JwtAccessDeniedHandler implements AccessDeniedHandler {
         response.setStatus(HttpServletResponse.SC_FORBIDDEN);
         response.setContentType("application/json");
 
-        Object correlationId = MDC.get("correlationId");
         Map<String, Object> errorResponse = Map.of(
             "error", "Forbidden",
-            "message", "Insufficient permissions for this resource",
-            "code", correlationId != null ? correlationId : "unknown"
+            "message", "Insufficient permissions for this resource"
         );
 
         ObjectMapper mapper = new ObjectMapper();

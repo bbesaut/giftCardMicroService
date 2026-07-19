@@ -5,7 +5,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Map;
 
-import org.jboss.logging.MDC;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.stereotype.Component;
@@ -20,11 +19,9 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType("application/json");
 
-        Object correlationId = MDC.get("correlationId");
         Map<String, Object> errorResponse = Map.of(
             "error", "Unauthorized",
-            "message", "Invalid or missing JWT token",
-            "code", correlationId != null ? correlationId : "unknown"
+            "message", "Invalid or missing JWT token"
         );
 
         ObjectMapper mapper = new ObjectMapper();

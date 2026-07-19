@@ -40,6 +40,7 @@ Two Maven profiles for different workflows:
 - **Async**: Custom TaskExecutor with MdcTaskDecorator for MDC propagation
 - **Exception handling**: GlobalExceptionHandler with custom exceptions
 - **Response timing**: ResponseTimeFilter adds `X-Response-Time` header to all responses (in milliseconds)
+- **Rate limiting**: RateLimitFilter caps `login`/`lookup`/`redeem` at 10 requests/minute per IP (in-memory, per-instance only — see `app.rate-limit.*` properties). Disabled under the `test` profile.
 
 ### Response Timing Header (X-Response-Time)
 Every response includes an `X-Response-Time` header with the request processing time in milliseconds. This is a best practice for:
@@ -117,6 +118,7 @@ Content-Type: application/json
 **Error Responses**:
 - `400 Bad Request`: Invalid email format or blank fields
 - `401 Unauthorized`: Invalid email or password
+- `429 Too Many Requests`: Rate limit exceeded (max 10 attempts/minute per IP)
 - `500 Internal Server Error`: Server error
 
 ### POST /api/v1/auth/refresh
@@ -180,6 +182,7 @@ Content-Type: application/json
 **Error Responses**:
 - `401 Unauthorized`: Missing or invalid JWT token
 - `404 Not Found`: Gift card with specified code does not exist
+- `429 Too Many Requests`: Rate limit exceeded (max 10 attempts/minute per IP)
 - `500 Internal Server Error`: Database or unexpected server error
 
 ### POST /api/v1/giftcards/redeem
@@ -208,6 +211,7 @@ Content-Type: application/json
 - `401 Unauthorized`: Missing or invalid JWT token
 - `404 Not Found`: Gift card with specified code does not exist
 - `422 Unprocessable Entity`: Card is inactive or has expired (an amount exceeding the balance is NOT an error — the response returns `SUCCESS` with a non-zero `remainingToPay`)
+- `429 Too Many Requests`: Rate limit exceeded (max 10 attempts/minute per IP)
 - `500 Internal Server Error`: Server error
 
 ### POST /api/v1/giftcards/create
@@ -319,12 +323,11 @@ All error responses follow this standard structure:
 ```json
 {
   "error": "Error Type",
-  "message": "Detailed description of what went wrong",
-  "code": "correlation-id-for-tracking"
+  "message": "Detailed description of what went wrong"
 }
 ```
 
-The `code` field contains the correlation ID from the request context, useful for tracing requests in logs and monitoring systems.
+The correlation ID is **not** duplicated in the body — it is already returned on every response (success or error) via the `X-Correlation-Id` header, which is what you use to trace a request in Grafana/Loki.
 
 ### Common HTTP Status Codes
 - **400 Bad Request**: Invalid request body or validation failure
@@ -342,8 +345,7 @@ The `code` field contains the correlation ID from the request context, useful fo
 ```json
 {
   "error": "Conflict",
-  "message": "Email already registered",
-  "code": "correlation-id"
+  "message": "Email already registered"
 }
 ```
 

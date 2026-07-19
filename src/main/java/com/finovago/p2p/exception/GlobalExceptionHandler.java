@@ -2,7 +2,6 @@ package com.finovago.p2p.exception;
 
 import java.util.Map;
 
-import org.jboss.logging.MDC;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,8 +29,7 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.NOT_FOUND)
                 .body(Map.of(
                     "error", "Not Found",
-                    "message", ex.getMessage(), 
-                    "code", MDC.get("correlationId")
+                    "message", ex.getMessage()
                 ));
     }
 
@@ -43,8 +41,7 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.UNPROCESSABLE_ENTITY)
                 .body(Map.of(
                     "error", "Unprocessable Entity",
-                    "message", ex.getMessage(),
-                    "code", MDC.get("correlationId")
+                    "message", ex.getMessage()
                 ));
     }
 
@@ -56,8 +53,7 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.UNPROCESSABLE_ENTITY)
                 .body(Map.of(
                     "error", "Unprocessable Entity",
-                    "message", ex.getMessage(),
-                    "code", MDC.get("correlationId")
+                    "message", ex.getMessage()
                 ));
     }
 
@@ -74,8 +70,7 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.BAD_REQUEST) 
                 .body(Map.of(
                     "error", "Bad Request",
-                    "message", errorMessage,
-                    "code", MDC.get("correlationId")
+                    "message", errorMessage
                 ));
     }
 
@@ -109,8 +104,7 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.UNAUTHORIZED)
                 .body(Map.of(
                     "error", "Unauthorized",
-                    "message", ex.getMessage(),
-                    "code", MDC.get("correlationId")
+                    "message", ex.getMessage()
                 ));
     }
 
@@ -123,8 +117,7 @@ public class GlobalExceptionHandler {
             .status(HttpStatus.CONFLICT)
             .body(Map.of(
                 "error", "Conflict",
-                "message", ex.getMessage(),
-                "code", MDC.get("correlationId")
+                "message", ex.getMessage()
             ));
 }
 
@@ -136,8 +129,7 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.CONFLICT)
                 .body(Map.of(
                     "error", "Conflict",
-                    "message", ex.getMessage(),
-                    "code", MDC.get("correlationId")
+                    "message", ex.getMessage()
                 ));
     }
 
@@ -149,8 +141,7 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.UNAUTHORIZED)
                 .body(Map.of(
                     "error", "Unauthorized",
-                    "message", "Invalid email or password",
-                    "code", MDC.get("correlationId")
+                    "message", "Invalid email or password"
                 ));
     }
 
