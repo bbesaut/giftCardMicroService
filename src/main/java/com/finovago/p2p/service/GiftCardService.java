@@ -20,27 +20,39 @@ import com.finovago.p2p.exception.ExpiredGiftCardException;
 import com.finovago.p2p.exception.InactiveGiftCardException;
 import com.finovago.p2p.exception.UnknownGiftCardException;
 import com.finovago.p2p.model.GiftCard;
+import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.repository.GiftCardRepository;
+import com.finovago.p2p.repository.MerchantRepository;
+import com.finovago.p2p.security.CurrentUserContext;
 
 @Service
 public class GiftCardService {
     private final GiftCardRepository giftCardRepository;
+    private final MerchantRepository merchantRepository;
+    private final CurrentUserContext currentUserContext;
     private final Executor taskExecutor;
     private static final Logger log = LoggerFactory.getLogger(GiftCardService.class);
 
-    public GiftCardService(GiftCardRepository giftCardRepository, @Qualifier("taskExecutor") Executor taskExecutor) {
+    public GiftCardService(
+            GiftCardRepository giftCardRepository,
+            MerchantRepository merchantRepository,
+            CurrentUserContext currentUserContext,
+            @Qualifier("taskExecutor") Executor taskExecutor) {
         this.giftCardRepository = giftCardRepository;
+        this.merchantRepository = merchantRepository;
+        this.currentUserContext = currentUserContext;
         this.taskExecutor = taskExecutor;
     }
 
     public CompletableFuture<RedemptionResponse> redeemGiftCardAsync(RedemptionRequest request) {
+        Long merchantId = currentUserContext.currentMerchantId();
         return CompletableFuture.supplyAsync(() -> {
-                return executeRedemptionSync(request.giftCardCode(), request.amount());
+                return executeRedemptionSync(merchantId, request.giftCardCode(), request.amount());
         }, taskExecutor);
     }
 
     @Transactional
-    public RedemptionResponse executeRedemptionSync(String code, double amount) {
+    public RedemptionResponse executeRedemptionSync(Long merchantId, String code, double amount) {
 
         log.info("Processing database validation for card code: {}", code);
 
@@ -54,7 +66,7 @@ public class GiftCardService {
             throw new IllegalArgumentException("Amount must be greater than zero");
         }
 
-        GiftCard giftCard = giftCardRepository.findByCardCode(code)
+        GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, code)
                 .orElseThrow(() -> new UnknownGiftCardException("Gift card not found"));
 
         if (!giftCard.isActive()) {
@@ -94,28 +106,38 @@ public class GiftCardService {
 
     @Transactional
     public GiftCardResponse createGiftCard(GiftCardCreateRequest request) {
-        Optional<GiftCard> existingCard = giftCardRepository.findByCardCode(request.giftCardCode());
+        Long merchantId = currentUserContext.currentMerchantId();
+
+        Optional<GiftCard> existingCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, request.giftCardCode());
         if (existingCard.isPresent()) {
             throw new IllegalArgumentException("Gift card with this code already exists");
         }
 
         log.debug("Database command issued: Instantiating new entity record for code: {}", request.giftCardCode());
 
-        GiftCard giftCard = new GiftCard(request.giftCardCode(), request.balance(), request.active(), request.expirationDate());
+        // merchantId is trusted (derived from the authenticated principal, never from the request body).
+        // getReferenceById avoids an extra round-trip to load the full Merchant just to set the FK.
+        Merchant merchant = merchantRepository.getReferenceById(merchantId);
+
+        GiftCard giftCard = new GiftCard(merchant, request.giftCardCode(), request.balance(), request.active(), request.expirationDate());
         GiftCard savedCard = giftCardRepository.save(giftCard);
 
         log.info("Administrative Event: Gift card [{}] successfully registered into database vault.", request.giftCardCode());
 
-        return new GiftCardResponse(savedCard.getCardCode(), savedCard.getBalance(), savedCard.isActive(), savedCard.getExpirationDate());
+        return new GiftCardResponse(savedCard.getCardCode(), savedCard.getBalance(), savedCard.isActive(), savedCard.getExpirationDate(), merchantId);
     }
 
     @Transactional(readOnly = true)
     public List<GiftCardResponse> getAllGiftCards() {
         log.info("Fetching all gift cards from database");
 
-        return giftCardRepository.findAll()
+        List<GiftCard> cards = currentUserContext.isAdmin()
+                ? giftCardRepository.findAll()
+                : giftCardRepository.findAllByMerchantId(currentUserContext.currentMerchantId());
+
+        return cards
                 .stream()
-                .map(card -> new GiftCardResponse(card.getCardCode(), card.getBalance(), card.isActive(), card.getExpirationDate()))
+                .map(card -> new GiftCardResponse(card.getCardCode(), card.getBalance(), card.isActive(), card.getExpirationDate(), card.getMerchant().getId()))
                 .toList();
     }
 
@@ -123,14 +145,16 @@ public class GiftCardService {
     public GiftCardResponse lookupGiftCard(String code) {
         log.info("Looking up gift card with code: {}", code);
 
-        GiftCard giftCard = giftCardRepository.findByCardCode(code)
+        Long merchantId = currentUserContext.currentMerchantId();
+        GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, code)
                 .orElseThrow(() -> new UnknownGiftCardException("Gift card not found"));
 
         return new GiftCardResponse(
                 giftCard.getCardCode(),
                 giftCard.getBalance(),
                 giftCard.isActive(),
-                giftCard.getExpirationDate()
+                giftCard.getExpirationDate(),
+                merchantId
         );
     }
 }

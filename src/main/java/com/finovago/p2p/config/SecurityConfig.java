@@ -38,7 +38,7 @@ public class SecurityConfig {
             "/api/v1/giftcards/list/**"
     };
 
-    private static final String[] CLIENT_ROUTES = {
+    private static final String[] MERCHANT_ROUTES = {
             "/api/v1/giftcards/redeem/**",
             "/api/v1/giftcards/lookup/**",
             "/api/v1/giftcards/create/**"
@@ -61,9 +61,9 @@ public class SecurityConfig {
 
     @Bean
     public RoleHierarchy roleHierarchy() {
-        return RoleHierarchyImpl.withDefaultRolePrefix()
-                .role("ADMIN").implies("CLIENT")
-                .build();
+        // No implied roles: ADMIN manages the platform (merchants, global gift card listing)
+        // but does not act on behalf of a specific merchant's own gift cards.
+        return RoleHierarchyImpl.withDefaultRolePrefix().build();
     }
 
     @Bean
@@ -77,7 +77,7 @@ public class SecurityConfig {
                         .requestMatchers("/h2-console/**").permitAll()
                         .requestMatchers(PUBLIC_ROUTES).permitAll()
                         .requestMatchers(ADMIN_ROUTES).hasRole("ADMIN")
-                        .requestMatchers(CLIENT_ROUTES).hasRole("CLIENT")
+                        .requestMatchers(MERCHANT_ROUTES).hasRole("MERCHANT")
                         .anyRequest().authenticated())
 
                 .exceptionHandling(exception -> exception

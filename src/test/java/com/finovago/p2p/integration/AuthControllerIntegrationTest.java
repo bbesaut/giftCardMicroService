@@ -3,8 +3,10 @@ package com.finovago.p2p.integration;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finovago.p2p.AbstractIntegrationTest;
 import com.finovago.p2p.dto.AuthResponse;
+import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.model.Role;
 import com.finovago.p2p.model.User;
+import com.finovago.p2p.repository.MerchantRepository;
 import com.finovago.p2p.repository.RefreshTokenRepository;
 import com.finovago.p2p.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,6 +41,9 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
     private UserRepository userRepository;
 
     @Autowired
+    private MerchantRepository merchantRepository;
+
+    @Autowired
     private RefreshTokenRepository refreshTokenRepository;
 
     @Autowired
@@ -51,8 +56,10 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
     void setUp() {
         refreshTokenRepository.deleteAll();
         userRepository.deleteAll();
-        userRepository.save(new User(EMAIL, passwordEncoder.encode(PASSWORD), Role.CLIENT));
-        userRepository.save(new User(VALID_EMAIL, passwordEncoder.encode(PASSWORD), Role.ADMIN));
+        merchantRepository.deleteAll();
+        Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "merchant@example.com"));
+        userRepository.save(new User(EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant));
+        userRepository.save(new User(VALID_EMAIL, passwordEncoder.encode(PASSWORD), Role.ADMIN, null));
     }
 
     @Test
@@ -296,7 +303,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/v1/auth/register")
                         .header(AUTHORIZATION, "Bearer " + adminAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\"}"))
+                        .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"New Merchant\"}"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.accessToken", notNullValue()))
@@ -310,7 +317,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
     void should_returnUnauthorized_when_registeringWithoutToken() throws Exception {
         mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"anonymous@example.com\",\"password\":\"" + PASSWORD + "\"}"))
+                        .content("{\"email\":\"anonymous@example.com\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"New Merchant\"}"))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -320,7 +327,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/v1/auth/register")
                         .header(AUTHORIZATION, "Bearer " + clientAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"blockedclient@example.com\",\"password\":\"" + PASSWORD + "\"}"))
+                        .content("{\"email\":\"blockedclient@example.com\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"New Merchant\"}"))
                 .andExpect(status().isForbidden());
     }
 
@@ -330,7 +337,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/v1/auth/register")
                         .header(AUTHORIZATION, "Bearer " + adminAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}"))
+                        .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"New Merchant\"}"))
                 .andExpect(status().isConflict());
     }
 
@@ -340,7 +347,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/v1/auth/register")
                         .header(AUTHORIZATION, "Bearer " + adminAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"\",\"password\":\"" + PASSWORD + "\"}"))
+                        .content("{\"email\":\"\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"New Merchant\"}"))
                 .andExpect(status().isBadRequest());
     }
 
@@ -350,7 +357,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/v1/auth/register")
                         .header(AUTHORIZATION, "Bearer " + adminAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"newuser@example.com\",\"password\":\"\"}"))
+                        .content("{\"email\":\"newuser@example.com\",\"password\":\"\",\"merchantName\":\"New Merchant\"}"))
                 .andExpect(status().isBadRequest());
     }
 
@@ -360,21 +367,33 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/v1/auth/register")
                         .header(AUTHORIZATION, "Bearer " + adminAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"not-an-email\",\"password\":\"" + PASSWORD + "\"}"))
+                        .content("{\"email\":\"not-an-email\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"New Merchant\"}"))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
-    void should_createNewUserWithClientRoleOnRegistration() throws Exception {
+    void should_returnBadRequest_when_registrationMerchantNameIsBlank() throws Exception {
         String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
-        String newEmail = "clientuser@example.com";
         mockMvc.perform(post("/api/v1/auth/register")
                         .header(AUTHORIZATION, "Bearer " + adminAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\"}"))
+                        .content("{\"email\":\"newuser@example.com\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void should_createNewMerchantAndUserWithMerchantRoleOnRegistration() throws Exception {
+        String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
+        String newEmail = "merchantuser@example.com";
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .header(AUTHORIZATION, "Bearer " + adminAccessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"New Merchant\"}"))
                 .andExpect(status().isOk());
 
         User createdUser = userRepository.findByEmail(newEmail).orElseThrow();
-        assertEquals(Role.CLIENT, createdUser.getRole());
+        assertEquals(Role.MERCHANT, createdUser.getRole());
+        assertNotNull(createdUser.getMerchant());
+        assertEquals("New Merchant", createdUser.getMerchant().getName());
     }
 }

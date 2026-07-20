@@ -1,8 +1,10 @@
 package com.finovago.p2p.integration;
 
 import com.finovago.p2p.AbstractIntegrationTest;
+import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.model.Role;
 import com.finovago.p2p.model.User;
+import com.finovago.p2p.repository.MerchantRepository;
 import com.finovago.p2p.repository.RefreshTokenRepository;
 import com.finovago.p2p.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,6 +32,9 @@ class AuthValidationIntegrationTest extends AbstractIntegrationTest {
     private UserRepository userRepository;
 
     @Autowired
+    private MerchantRepository merchantRepository;
+
+    @Autowired
     private RefreshTokenRepository refreshTokenRepository;
 
     @Autowired
@@ -39,7 +44,9 @@ class AuthValidationIntegrationTest extends AbstractIntegrationTest {
     void setUp() {
         refreshTokenRepository.deleteAll();
         userRepository.deleteAll();
-        userRepository.save(new User(VALID_EMAIL, passwordEncoder.encode(VALID_PASSWORD), Role.CLIENT));
+        merchantRepository.deleteAll();
+        Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "merchant@example.com"));
+        userRepository.save(new User(VALID_EMAIL, passwordEncoder.encode(VALID_PASSWORD), Role.MERCHANT, merchant));
     }
 
     // ==================== Login Validation Tests ====================

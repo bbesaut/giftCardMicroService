@@ -21,20 +21,21 @@ mvn test -P integration-tests        # Run all tests with real PostgreSQL 17 via
 Two Maven profiles for different workflows:
 
 **Unit Tests (default)** - `mvn test`
-- 39 unit tests, pure Mockito (no database at all)
+- 47 unit tests, pure Mockito (no database at all)
 - Fast (~30s), no external dependencies
 - Best for: Local TDD, quick feedback loops
 - No Docker required
 
 **Integration Tests** - `mvn test -P integration-tests`
-- 56 tests (39 unit + 17 integration) with real PostgreSQL 17
+- 109 tests (47 unit + 62 integration) with real PostgreSQL 17
 - Validates Flyway migrations
 - Matches production database (Neon PostgreSQL 18.4)
 - Requires: Docker installed and running
 - Best for: CI/CD pipelines, pre-deployment verification
 
 ## 🏗️ Architecture Summary
-- **JWT auth**: JJWT-based, stateless, roles (ADMIN/CLIENT)
+- **Multi-tenancy**: every gift card belongs to exactly one `Merchant`. `ADMIN` is the platform owner (manages merchants, sees all cards via `/list`); `MERCHANT` is a merchant account, scoped to its own cards only. Tenant scoping is derived server-side from the JWT (`merchantId` claim), never from client input.
+- **JWT auth**: JJWT-based, stateless, roles (ADMIN/MERCHANT), JWT carries a `merchantId` claim (null for ADMIN)
 - **Service layer**: GiftCardService with async redemption (CompletableFuture)
 - **Observability**: Correlation IDs in MDC, Loki logging in prod
 - **Async**: Custom TaskExecutor with MdcTaskDecorator for MDC propagation
@@ -62,13 +63,14 @@ Content-Type: application/json
 ## 🔐 Authentication Endpoints
 
 ### POST /api/v1/auth/register
-**Description**: Create a new user account. New users are automatically assigned CLIENT role. Requires authentication (ADMIN role).
+**Description**: Create a new merchant. A merchant is exactly one email account: this endpoint creates both the `Merchant` record (business name) and its single MERCHANT-role user account together, in one transaction. Requires authentication (ADMIN role) — merchant onboarding is admin-gated, not public self-signup.
 
 **Request** (RegisterRequest):
 ```json
 {
   "email": "user@example.com",
-  "password": "securePassword123"
+  "password": "securePassword123",
+  "merchantName": "Acme Corp"
 }
 ```
 
@@ -81,7 +83,7 @@ Content-Type: application/json
 ```
 
 **Error Responses**:
-- `400 Bad Request`: Invalid email format or blank fields
+- `400 Bad Request`: Invalid email format or blank/missing fields (including blank `merchantName`)
 - `401 Unauthorized`: Missing or invalid JWT token
 - `403 Forbidden`: Insufficient permissions (ADMIN role required)
 - `409 Conflict`: Email already registered
@@ -89,12 +91,15 @@ Content-Type: application/json
 
 **Logging**:
 - `INFO`: "Registration attempt for email: u***@example.com"
-- `INFO`: "User registered successfully: user@example.com (role: CLIENT)"
+- `INFO`: "User registered successfully: user@example.com (role: MERCHANT, merchantId: 1)"
 - `WARN`: "Registration failed - email already exists: u***@example.com"
 
 **Field Validation**:
 - `email`: Required, must be valid email format, must be unique in database
 - `password`: Required, non-blank
+- `merchantName`: Required, non-blank — becomes the new Merchant's business name
+
+**Note**: There is currently no way to attach a *second* user to an existing merchant (register always creates a brand-new Merchant). `Merchant` and `User` are still modeled as separate entities (1 Merchant → N Users) so that capability can be added later without a schema change — but no such endpoint exists today.
 
 ### POST /api/v1/auth/login
 **Description**: Authenticate user with credentials and obtain JWT tokens.
@@ -163,8 +168,10 @@ Content-Type: application/json
 
 ## 🎁 Gift Card Endpoints
 
+All gift card endpoints below are scoped to the calling MERCHANT's own tenant — `merchantId` is derived from the JWT, never accepted from the client. A gift card code only needs to be unique **within a merchant** (`UNIQUE(merchant_id, card_code)`); two different merchants may use the same code without collision. Looking up or redeeming another merchant's card returns `404 Not Found` (not `403`), so tenant existence is never leaked.
+
 ### GET /api/v1/giftcards/lookup/{code}
-**Description**: Retrieve detailed information about a specific gift card by its code. Returns the card's current balance, active status, and expiration date. Requires authentication (CLIENT role or higher).
+**Description**: Retrieve detailed information about a specific gift card by its code, scoped to the caller's merchant. Returns the card's current balance, active status, and expiration date. Requires authentication (MERCHANT role).
 
 **Path Parameters**:
 - `code` (String): The gift card code to look up
@@ -181,12 +188,12 @@ Content-Type: application/json
 
 **Error Responses**:
 - `401 Unauthorized`: Missing or invalid JWT token
-- `404 Not Found`: Gift card with specified code does not exist
+- `404 Not Found`: Gift card with specified code does not exist for the caller's merchant
 - `429 Too Many Requests`: Rate limit exceeded (max 10 attempts/minute per IP)
 - `500 Internal Server Error`: Database or unexpected server error
 
 ### POST /api/v1/giftcards/redeem
-**Description**: Redeem a specified amount from a gift card using its code. The request is processed asynchronously. Requires authentication (CLIENT role or higher).
+**Description**: Redeem a specified amount from a gift card using its code, scoped to the caller's merchant. The request is processed asynchronously. Requires authentication (MERCHANT role).
 
 **Request** (RedemptionRequest):
 ```json
@@ -209,13 +216,13 @@ Content-Type: application/json
 **Error Responses**:
 - `400 Bad Request`: Invalid request body (missing or invalid fields)
 - `401 Unauthorized`: Missing or invalid JWT token
-- `404 Not Found`: Gift card with specified code does not exist
+- `404 Not Found`: Gift card with specified code does not exist for the caller's merchant
 - `422 Unprocessable Entity`: Card is inactive or has expired (an amount exceeding the balance is NOT an error — the response returns `SUCCESS` with a non-zero `remainingToPay`)
 - `429 Too Many Requests`: Rate limit exceeded (max 10 attempts/minute per IP)
 - `500 Internal Server Error`: Server error
 
 ### POST /api/v1/giftcards/create
-**Description**: Create a new gift card with the specified code and initial balance. Requires authentication (ADMIN role). Gift card code must be unique.
+**Description**: Create a new gift card with the specified code and initial balance, under the caller's own merchant. Requires authentication (MERCHANT role). Gift card code must be unique within that merchant.
 
 **Request** (GiftCardCreateRequest):
 ```json
@@ -240,12 +247,12 @@ Content-Type: application/json
 **Error Responses**:
 - `400 Bad Request`: Invalid request body (missing or invalid fields)
 - `401 Unauthorized`: Missing or invalid JWT token
-- `403 Forbidden`: Insufficient permissions (ADMIN role required)
-- `409 Conflict`: Gift card code already exists
+- `403 Forbidden`: Insufficient permissions (MERCHANT role required — ADMIN cannot create gift cards, it has no merchant of its own)
+- `409 Conflict`: Gift card code already exists for this merchant
 - `500 Internal Server Error`: Database or unexpected server error
 
 ### GET /api/v1/giftcards/list
-**Description**: Retrieve a list of all available gift cards with their details. Requires authentication (ADMIN role).
+**Description**: Retrieve a list of all available gift cards with their details. Requires authentication (ADMIN role) — this is the only gift card endpoint ADMIN can access, and it returns cards across **all** merchants (not scoped).
 
 **Response** (List of GiftCardResponse - HTTP 200):
 ```json
@@ -273,9 +280,10 @@ Content-Type: application/json
 ## 📦 DTOs
 
 ### RegisterRequest
-Used for user registration (POST /api/v1/auth/register)
+Used for merchant registration (POST /api/v1/auth/register)
 - `email` (String): User's email, must be unique, validated with @Email
 - `password` (String): User's password, non-blank
+- `merchantName` (String): Business name for the new Merchant created alongside this user, non-blank
 
 ### LoginRequest
 Used for authentication (POST /api/v1/auth/login)
@@ -355,6 +363,8 @@ The correlation ID is **not** duplicated in the body — it is already returned 
 - All endpoints require JWT (except /api/v1/auth/login, /api/v1/auth/refresh, /api/v1/auth/logout). `/api/v1/auth/register` requires JWT + ADMIN role.
 - Profiles: dev (PostgreSQL via docker-compose, DEBUG), prod (PostgreSQL, INFO), test (PostgreSQL via Testcontainers, random port)
 - **Response timing**: All responses include `X-Response-Time` header (milliseconds). This is HTTP metadata only—never add timing to DTOs.
+- **Correlation id & response timing filters run before Spring Security** (`@Order(Ordered.HIGHEST_PRECEDENCE)` on `MdcFilter`/`ResponseTimeFilter`) so that even 401/403 responses rejected by Security itself carry `X-Correlation-Id`/`X-Response-Time` — don't remove that ordering.
+- **Tenant scoping**: never trust a client-supplied `merchantId` for gift card operations — it always comes from the authenticated principal's JWT (`CurrentUserContext`).
 
 ## 👥 Admin User Setup
 
@@ -363,9 +373,9 @@ The correlation ID is **not** duplicated in the body — it is already returned 
 - Password: `admin123` (⚠️ **Change immediately after first login**)
 - See [docs/PRODUCTION_SETUP.md](docs/PRODUCTION_SETUP.md) for customization
 
-**Development**: Admin + Client users created by DataInitializer on startup:
-- `admin@finovago.com` / `admin123`
-- `client@finovago.com` / `client123`
+**Development**: Admin + Merchant users created by DataInitializer on startup:
+- `admin@finovago.com` / `admin123` (role: ADMIN, no merchant)
+- `client@finovago.com` / `client123` (role: MERCHANT, attached to the seeded "Finovago Demo Merchant")
 
 ## ⛔ DO NOT
 - Modify files in `src/main/resources/db/migration/` directly
