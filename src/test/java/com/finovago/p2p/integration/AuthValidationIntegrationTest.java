@@ -4,6 +4,7 @@ import com.finovago.p2p.AbstractIntegrationTest;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.model.Role;
 import com.finovago.p2p.model.User;
+import com.finovago.p2p.repository.GiftCardRepository;
 import com.finovago.p2p.repository.MerchantRepository;
 import com.finovago.p2p.repository.RefreshTokenRepository;
 import com.finovago.p2p.repository.UserRepository;
@@ -35,6 +36,9 @@ class AuthValidationIntegrationTest extends AbstractIntegrationTest {
     private MerchantRepository merchantRepository;
 
     @Autowired
+    private GiftCardRepository giftCardRepository;
+
+    @Autowired
     private RefreshTokenRepository refreshTokenRepository;
 
     @Autowired
@@ -44,6 +48,9 @@ class AuthValidationIntegrationTest extends AbstractIntegrationTest {
     void setUp() {
         refreshTokenRepository.deleteAll();
         userRepository.deleteAll();
+        // gift_card has a FK to merchants; other integration test classes are non-transactional
+        // and commit rows that outlive this class, so clear gift cards before deleting merchants.
+        giftCardRepository.deleteAll();
         merchantRepository.deleteAll();
         Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "merchant@example.com"));
         userRepository.save(new User(VALID_EMAIL, passwordEncoder.encode(VALID_PASSWORD), Role.MERCHANT, merchant));
