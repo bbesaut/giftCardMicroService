@@ -1,13 +1,18 @@
 package com.finovago.p2p.integration;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import com.finovago.p2p.AbstractIntegrationTest;
 import com.finovago.p2p.dto.GiftCardCreateRequest;
@@ -15,7 +20,10 @@ import com.finovago.p2p.dto.RedemptionRequest;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.exception.ExpiredGiftCardException;
 import com.finovago.p2p.model.GiftCard;
+import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.repository.GiftCardRepository;
+import com.finovago.p2p.repository.MerchantRepository;
+import com.finovago.p2p.security.AuthenticatedUser;
 import com.finovago.p2p.service.GiftCardService;
 
 class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
@@ -24,7 +32,34 @@ class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
     private GiftCardRepository giftCardRepository;
 
     @Autowired
+    private MerchantRepository merchantRepository;
+
+    @Autowired
     private GiftCardService giftCardService;
+
+    private Long merchantId;
+
+    @BeforeEach
+    void setUp() {
+        // Redemption runs on a separate thread pool (see GiftCardService#redeemGiftCardAsync), so this
+        // class deliberately does NOT use @Transactional — a test-managed transaction is bound to the
+        // main thread only, and the async thread wouldn't see uncommitted data. Rows are cleaned up
+        // manually instead (gift_card first: it has a FK to merchants).
+        giftCardRepository.deleteAll();
+        merchantRepository.deleteAll();
+
+        Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "merchant@example.com"));
+        merchantId = merchant.getId();
+
+        AuthenticatedUser authenticatedUser = new AuthenticatedUser("merchant@example.com", "MERCHANT", merchantId);
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(authenticatedUser, null, List.of()));
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
 
     @Test
     void should_create_gift_card_successfully()
@@ -38,7 +73,7 @@ class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
 
         giftCardService.createGiftCard(request);
 
-        assertTrue(giftCardRepository.findByCardCode(giftCardCode).isPresent());
+        assertTrue(giftCardRepository.findByMerchantIdAndCardCode(merchantId, giftCardCode).isPresent());
     }
 
     @Test
@@ -58,7 +93,7 @@ class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
         RedemptionResponse response = future.join();
 
         assertEquals(0.0, response.remainingToPay());
-        GiftCard giftCard = giftCardRepository.findByCardCode(giftCardCode).orElseThrow(() -> new RuntimeException("Gift card not found"));
+        GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, giftCardCode).orElseThrow(() -> new RuntimeException("Gift card not found"));
         assertEquals(0.0, giftCard.getBalance());
         assertFalse(giftCard.isActive());
     }
@@ -78,6 +113,24 @@ class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
     }
 
     @Test
+    void should_allow_same_card_code_for_different_merchants() {
+        String sharedCode = "SHARED_CODE";
+        LocalDate expirationDate = LocalDate.now().plusYears(1);
+
+        giftCardService.createGiftCard(new GiftCardCreateRequest(sharedCode, 100.0, true, expirationDate));
+
+        Merchant otherMerchant = merchantRepository.save(new Merchant("Other Merchant", "other@example.com"));
+        AuthenticatedUser otherUser = new AuthenticatedUser("other@example.com", "MERCHANT", otherMerchant.getId());
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(otherUser, null, List.of()));
+
+        giftCardService.createGiftCard(new GiftCardCreateRequest(sharedCode, 200.0, true, expirationDate));
+
+        assertTrue(giftCardRepository.findByMerchantIdAndCardCode(merchantId, sharedCode).isPresent());
+        assertTrue(giftCardRepository.findByMerchantIdAndCardCode(otherMerchant.getId(), sharedCode).isPresent());
+    }
+
+    @Test
     void should_reduce_the_original_balance_when_redeeming()
     {
         String giftCardCode = "TEST456";
@@ -94,7 +147,7 @@ class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
         RedemptionResponse response = future.join();
 
         assertEquals(50.0, response.remainingToPay());
-        GiftCard giftCard = giftCardRepository.findByCardCode(giftCardCode).orElseThrow(() -> new RuntimeException("Gift card not found"));
+        GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, giftCardCode).orElseThrow(() -> new RuntimeException("Gift card not found"));
         assertEquals(0.0, giftCard.getBalance());
     }
 
@@ -132,7 +185,7 @@ class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
         GiftCardCreateRequest createRequest = new GiftCardCreateRequest(cardCode, balance, active, null);
         giftCardService.createGiftCard(createRequest);
 
-        var savedCard = giftCardRepository.findByCardCode(cardCode).orElseThrow();
+        var savedCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, cardCode).orElseThrow();
         LocalDate expectedExpiration = LocalDate.now().plusYears(2);
 
         assertEquals(expectedExpiration, savedCard.getExpirationDate());

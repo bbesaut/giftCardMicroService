@@ -11,7 +11,7 @@ public class OpenApiConfig {
     GroupedOpenApi publicApi() {
         return GroupedOpenApi.builder()
                 .group("public-api")
-                .pathsToMatch("/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/auth/refresh", "/api/v1/auth/logout")
+                .pathsToMatch("/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/logout")
                 .build();
     }
 
@@ -19,7 +19,7 @@ public class OpenApiConfig {
     GroupedOpenApi customerApi() {
         return GroupedOpenApi.builder()
                 .group("customer-api")
-                .pathsToMatch("/", "/api/v1/giftcards/create", "/api/v1/giftcards/redeem")
+                .pathsToMatch("/", "/api/v1/giftcards/create", "/api/v1/giftcards/redeem","/api/v1/giftcards/lookup/**")
                 .build();
     }
 
@@ -27,7 +27,7 @@ public class OpenApiConfig {
     GroupedOpenApi adminApi() {
         return GroupedOpenApi.builder()
                 .group("admin-api")
-                .pathsToMatch("/api/v1/giftcards/list")
+                .pathsToMatch("/api/v1/auth/register", "/api/v1/giftcards/list")
                 .build();
     }
 }

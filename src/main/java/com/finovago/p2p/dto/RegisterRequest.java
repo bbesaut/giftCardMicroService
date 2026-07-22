@@ -6,8 +6,8 @@ import jakarta.validation.constraints.NotBlank;
 
 @Schema(
     name = "RegisterRequest",
-    description = "Request object for user registration. Creates a new user account with email and password.",
-    example = "{\"email\": \"newuser@example.com\", \"password\": \"securePassword123\"}"
+    description = "Request object for merchant registration. Creates a new Merchant and its MERCHANT-role user account together.",
+    example = "{\"email\": \"newuser@example.com\", \"password\": \"securePassword123\", \"merchantName\": \"Acme Corp\"}"
 )
 public record RegisterRequest(
     @Schema(
@@ -25,5 +25,13 @@ public record RegisterRequest(
         requiredMode = Schema.RequiredMode.REQUIRED
     )
     @NotBlank(message = "Password cannot be blank")
-    String password
+    String password,
+
+    @Schema(
+        description = "Business name of the merchant to create for this user",
+        example = "Acme Corp",
+        requiredMode = Schema.RequiredMode.REQUIRED
+    )
+    @NotBlank(message = "merchantName cannot be blank")
+    String merchantName
 ) {}

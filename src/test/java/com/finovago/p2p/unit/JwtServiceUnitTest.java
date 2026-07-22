@@ -19,7 +19,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JwtServiceUnitTest {
@@ -39,9 +39,9 @@ class JwtServiceUnitTest {
 
     @Test
     void should_generateValidToken_with_usernameAndRoles() {
-        List<String> roles = List.of("CLIENT", "ADMIN");
+        List<String> roles = List.of("MERCHANT", "ADMIN");
 
-        String token = jwtService.generateToken(TEST_USERNAME, roles);
+        String token = jwtService.generateToken(TEST_USERNAME, roles, 1L);
 
         assertNotNull(token);
         assertTrue(token.length() > 0);
@@ -50,8 +50,8 @@ class JwtServiceUnitTest {
 
     @Test
     void should_extractUsername_from_validToken() {
-        List<String> roles = List.of("CLIENT");
-        String token = jwtService.generateToken(TEST_USERNAME, roles);
+        List<String> roles = List.of("MERCHANT");
+        String token = jwtService.generateToken(TEST_USERNAME, roles, 1L);
 
         String extractedUsername = jwtService.extractUsername(token);
 
@@ -60,8 +60,8 @@ class JwtServiceUnitTest {
 
     @Test
     void should_extractRoles_from_validToken() {
-        List<String> roles = List.of("CLIENT", "ADMIN");
-        String token = jwtService.generateToken(TEST_USERNAME, roles);
+        List<String> roles = List.of("MERCHANT", "ADMIN");
+        String token = jwtService.generateToken(TEST_USERNAME, roles, 1L);
 
         List<String> extractedRoles = jwtService.extractRoles(token);
 
@@ -71,7 +71,7 @@ class JwtServiceUnitTest {
     @Test
     void should_extractSingleRole_from_validToken() {
         List<String> roles = List.of("ADMIN");
-        String token = jwtService.generateToken(TEST_USERNAME, roles);
+        String token = jwtService.generateToken(TEST_USERNAME, roles, null);
 
         List<String> extractedRoles = jwtService.extractRoles(token);
 
@@ -80,8 +80,22 @@ class JwtServiceUnitTest {
     }
 
     @Test
+    void should_extractMerchantId_from_validToken() {
+        String token = jwtService.generateToken(TEST_USERNAME, List.of("MERCHANT"), 42L);
+
+        assertEquals(42L, jwtService.extractMerchantId(token));
+    }
+
+    @Test
+    void should_extractNullMerchantId_when_notProvided() {
+        String token = jwtService.generateToken(TEST_USERNAME, List.of("ADMIN"), null);
+
+        assertNull(jwtService.extractMerchantId(token));
+    }
+
+    @Test
     void should_validateToken_when_tokenIsValid() {
-        String token = jwtService.generateToken(TEST_USERNAME, List.of("CLIENT"));
+        String token = jwtService.generateToken(TEST_USERNAME, List.of("MERCHANT"), 1L);
 
         boolean isValid = jwtService.isTokenValid(token);
 
@@ -92,7 +106,7 @@ class JwtServiceUnitTest {
     void should_invalidateToken_when_tokenIsExpired() {
         String expiredToken = Jwts.builder()
                 .subject(TEST_USERNAME)
-                .claim("roles", List.of("CLIENT"))
+                .claim("roles", List.of("MERCHANT"))
                 .issuedAt(new Date(System.currentTimeMillis() - EXPIRATION_MS - 1000))
                 .expiration(new Date(System.currentTimeMillis() - 1000))
                 .signWith(testKey)
@@ -130,7 +144,7 @@ class JwtServiceUnitTest {
     void should_returnFalse_when_tokenHasWrongSignature() {
         String tokenWithWrongSignature = Jwts.builder()
                 .subject(TEST_USERNAME)
-                .claim("roles", List.of("CLIENT"))
+                .claim("roles", List.of("MERCHANT"))
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + EXPIRATION_MS))
                 .signWith(Keys.hmacShaKeyFor("different-secret-key-that-is-very-long".getBytes(StandardCharsets.UTF_8)))
@@ -144,7 +158,7 @@ class JwtServiceUnitTest {
     @Test
     void should_generateTokenWith_correctExpirationTime() {
         long beforeGeneration = System.currentTimeMillis();
-        String token = jwtService.generateToken(TEST_USERNAME, List.of("CLIENT"));
+        String token = jwtService.generateToken(TEST_USERNAME, List.of("MERCHANT"), 1L);
         long afterGeneration = System.currentTimeMillis();
 
         Claims claims = Jwts.parser()
@@ -164,8 +178,8 @@ class JwtServiceUnitTest {
 
     @Test
     void should_handleMultipleRoles_correctly() {
-        List<String> roles = List.of("ADMIN", "CLIENT", "USER");
-        String token = jwtService.generateToken(TEST_USERNAME, roles);
+        List<String> roles = List.of("ADMIN", "MERCHANT", "USER");
+        String token = jwtService.generateToken(TEST_USERNAME, roles, null);
 
         List<String> extractedRoles = jwtService.extractRoles(token);
 
@@ -176,7 +190,7 @@ class JwtServiceUnitTest {
     @Test
     void should_handleEmptyRolesList_correctly() {
         List<String> emptyRoles = List.of();
-        String token = jwtService.generateToken(TEST_USERNAME, emptyRoles);
+        String token = jwtService.generateToken(TEST_USERNAME, emptyRoles, null);
 
         List<String> extractedRoles = jwtService.extractRoles(token);
 

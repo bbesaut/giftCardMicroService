@@ -16,5 +16,8 @@ public record GiftCardResponse(
     boolean active,
 
     @Schema(description = "Expiration date", example = "2025-12-31")
-    LocalDate expirationDate
+    LocalDate expirationDate,
+
+    @Schema(description = "Id of the merchant that owns this gift card", example = "1")
+    Long merchantId
 ) {}
