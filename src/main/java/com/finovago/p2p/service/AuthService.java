@@ -12,8 +12,10 @@ import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
 import com.finovago.p2p.exception.InvalidRefreshTokenException;
 import com.finovago.p2p.exception.UserAlreadyExistsException;
+import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.model.Role;
 import com.finovago.p2p.model.User;
+import com.finovago.p2p.repository.MerchantRepository;
 import com.finovago.p2p.repository.UserRepository;
 import com.finovago.p2p.security.JwtService;
 
@@ -24,16 +26,19 @@ import lombok.extern.slf4j.Slf4j;
 public class AuthService {
 
     private final UserRepository userRepository;
+    private final MerchantRepository merchantRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
 
     public AuthService(
             UserRepository userRepository,
+            MerchantRepository merchantRepository,
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
             RefreshTokenService refreshTokenService) {
         this.userRepository = userRepository;
+        this.merchantRepository = merchantRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.refreshTokenService = refreshTokenService;
@@ -83,15 +88,18 @@ public class AuthService {
             throw new UserAlreadyExistsException("Email already registered");
         }
 
-        User user = new User(request.email(), passwordEncoder.encode(request.password()), Role.CLIENT);
+        Merchant merchant = merchantRepository.save(new Merchant(request.merchantName(), request.email()));
+
+        User user = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, merchant);
         userRepository.save(user);
-        log.info("User registered successfully: {} (role: CLIENT)", user.getEmail());
+        log.info("User registered successfully: {} (role: MERCHANT, merchantId: {})", user.getEmail(), merchant.getId());
         return issueTokens(user);
     }
 
     private AuthResponse issueTokens(User user) {
         List<String> roles = List.of(user.getRole().name());
-        String accessToken = jwtService.generateToken(user.getEmail(), roles);
+        Long merchantId = user.getMerchant() != null ? user.getMerchant().getId() : null;
+        String accessToken = jwtService.generateToken(user.getEmail(), roles, merchantId);
         String refreshToken = refreshTokenService.createRefreshToken(user);
         log.debug("New access and refresh tokens generated for user: {}", user.getEmail());
         return new AuthResponse(accessToken, refreshToken);

@@ -14,8 +14,10 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.finovago.p2p.AbstractIntegrationTest;
+import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.model.Role;
 import com.finovago.p2p.model.User;
+import com.finovago.p2p.repository.MerchantRepository;
 import com.finovago.p2p.repository.UserRepository;
 
 @Transactional
@@ -31,11 +33,15 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
     private UserRepository userRepository;
 
     @Autowired
+    private MerchantRepository merchantRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @BeforeEach
     void setUp() {
-        userRepository.save(new User(EMAIL, passwordEncoder.encode(PASSWORD), Role.CLIENT));
+        Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "merchant@example.com"));
+        userRepository.save(new User(EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant));
     }
 
     @Test
