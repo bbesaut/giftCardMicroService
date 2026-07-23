@@ -23,8 +23,10 @@ import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
 import com.finovago.p2p.exception.UserAlreadyExistsException;
+import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.model.Role;
 import com.finovago.p2p.model.User;
+import com.finovago.p2p.repository.MerchantRepository;
 import com.finovago.p2p.repository.UserRepository;
 import com.finovago.p2p.security.JwtService;
 import com.finovago.p2p.service.AuthService;
@@ -35,6 +37,9 @@ class AuthServiceUnitTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private MerchantRepository merchantRepository;
 
     @Mock
     private PasswordEncoder passwordEncoder;
@@ -48,14 +53,18 @@ class AuthServiceUnitTest {
     @InjectMocks
     private AuthService authService;
 
+    private Merchant merchant() {
+        return new Merchant("Test Merchant", "merchant@example.com");
+    }
+
     @Test
     void should_returnAuthResponse_when_loginSucceeds() {
-        User user = new User("client@example.com", "hashed", Role.CLIENT);
+        User user = new User("client@example.com", "hashed", Role.MERCHANT, merchant());
         LoginRequest request = new LoginRequest("client@example.com", "password123");
 
         when(userRepository.findByEmail("client@example.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("password123", "hashed")).thenReturn(true);
-        when(jwtService.generateToken(eq("client@example.com"), anyList())).thenReturn("access-token");
+        when(jwtService.generateToken(eq("client@example.com"), anyList(), any())).thenReturn("access-token");
         when(refreshTokenService.createRefreshToken(user)).thenReturn("refresh-token");
 
         AuthResponse response = authService.login(request);
@@ -74,7 +83,7 @@ class AuthServiceUnitTest {
 
     @Test
     void should_throwBadCredentialsException_when_passwordWrong() {
-        User user = new User("client@example.com", "hashed", Role.CLIENT);
+        User user = new User("client@example.com", "hashed", Role.MERCHANT, merchant());
         LoginRequest request = new LoginRequest("client@example.com", "wrong-password");
 
         when(userRepository.findByEmail("client@example.com")).thenReturn(Optional.of(user));
@@ -85,11 +94,11 @@ class AuthServiceUnitTest {
 
     @Test
     void should_returnNewAuthResponse_when_refreshSucceeds() {
-        User user = new User("client@example.com", "hashed", Role.CLIENT);
+        User user = new User("client@example.com", "hashed", Role.MERCHANT, merchant());
         RefreshTokenRequest request = new RefreshTokenRequest("old-refresh-token");
 
         when(refreshTokenService.validateAndRotate("old-refresh-token")).thenReturn(user);
-        when(jwtService.generateToken(eq("client@example.com"), anyList())).thenReturn("new-access-token");
+        when(jwtService.generateToken(eq("client@example.com"), anyList(), any())).thenReturn("new-access-token");
         when(refreshTokenService.createRefreshToken(user)).thenReturn("new-refresh-token");
 
         AuthResponse response = authService.refresh(request);
@@ -109,24 +118,26 @@ class AuthServiceUnitTest {
 
     @Test
     void should_returnAuthResponse_when_registrationSucceeds() {
-        RegisterRequest request = new RegisterRequest("newuser@example.com", "password123");
+        RegisterRequest request = new RegisterRequest("newuser@example.com", "password123", "Acme Corp");
 
         when(userRepository.findByEmail("newuser@example.com")).thenReturn(Optional.empty());
+        when(merchantRepository.save(any(Merchant.class))).thenReturn(merchant());
         when(passwordEncoder.encode("password123")).thenReturn("hashed");
-        when(jwtService.generateToken(eq("newuser@example.com"), anyList())).thenReturn("access-token");
+        when(jwtService.generateToken(eq("newuser@example.com"), anyList(), any())).thenReturn("access-token");
         when(refreshTokenService.createRefreshToken(any(User.class))).thenReturn("refresh-token");
 
         AuthResponse response = authService.register(request);
 
         assertEquals("access-token", response.accessToken());
         assertEquals("refresh-token", response.refreshToken());
+        verify(merchantRepository).save(any(Merchant.class));
         verify(userRepository).save(any(User.class));
     }
 
     @Test
     void should_throwUserAlreadyExistsException_when_emailAlreadyExists() {
-        RegisterRequest request = new RegisterRequest("existing@example.com", "password123");
-        User existingUser = new User("existing@example.com", "hashed", Role.CLIENT);
+        RegisterRequest request = new RegisterRequest("existing@example.com", "password123", "Acme Corp");
+        User existingUser = new User("existing@example.com", "hashed", Role.MERCHANT, merchant());
 
         when(userRepository.findByEmail("existing@example.com")).thenReturn(Optional.of(existingUser));
 

@@ -32,6 +32,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     @Override
+    protected boolean shouldNotFilterAsyncDispatch() {
+        // Async controller methods (e.g. redeem, backed by CompletableFuture) resume on the container's
+        // async dispatch, which runs SecurityContextHolder-empty by default. Spring Security's own
+        // authorization filter still runs on that dispatch, so this filter must re-authenticate too —
+        // otherwise the final response for any async endpoint is always 401, regardless of outcome.
+        return false;
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         
@@ -50,18 +59,27 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 if (jwtService.isTokenValid(token)) {
                     List<String> roles = jwtService.extractRoles(token);
+                    Long merchantId = jwtService.extractMerchantId(token);
+                    String role = roles.isEmpty() ? null : roles.get(0);
 
-                    List<SimpleGrantedAuthority> authorities = roles.stream()
-                            .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
-                            .toList();
+                    // Fail closed: a MERCHANT token minted before merchantId was introduced (or otherwise
+                    // missing it) must not be treated as authenticated, since it has no tenant to scope to.
+                    boolean missingRequiredMerchant = "MERCHANT".equals(role) && merchantId == null;
 
-                    UsernamePasswordAuthenticationToken authToken =
-                            new UsernamePasswordAuthenticationToken(username, null, authorities);
+                    if (!missingRequiredMerchant) {
+                        List<SimpleGrantedAuthority> authorities = roles.stream()
+                                .map(r -> new SimpleGrantedAuthority("ROLE_" + r))
+                                .toList();
 
-                    Collection<? extends GrantedAuthority> reachableRoles = roleHierarchy.getReachableGrantedAuthorities(authToken.getAuthorities());
-                    authToken = new UsernamePasswordAuthenticationToken(username, null, reachableRoles);
+                        Collection<? extends GrantedAuthority> reachableRoles =
+                                roleHierarchy.getReachableGrantedAuthorities(authorities);
 
-                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                        AuthenticatedUser authenticatedUser = new AuthenticatedUser(username, role, merchantId);
+                        UsernamePasswordAuthenticationToken authToken =
+                                new UsernamePasswordAuthenticationToken(authenticatedUser, null, reachableRoles);
+
+                        SecurityContextHolder.getContext().setAuthentication(authToken);
+                    }
                 }
             }
             filterChain.doFilter(request, response);

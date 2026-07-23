@@ -20,6 +20,7 @@
         <loki.version>1.5.1</loki.version>
         <logstash.version>7.4</logstash.version>
         <jjwt.version>0.12.5</jjwt.version>
+        <bucket4j.version>8.19.0</bucket4j.version>
     </properties>
 
     <dependencies>
@@ -123,6 +124,12 @@
             <artifactId>jjwt-jackson</artifactId>
             <version>${jjwt.version}</version>
             <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.bucket4j</groupId>
+            <artifactId>bucket4j_jdk17-core</artifactId>
+            <version>${bucket4j.version}</version>
         </dependency>
     </dependencies>
 

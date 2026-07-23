@@ -3,6 +3,7 @@ package com.finovago.p2p.security;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.Nullable;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -26,13 +27,14 @@ public class JwtService {
         this.jwtExpirationMs = jwtExpirationMs;
     }
 
-    public String generateToken(String username, List<String> roles) {
+    public String generateToken(String username, List<String> roles, @Nullable Long merchantId) {
         return Jwts.builder()
-                .subject(username) 
-                .claim("roles", roles) // roles (ex : CLIENT, ADMIN)
-                .issuedAt(new Date(System.currentTimeMillis())) 
-                .expiration(new Date(System.currentTimeMillis() + jwtExpirationMs)) 
-                .signWith(key) 
+                .subject(username)
+                .claim("roles", roles) // roles (ex : MERCHANT, ADMIN)
+                .claim("merchantId", merchantId)
+                .issuedAt(new Date(System.currentTimeMillis()))
+                .expiration(new Date(System.currentTimeMillis() + jwtExpirationMs))
+                .signWith(key)
                 .compact();
     }
 
@@ -43,6 +45,10 @@ public class JwtService {
     @SuppressWarnings("unchecked")
     public List<String> extractRoles(String token) {
         return extractClaim(token, claims -> claims.get("roles", List.class));
+    }
+
+    public Long extractMerchantId(String token) {
+        return extractClaim(token, claims -> claims.get("merchantId", Long.class));
     }
 
     public boolean isTokenValid(String token) {

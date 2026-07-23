@@ -43,7 +43,7 @@ class RefreshTokenServiceUnitTest {
 
     @Test
     void should_createAndPersistRefreshToken_when_userIsValid() {
-        User user = new User("client@example.com", "hashed", Role.CLIENT);
+        User user = new User("client@example.com", "hashed", Role.MERCHANT, null);
 
         String rawToken = refreshTokenService.createRefreshToken(user);
 
@@ -59,7 +59,7 @@ class RefreshTokenServiceUnitTest {
 
     @Test
     void should_returnUserAndRevokeOldToken_when_rotatingValidToken() {
-        User user = new User("client@example.com", "hashed", Role.CLIENT);
+        User user = new User("client@example.com", "hashed", Role.MERCHANT, null);
         RefreshToken existing = new RefreshToken("hash", user, Instant.now().plusSeconds(60));
 
         when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(existing));
@@ -81,7 +81,7 @@ class RefreshTokenServiceUnitTest {
 
     @Test
     void should_throwInvalidRefreshTokenException_when_tokenRevoked() {
-        User user = new User("client@example.com", "hashed", Role.CLIENT);
+        User user = new User("client@example.com", "hashed", Role.MERCHANT, null);
         RefreshToken revoked = new RefreshToken("hash", user, Instant.now().plusSeconds(60));
         revoked.revoke();
 
@@ -93,7 +93,7 @@ class RefreshTokenServiceUnitTest {
 
     @Test
     void should_throwInvalidRefreshTokenException_when_tokenExpired() {
-        User user = new User("client@example.com", "hashed", Role.CLIENT);
+        User user = new User("client@example.com", "hashed", Role.MERCHANT, null);
         RefreshToken expired = new RefreshToken("hash", user, Instant.now().minusSeconds(60));
 
         when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(expired));
@@ -104,7 +104,7 @@ class RefreshTokenServiceUnitTest {
 
     @Test
     void should_revokeToken_when_loggingOut() {
-        User user = new User("client@example.com", "hashed", Role.CLIENT);
+        User user = new User("client@example.com", "hashed", Role.MERCHANT, null);
         RefreshToken existing = new RefreshToken("hash", user, Instant.now().plusSeconds(60));
 
         when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(existing));
