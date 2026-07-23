@@ -41,7 +41,9 @@ public class SecurityConfig {
     private static final String[] MERCHANT_ROUTES = {
             "/api/v1/giftcards/redeem/**",
             "/api/v1/giftcards/lookup/**",
-            "/api/v1/giftcards/create/**"
+            "/api/v1/giftcards/create/**",
+            "/api/v1/giftcards/reserve/**",
+            "/api/v1/giftcards/holds/**"
     };
 
     private final JwtAuthenticationFilter jwtAuthFilter;
