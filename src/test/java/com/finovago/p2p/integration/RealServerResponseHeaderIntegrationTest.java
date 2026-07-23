@@ -8,6 +8,7 @@ import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -85,5 +86,27 @@ class RealServerResponseHeaderIntegrationTest {
         String responseTime = response.getHeaders().getFirst("X-Response-Time");
         assertNotNull(responseTime, "X-Response-Time must be present on a real (non-MockMvc) response");
         assertTrue(responseTime.matches("\\d+"));
+    }
+
+    @Test
+    void should_return_404_with_response_time_header_for_unmapped_route_even_when_authenticated() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        String loginBody = "{\"email\":\"%s\",\"password\":\"%s\"}".formatted(TEST_EMAIL, TEST_PASSWORD);
+        ResponseEntity<String> loginResponse = restTemplate.postForEntity(baseUrl("/api/v1/auth/login"), new HttpEntity<>(loginBody, headers), String.class);
+        String token = loginResponse.getBody().replaceAll(".*\"accessToken\":\"([^\"]+)\".*", "$1");
+
+        HttpHeaders authHeaders = new HttpHeaders();
+        authHeaders.set("Authorization", "Bearer " + token);
+
+        ResponseEntity<String> response = restTemplate.exchange(
+                baseUrl("/api/v1/this/route/does/not/exist"), HttpMethod.GET, new HttpEntity<>(authHeaders), String.class);
+
+        // Spring Boot forwards unmapped routes to /error internally; without /error being public,
+        // JwtAuthenticationFilter never re-runs on that dispatch (OncePerRequestFilter skips ERROR by
+        // default) and an authenticated caller would incorrectly get 401 instead of 404.
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        assertNotNull(response.getHeaders().getFirst("X-Response-Time"),
+                "X-Response-Time must be present even on the /error-rendered 404");
     }
 }

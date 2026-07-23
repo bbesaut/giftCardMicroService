@@ -67,6 +67,14 @@ public class ResponseTimeFilter extends OncePerRequestFilter {
         return false;
     }
 
+    @Override
+    protected boolean shouldNotFilterErrorDispatch() {
+        // Default is true (skip on the internal /error forward Boot performs for unmapped routes
+        // and uncaught exceptions), which would leave error-page responses untimed. Re-run so those
+        // get X-Response-Time too, consistent with "every response has this header".
+        return false;
+    }
+
     /**
      * Adds X-Response-Time the moment the response body starts being written, instead of after the
      * fact. Purely pass-through - it never buffers bytes itself, so (unlike e.g.

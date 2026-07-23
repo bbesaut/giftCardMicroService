@@ -42,6 +42,14 @@ public class MdcFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilterAsyncDispatch() {
-        return false; 
+        return false;
+    }
+
+    @Override
+    protected boolean shouldNotFilterErrorDispatch() {
+        // Default is true (skip on the internal /error forward Boot performs for unmapped routes
+        // and uncaught exceptions) - re-run so those responses get a correlation id too, otherwise
+        // they're untraceable in Loki/Grafana just like the ones this filter already guards against.
+        return false;
     }
 }
