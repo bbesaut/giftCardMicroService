@@ -27,6 +27,8 @@ import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.repository.GiftCardHoldRepository;
 import com.finovago.p2p.repository.GiftCardRepository;
 import com.finovago.p2p.repository.MerchantRepository;
+import com.finovago.p2p.repository.RefreshTokenRepository;
+import com.finovago.p2p.repository.UserRepository;
 import com.finovago.p2p.scheduler.HoldExpirationScheduler;
 import com.finovago.p2p.security.AuthenticatedUser;
 import com.finovago.p2p.service.GiftCardHoldService;
@@ -44,6 +46,12 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
     private MerchantRepository merchantRepository;
 
     @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+
+    @Autowired
     private GiftCardService giftCardService;
 
     @Autowired
@@ -59,6 +67,8 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
     void setUp() {
         giftCardHoldRepository.deleteAll();
         giftCardRepository.deleteAll();
+        refreshTokenRepository.deleteAll();
+        userRepository.deleteAll();
         merchantRepository.deleteAll();
 
         Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "merchant@example.com"));
