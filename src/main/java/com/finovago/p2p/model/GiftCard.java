@@ -15,6 +15,9 @@ import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import com.finovago.p2p.exception.ExpiredGiftCardException;
+import com.finovago.p2p.exception.InactiveGiftCardException;
+
 @Entity
 @NoArgsConstructor
 @Getter
@@ -40,6 +43,15 @@ public class GiftCard
         this.balance = balance;
         this.active = active;
         this.expirationDate = expirationDate != null ? expirationDate : LocalDate.now().plusYears(2);
+    }
+
+    public void ensureUsable() {
+        if (!active) {
+            throw new InactiveGiftCardException("Card is already inactive");
+        }
+        if (expirationDate.isBefore(LocalDate.now())) {
+            throw new ExpiredGiftCardException("Gift card has expired");
+        }
     }
 
     public void deductBalance(double amount) {
