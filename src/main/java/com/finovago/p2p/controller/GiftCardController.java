@@ -17,8 +17,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.GiftCardResponse;
+import com.finovago.p2p.dto.HoldResponse;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.dto.RedemptionRequest;
+import com.finovago.p2p.dto.ReserveRequest;
+import com.finovago.p2p.service.GiftCardHoldService;
 import com.finovago.p2p.service.GiftCardService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -38,11 +41,13 @@ public class GiftCardController
 {
     private static final Logger log = LoggerFactory.getLogger(GiftCardController.class);
     private final GiftCardService giftCardService;
+    private final GiftCardHoldService giftCardHoldService;
 
-    public GiftCardController(GiftCardService giftCardService) {
+    public GiftCardController(GiftCardService giftCardService, GiftCardHoldService giftCardHoldService) {
         this.giftCardService = giftCardService;
+        this.giftCardHoldService = giftCardHoldService;
     }
-    
+
     @Operation(
         summary = "Redeem a gift card",
         description = "Redeem a specified amount from a gift card using its code. The request will be processed asynchronously and returns a CompletableFuture. "
@@ -147,6 +152,84 @@ public class GiftCardController
     public GiftCardResponse lookupGiftCard(@PathVariable String code) {
         log.info("Received gift card lookup request. Code: {}", code);
         return giftCardService.lookupGiftCard(code);
+    }
+
+    @Operation(
+        summary = "Reserve a hold on a gift card",
+        description = "Earmark an amount against a gift card's balance without deducting it yet. The hold must later be "
+                    + "confirmed via capture or cancelled via release, and auto-expires if left pending too long. "
+                    + "Unlike redeem, an amount exceeding the available balance (balance minus other pending holds) IS an error. "
+                    + "Requires authentication (JWT token, MERCHANT role)."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "201", description = "Created - Hold reserved, status PENDING",
+            content = @Content(schema = @Schema(implementation = HoldResponse.class))),
+        @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request body (missing or invalid fields)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"The gift card code cannot be blank\"}"))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
+        @ApiResponse(responseCode = "404", description = "Not Found - Gift card with specified code does not exist",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Not Found\",\"message\":\"Gift card not found\"}"))),
+        @ApiResponse(responseCode = "422", description = "Unprocessable Entity - Card is inactive/expired, or available balance is insufficient to reserve this amount",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unprocessable Entity\",\"message\":\"Insufficient available balance to reserve this amount\"}"))),
+        @ApiResponse(responseCode = "429", description = "Too Many Requests - Rate limit exceeded for this IP (max 10 attempts/minute)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Too Many Requests\",\"message\":\"Too many requests. Please try again later.\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
+    })
+    @PostMapping("/reserve")
+    @ResponseStatus(HttpStatus.CREATED)
+    public HoldResponse reserveGiftCard(@Valid @RequestBody ReserveRequest request) {
+        log.info("Received hold reservation request. Code: {}, Amount: {}", request.giftCardCode(), request.amount());
+        return giftCardHoldService.reserve(request);
+    }
+
+    @Operation(
+        summary = "Capture a hold",
+        description = "Finalize a previously reserved hold: deducts the held amount from the gift card's real balance. "
+                    + "Requires authentication (JWT token, MERCHANT role)."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "OK - Hold captured, status CAPTURED",
+            content = @Content(schema = @Schema(implementation = HoldResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
+        @ApiResponse(responseCode = "404", description = "Not Found - Hold with specified id does not exist for the caller's merchant",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Not Found\",\"message\":\"Hold not found\"}"))),
+        @ApiResponse(responseCode = "409", description = "Conflict - Hold is no longer PENDING (already captured, released, or expired)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Conflict\",\"message\":\"Hold is already CAPTURED\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
+    })
+    @PostMapping("/holds/{holdId}/capture")
+    @ResponseStatus(HttpStatus.OK)
+    public HoldResponse captureHold(@PathVariable Long holdId) {
+        log.info("Received hold capture request. HoldId: {}", holdId);
+        return giftCardHoldService.capture(holdId);
+    }
+
+    @Operation(
+        summary = "Release a hold",
+        description = "Cancel a previously reserved hold: no balance deduction occurs and the held amount becomes available again. "
+                    + "Requires authentication (JWT token, MERCHANT role)."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "OK - Hold released, status RELEASED",
+            content = @Content(schema = @Schema(implementation = HoldResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
+        @ApiResponse(responseCode = "404", description = "Not Found - Hold with specified id does not exist for the caller's merchant",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Not Found\",\"message\":\"Hold not found\"}"))),
+        @ApiResponse(responseCode = "409", description = "Conflict - Hold is no longer PENDING (already captured, released, or expired)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Conflict\",\"message\":\"Hold is already RELEASED\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
+    })
+    @PostMapping("/holds/{holdId}/release")
+    @ResponseStatus(HttpStatus.OK)
+    public HoldResponse releaseHold(@PathVariable Long holdId) {
+        log.info("Received hold release request. HoldId: {}", holdId);
+        return giftCardHoldService.release(holdId);
     }
 }
 
