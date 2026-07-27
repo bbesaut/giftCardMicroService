@@ -29,7 +29,13 @@ public class SecurityConfig {
             "/",
             "/swagger-ui.html",
             "/swagger-ui/**",
-            "/api-docs/**"
+            "/api-docs/**",
+            // Spring Boot forwards unmapped requests to /error internally (DispatcherType.ERROR).
+            // JwtAuthenticationFilter does not re-run on that dispatch (OncePerRequestFilter skips
+            // ERROR by default), so the SecurityContext is empty there - without this being public,
+            // anyRequest().authenticated() rejects it and every unmapped URL becomes a 401 instead
+            // of the real 404, for authenticated and unauthenticated callers alike.
+            "/error"
     };
 
     private static final String[] ADMIN_ROUTES = {
@@ -41,7 +47,9 @@ public class SecurityConfig {
     private static final String[] MERCHANT_ROUTES = {
             "/api/v1/giftcards/redeem/**",
             "/api/v1/giftcards/lookup/**",
-            "/api/v1/giftcards/create/**"
+            "/api/v1/giftcards/create/**",
+            "/api/v1/giftcards/reserve/**",
+            "/api/v1/giftcards/holds/**"
     };
 
     private final JwtAuthenticationFilter jwtAuthFilter;

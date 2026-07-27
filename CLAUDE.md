@@ -377,6 +377,11 @@ The correlation ID is **not** duplicated in the body — it is already returned 
 - `admin@finovago.com` / `admin123` (role: ADMIN, no merchant)
 - `client@finovago.com` / `client123` (role: MERCHANT, attached to the seeded "Finovago Demo Merchant")
 
+## 📝 Git Commits
+- Write commit messages like a human, not a report: short sentences, no filler.
+- Use clear, terse bullet points (dashes) for multi-line messages.
+- No long prose, no restating the diff line by line.
+
 ## ⛔ DO NOT
 - Modify files in `src/main/resources/db/migration/` directly
 - Commit `.env` or JWT_SECRET_KEY
