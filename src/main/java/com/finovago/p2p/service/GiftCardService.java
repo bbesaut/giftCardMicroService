@@ -1,5 +1,4 @@
 package com.finovago.p2p.service;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -16,8 +15,6 @@ import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.GiftCardResponse;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.dto.RedemptionRequest;
-import com.finovago.p2p.exception.ExpiredGiftCardException;
-import com.finovago.p2p.exception.InactiveGiftCardException;
 import com.finovago.p2p.exception.UnknownGiftCardException;
 import com.finovago.p2p.model.GiftCard;
 import com.finovago.p2p.model.Merchant;
@@ -69,13 +66,7 @@ public class GiftCardService {
         GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, code)
                 .orElseThrow(() -> new UnknownGiftCardException("Gift card not found"));
 
-        if (!giftCard.isActive()) {
-            throw new InactiveGiftCardException("Card is already inactive");
-        }
-
-        if (giftCard.getExpirationDate().isBefore(LocalDate.now())) {
-            throw new ExpiredGiftCardException("Gift card has expired");
-        }
+        giftCard.ensureUsable();
 
         double deducted;
         double remainingToPay = 0;

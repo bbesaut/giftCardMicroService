@@ -1,6 +1,5 @@
 package com.finovago.p2p.service;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import org.slf4j.Logger;
@@ -11,10 +10,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.finovago.p2p.dto.HoldResponse;
 import com.finovago.p2p.dto.ReserveRequest;
-import com.finovago.p2p.exception.ExpiredGiftCardException;
 import com.finovago.p2p.exception.HoldAlreadyFinalizedException;
 import com.finovago.p2p.exception.HoldNotFoundException;
-import com.finovago.p2p.exception.InactiveGiftCardException;
 import com.finovago.p2p.exception.InsufficientAvailableBalanceException;
 import com.finovago.p2p.exception.UnknownGiftCardException;
 import com.finovago.p2p.model.GiftCard;
@@ -53,13 +50,7 @@ public class GiftCardHoldService {
         GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCodeForUpdate(merchantId, request.giftCardCode())
                 .orElseThrow(() -> new UnknownGiftCardException("Gift card not found"));
 
-        if (!giftCard.isActive()) {
-            throw new InactiveGiftCardException("Card is already inactive");
-        }
-
-        if (giftCard.getExpirationDate().isBefore(LocalDate.now())) {
-            throw new ExpiredGiftCardException("Gift card has expired");
-        }
+        giftCard.ensureUsable();
 
         double pendingHeld = giftCardHoldRepository.sumPendingHoldAmounts(giftCard.getId());
         double available = giftCard.getBalance() - pendingHeld;
