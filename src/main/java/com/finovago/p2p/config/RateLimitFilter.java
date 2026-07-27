@@ -43,7 +43,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final List<String> PROTECTED_PATH_PREFIXES = List.of(
         "/api/v1/auth/login",
         "/api/v1/giftcards/lookup/",
-        "/api/v1/giftcards/redeem"
+        "/api/v1/giftcards/redeem",
+        "/api/v1/giftcards/reserve"
     );
 
     private final boolean enabled;

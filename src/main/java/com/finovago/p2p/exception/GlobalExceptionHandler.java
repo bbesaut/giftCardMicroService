@@ -57,6 +57,42 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(HoldNotFoundException.class)
+    public ResponseEntity<Object> handleHoldNotFoundException(HoldNotFoundException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(Map.of(
+                    "error", "Not Found",
+                    "message", ex.getMessage()
+                ));
+    }
+
+    @ExceptionHandler(HoldAlreadyFinalizedException.class)
+    public ResponseEntity<Object> handleHoldAlreadyFinalizedException(HoldAlreadyFinalizedException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(Map.of(
+                    "error", "Conflict",
+                    "message", ex.getMessage()
+                ));
+    }
+
+    @ExceptionHandler(InsufficientAvailableBalanceException.class)
+    public ResponseEntity<Object> handleInsufficientAvailableBalanceException(InsufficientAvailableBalanceException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(Map.of(
+                    "error", "Unprocessable Entity",
+                    "message", ex.getMessage()
+                ));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Object> handleValidationExceptions(MethodArgumentNotValidException ex) { // when a request body fails vaidation with @Valid
         String errorMessage = ex.getBindingResult() 
