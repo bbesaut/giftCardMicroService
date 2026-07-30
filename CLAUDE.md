@@ -33,6 +33,11 @@ Two Maven profiles for different workflows:
 - Requires: Docker installed and running
 - Best for: CI/CD pipelines, pre-deployment verification
 
+## 🗺️ Database Schema Diagram
+An up-to-date ER diagram is generated automatically by `.github/workflows/schema-diagram.yml` whenever a push to `develop` or `main` touches `src/main/resources/db/migration/**`. It spins up Postgres, applies Flyway migrations via the `flyway-maven-plugin` (see `pom.xml`), runs SchemaSpy against it, and publishes the result to GitHub Pages: https://bbesaut.github.io/giftCardMicroService/schema/
+
+**One-time setup required**: enable GitHub Pages for this repo (Settings → Pages → source: `gh-pages` branch) — the workflow creates/updates that branch but Pages must be turned on manually once.
+
 ## 🏗️ Architecture Summary
 - **Multi-tenancy**: every gift card belongs to exactly one `Merchant`. `ADMIN` is the platform owner (manages merchants, sees all cards via `/list`); `MERCHANT` is a merchant account, scoped to its own cards only. Tenant scoping is derived server-side from the JWT (`merchantId` claim), never from client input.
 - **JWT auth**: JJWT-based, stateless, roles (ADMIN/MERCHANT), JWT carries a `merchantId` claim (null for ADMIN)
