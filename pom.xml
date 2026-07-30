@@ -21,6 +21,9 @@
         <logstash.version>7.4</logstash.version>
         <jjwt.version>0.12.5</jjwt.version>
         <bucket4j.version>8.19.0</bucket4j.version>
+        <flyway.url>jdbc:postgresql://localhost:5432/p2p_dev</flyway.url>
+        <flyway.user>p2p</flyway.user>
+        <flyway.password>p2p</flyway.password>
     </properties>
 
     <dependencies>
@@ -151,6 +154,18 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.2</version>
+            </plugin>
+            <plugin>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-maven-plugin</artifactId>
+                <configuration>
+                    <url>${flyway.url}</url>
+                    <user>${flyway.user}</user>
+                    <password>${flyway.password}</password>
+                    <locations>
+                        <location>classpath:db/migration</location>
+                    </locations>
+                </configuration>
             </plugin>
         </plugins>
     </build>

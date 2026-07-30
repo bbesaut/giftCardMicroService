@@ -1,0 +1,54 @@
+name: DB Schema Diagram
+
+on:
+  push:
+    branches: [ "develop", "main" ]
+    paths:
+      - "src/main/resources/db/migration/**"
+
+jobs:
+  generate-diagram:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: p2p_dev
+          POSTGRES_USER: p2p
+          POSTGRES_PASSWORD: p2p
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U p2p -d p2p_dev"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Apply Flyway migrations
+        run: mvn -q flyway:migrate
+
+      - name: Generate ER diagram with SchemaSpy
+        run: |
+          mkdir -p schema-diagram
+          docker run --rm --network=host \
+            -v "$PWD/schema-diagram:/output" \
+            andrewjones/schemaspy-postgres \
+            -host localhost -port 5432 -db p2p_dev -u p2p -p p2p -s public
+
+      - name: Publish to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./schema-diagram
+          destination_dir: schema
+          keep_files: true
