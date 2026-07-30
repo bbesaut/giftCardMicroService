@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <database name="p2p_dev" schema="public" type="PostgreSQL - 17.10">
    <tables>
-      <table name="flyway_schema_history" numRows="0" remarks="" schema="public" type="TABLE">
+      <table name="flyway_schema_history" numRows="11" remarks="" schema="public" type="TABLE">
          <column autoUpdated="false" defaultValue="null" digits="0" id="0" name="installed_rank" nullable="false" remarks="" size="10" type="int4" typeCode="4"/>
          <column autoUpdated="false" defaultValue="null" digits="0" id="1" name="version" nullable="true" remarks="" size="50" type="varchar" typeCode="12"/>
          <column autoUpdated="false" defaultValue="null" digits="0" id="2" name="description" nullable="false" remarks="" size="200" type="varchar" typeCode="12"/>
@@ -19,6 +19,120 @@
          <index name="flyway_schema_history_s_idx" unique="false">
             <column ascending="true" name="success"/>
          </index>
+      </table>
+      <table name="gift_card" numRows="0" remarks="" schema="public" type="TABLE">
+         <column autoUpdated="true" defaultValue="null" digits="0" id="0" name="id" nullable="false" remarks="" size="19" type="int8" typeCode="-5">
+            <child column="gift_card_id" foreignKey="gift_card_hold_gift_card_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="gift_card_hold"/>
+         </column>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="1" name="card_code" nullable="false" remarks="" size="255" type="varchar" typeCode="12"/>
+         <column autoUpdated="false" defaultValue="null" digits="17" id="2" name="balance" nullable="false" remarks="" size="17" type="float8" typeCode="8"/>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="3" name="active" nullable="false" remarks="" size="1" type="bool" typeCode="-7"/>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="4" name="expiration_date" nullable="true" remarks="" size="13" type="date" typeCode="91"/>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="5" name="merchant_id" nullable="false" remarks="" size="19" type="int8" typeCode="-5">
+            <parent column="id" foreignKey="gift_card_merchant_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="merchants"/>
+         </column>
+         <primaryKey column="id" sequenceNumberInPK="1"/>
+         <index name="gift_card_pkey" unique="true">
+            <column ascending="true" name="id"/>
+         </index>
+         <index name="idx_gift_card_merchant_id" unique="false">
+            <column ascending="true" name="merchant_id"/>
+         </index>
+         <index name="uq_giftcard_merchant_cardcode" unique="true">
+            <column ascending="true" name="merchant_id"/>
+            <column ascending="true" name="card_code"/>
+         </index>
+      </table>
+      <table name="gift_card_hold" numRows="0" remarks="" schema="public" type="TABLE">
+         <column autoUpdated="true" defaultValue="null" digits="0" id="0" name="id" nullable="false" remarks="" size="19" type="int8" typeCode="-5"/>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="1" name="gift_card_id" nullable="false" remarks="" size="19" type="int8" typeCode="-5">
+            <parent column="id" foreignKey="gift_card_hold_gift_card_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="gift_card"/>
+         </column>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="2" name="merchant_id" nullable="false" remarks="" size="19" type="int8" typeCode="-5">
+            <parent column="id" foreignKey="gift_card_hold_merchant_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="merchants"/>
+         </column>
+         <column autoUpdated="false" defaultValue="null" digits="17" id="3" name="amount" nullable="false" remarks="" size="17" type="float8" typeCode="8"/>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="4" name="status" nullable="false" remarks="" size="20" type="varchar" typeCode="12"/>
+         <column autoUpdated="false" defaultValue="now()" digits="6" id="5" name="created_at" nullable="false" remarks="" size="29" type="timestamp" typeCode="93"/>
+         <column autoUpdated="false" defaultValue="null" digits="6" id="6" name="expires_at" nullable="false" remarks="" size="29" type="timestamp" typeCode="93"/>
+         <primaryKey column="id" sequenceNumberInPK="1"/>
+         <index name="gift_card_hold_pkey" unique="true">
+            <column ascending="true" name="id"/>
+         </index>
+         <index name="idx_gift_card_hold_giftcard_status" unique="false">
+            <column ascending="true" name="gift_card_id"/>
+            <column ascending="true" name="status"/>
+         </index>
+         <index name="idx_gift_card_hold_merchant_id" unique="false">
+            <column ascending="true" name="merchant_id"/>
+            <column ascending="true" name="id"/>
+         </index>
+         <index name="idx_gift_card_hold_status_expires_at" unique="false">
+            <column ascending="true" name="status"/>
+            <column ascending="true" name="expires_at"/>
+         </index>
+         <checkConstraint constraint="(amount &gt; (0)::double precision)" name="gift_card_hold_amount_check"/>
+         <checkConstraint constraint="((status)::text = ANY ((ARRAY['PENDING'::character varying, 'CAPTURED'::character varying, 'RELEASED'::character varying, 'EXPIRED'::character varying])::text[]))" name="gift_card_hold_status_check"/>
+      </table>
+      <table name="merchants" numRows="1" remarks="" schema="public" type="TABLE">
+         <column autoUpdated="true" defaultValue="null" digits="0" id="0" name="id" nullable="false" remarks="" size="19" type="int8" typeCode="-5">
+            <child column="merchant_id" foreignKey="gift_card_merchant_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="gift_card"/>
+            <child column="merchant_id" foreignKey="gift_card_hold_merchant_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="gift_card_hold"/>
+            <child column="merchant_id" foreignKey="users_merchant_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="users"/>
+         </column>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="1" name="name" nullable="false" remarks="" size="255" type="varchar" typeCode="12"/>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="2" name="contact_email" nullable="true" remarks="" size="255" type="varchar" typeCode="12"/>
+         <column autoUpdated="false" defaultValue="true" digits="0" id="3" name="active" nullable="false" remarks="" size="1" type="bool" typeCode="-7"/>
+         <column autoUpdated="false" defaultValue="now()" digits="6" id="4" name="created_at" nullable="false" remarks="" size="29" type="timestamp" typeCode="93"/>
+         <primaryKey column="id" sequenceNumberInPK="1"/>
+         <index name="merchants_pkey" unique="true">
+            <column ascending="true" name="id"/>
+         </index>
+      </table>
+      <table name="refresh_tokens" numRows="0" remarks="" schema="public" type="TABLE">
+         <column autoUpdated="true" defaultValue="null" digits="0" id="0" name="id" nullable="false" remarks="" size="19" type="int8" typeCode="-5"/>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="1" name="token_hash" nullable="false" remarks="" size="255" type="varchar" typeCode="12"/>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="2" name="user_id" nullable="false" remarks="" size="19" type="int8" typeCode="-5">
+            <parent column="id" foreignKey="fk_refresh_tokens_user" implied="false" onDeleteCascade="false" schema="public" table="users"/>
+         </column>
+         <column autoUpdated="false" defaultValue="null" digits="6" id="3" name="expiry_date" nullable="false" remarks="" size="29" type="timestamp" typeCode="93"/>
+         <column autoUpdated="false" defaultValue="false" digits="0" id="4" name="revoked" nullable="false" remarks="" size="1" type="bool" typeCode="-7"/>
+         <column autoUpdated="false" defaultValue="null" digits="6" id="5" name="created_at" nullable="false" remarks="" size="29" type="timestamp" typeCode="93"/>
+         <primaryKey column="id" sequenceNumberInPK="1"/>
+         <index name="refresh_tokens_pkey" unique="true">
+            <column ascending="true" name="id"/>
+         </index>
+         <index name="idx_refresh_tokens_token_hash" unique="false">
+            <column ascending="true" name="token_hash"/>
+         </index>
+         <index name="idx_refresh_tokens_user_id" unique="false">
+            <column ascending="true" name="user_id"/>
+         </index>
+         <index name="refresh_tokens_token_hash_key" unique="true">
+            <column ascending="true" name="token_hash"/>
+         </index>
+      </table>
+      <table name="users" numRows="1" remarks="" schema="public" type="TABLE">
+         <column autoUpdated="true" defaultValue="null" digits="0" id="0" name="id" nullable="false" remarks="" size="19" type="int8" typeCode="-5">
+            <child column="user_id" foreignKey="fk_refresh_tokens_user" implied="false" onDeleteCascade="false" schema="public" table="refresh_tokens"/>
+         </column>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="1" name="email" nullable="false" remarks="" size="255" type="varchar" typeCode="12"/>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="2" name="password" nullable="false" remarks="" size="255" type="varchar" typeCode="12"/>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="3" name="role" nullable="false" remarks="" size="20" type="varchar" typeCode="12"/>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="4" name="merchant_id" nullable="true" remarks="" size="19" type="int8" typeCode="-5">
+            <parent column="id" foreignKey="users_merchant_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="merchants"/>
+         </column>
+         <primaryKey column="id" sequenceNumberInPK="1"/>
+         <index name="users_pkey" unique="true">
+            <column ascending="true" name="id"/>
+         </index>
+         <index name="idx_users_merchant_id" unique="false">
+            <column ascending="true" name="merchant_id"/>
+         </index>
+         <index name="users_email_key" unique="true">
+            <column ascending="true" name="email"/>
+         </index>
+         <checkConstraint constraint="((((role)::text = 'ADMIN'::text) AND (merchant_id IS NULL)) OR (((role)::text = 'MERCHANT'::text) AND (merchant_id IS NOT NULL)))" name="chk_users_role_merchant"/>
       </table>
    </tables>
 </database>

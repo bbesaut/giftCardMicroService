@@ -1,1 +1,6 @@
 flyway_schema_history
+gift_card_hold
+refresh_tokens
+users
+gift_card
+merchants
