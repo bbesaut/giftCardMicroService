@@ -5,6 +5,7 @@ on:
     branches: [ "develop", "main" ]
     paths:
       - "src/main/resources/db/migration/**"
+  workflow_dispatch: {}
 
 jobs:
   generate-diagram:
