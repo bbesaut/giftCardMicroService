@@ -163,7 +163,7 @@
                     <user>${flyway.user}</user>
                     <password>${flyway.password}</password>
                     <locations>
-                        <location>classpath:db/migration</location>
+                        <location>filesystem:src/main/resources/db/migration</location>
                     </locations>
                 </configuration>
             </plugin>
