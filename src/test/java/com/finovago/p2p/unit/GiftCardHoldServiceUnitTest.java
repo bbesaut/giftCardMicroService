@@ -27,12 +27,14 @@ import com.finovago.p2p.exception.UnknownGiftCardException;
 import com.finovago.p2p.model.GiftCard;
 import com.finovago.p2p.model.GiftCardHold;
 import com.finovago.p2p.model.HoldStatus;
+import com.finovago.p2p.model.LedgerEntryType;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.repository.GiftCardHoldRepository;
 import com.finovago.p2p.repository.GiftCardRepository;
 import com.finovago.p2p.security.CurrentUserContext;
 import com.finovago.p2p.service.GiftCardHoldService;
 import com.finovago.p2p.service.IdempotencyKeyService;
+import com.finovago.p2p.service.LedgerService;
 
 @ExtendWith(MockitoExtension.class)
 class GiftCardHoldServiceUnitTest {
@@ -52,6 +54,9 @@ class GiftCardHoldServiceUnitTest {
     @Mock
     private IdempotencyKeyService idempotencyKeyService;
 
+    @Mock
+    private LedgerService ledgerService;
+
     private GiftCardHoldService giftCardHoldService;
 
     private Merchant merchant;
@@ -59,7 +64,7 @@ class GiftCardHoldServiceUnitTest {
     @BeforeEach
     void setUp() {
         merchant = new Merchant("Test Merchant", "merchant@example.com");
-        giftCardHoldService = new GiftCardHoldService(giftCardHoldRepository, giftCardRepository, currentUserContext, idempotencyKeyService, TTL_MINUTES);
+        giftCardHoldService = new GiftCardHoldService(giftCardHoldRepository, giftCardRepository, currentUserContext, idempotencyKeyService, ledgerService, TTL_MINUTES);
         lenient().when(currentUserContext.currentMerchantId()).thenReturn(MERCHANT_ID);
         lenient().when(idempotencyKeyService.hashRequest(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString())).thenReturn("hash");
         lenient().when(idempotencyKeyService.claim(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(HoldResponse.class)))
@@ -85,6 +90,7 @@ class GiftCardHoldServiceUnitTest {
 
         assertEquals("PENDING", response.status());
         assertEquals(30.0, response.remainingAvailableBalance());
+        verify(ledgerService).record(card, MERCHANT_ID, LedgerEntryType.HOLD_PLACED, 50.0, 100.0, null);
     }
 
     @Test
@@ -120,6 +126,8 @@ class GiftCardHoldServiceUnitTest {
 
         assertThrows(InsufficientAvailableBalanceException.class,
                 () -> giftCardHoldService.reserve(new ReserveRequest(cardCode, 50.0), IDEMPOTENCY_KEY));
+        verify(ledgerService, never()).record(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -165,6 +173,7 @@ class GiftCardHoldServiceUnitTest {
 
         assertEquals("CAPTURED", response.status());
         assertEquals(70.0, card.getBalance());
+        verify(ledgerService).record(card, MERCHANT_ID, LedgerEntryType.HOLD_CAPTURED, 30.0, 70.0, hold.getId());
     }
 
     @Test
@@ -178,6 +187,8 @@ class GiftCardHoldServiceUnitTest {
 
         assertThrows(HoldAlreadyFinalizedException.class, () -> giftCardHoldService.capture(1L));
         verify(giftCardRepository, never()).findByMerchantIdAndCardCodeForUpdate(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(ledgerService, never()).record(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -210,6 +221,7 @@ class GiftCardHoldServiceUnitTest {
 
         assertEquals("RELEASED", response.status());
         assertEquals(100.0, card.getBalance());
+        verify(ledgerService).record(card, MERCHANT_ID, LedgerEntryType.HOLD_RELEASED, 30.0, 100.0, hold.getId());
     }
 
     @Test
@@ -222,6 +234,8 @@ class GiftCardHoldServiceUnitTest {
         when(giftCardHoldRepository.findByIdAndMerchantIdForUpdate(1L, MERCHANT_ID)).thenReturn(Optional.of(hold));
 
         assertThrows(HoldAlreadyFinalizedException.class, () -> giftCardHoldService.release(1L));
+        verify(ledgerService, never()).record(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test

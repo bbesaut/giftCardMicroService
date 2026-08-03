@@ -28,6 +28,7 @@ import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.repository.GiftCardHoldRepository;
 import com.finovago.p2p.repository.GiftCardRepository;
 import com.finovago.p2p.repository.IdempotencyKeyRepository;
+import com.finovago.p2p.repository.LedgerEntryRepository;
 import com.finovago.p2p.repository.MerchantRepository;
 import com.finovago.p2p.repository.RefreshTokenRepository;
 import com.finovago.p2p.repository.UserRepository;
@@ -46,6 +47,9 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private IdempotencyKeyRepository idempotencyKeyRepository;
+
+    @Autowired
+    private LedgerEntryRepository ledgerEntryRepository;
 
     @Autowired
     private MerchantRepository merchantRepository;
@@ -72,6 +76,7 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
     void setUp() {
         idempotencyKeyRepository.deleteAll();
         giftCardHoldRepository.deleteAll();
+        ledgerEntryRepository.deleteAll();
         giftCardRepository.deleteAll();
         refreshTokenRepository.deleteAll();
         userRepository.deleteAll();

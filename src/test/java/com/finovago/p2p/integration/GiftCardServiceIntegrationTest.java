@@ -24,6 +24,7 @@ import com.finovago.p2p.model.GiftCard;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.repository.GiftCardRepository;
 import com.finovago.p2p.repository.IdempotencyKeyRepository;
+import com.finovago.p2p.repository.LedgerEntryRepository;
 import com.finovago.p2p.repository.MerchantRepository;
 import com.finovago.p2p.security.AuthenticatedUser;
 import com.finovago.p2p.service.GiftCardService;
@@ -40,6 +41,9 @@ class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
     private IdempotencyKeyRepository idempotencyKeyRepository;
 
     @Autowired
+    private LedgerEntryRepository ledgerEntryRepository;
+
+    @Autowired
     private GiftCardService giftCardService;
 
     private Long merchantId;
@@ -51,6 +55,7 @@ class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
         // main thread only, and the async thread wouldn't see uncommitted data. Rows are cleaned up
         // manually instead, children before merchants (both gift_card and idempotency_key have a FK to merchants).
         idempotencyKeyRepository.deleteAll();
+        ledgerEntryRepository.deleteAll();
         giftCardRepository.deleteAll();
         merchantRepository.deleteAll();
 
