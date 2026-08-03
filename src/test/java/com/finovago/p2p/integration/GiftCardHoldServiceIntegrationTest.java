@@ -3,6 +3,7 @@ package com.finovago.p2p.integration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -26,6 +27,7 @@ import com.finovago.p2p.model.HoldStatus;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.repository.GiftCardHoldRepository;
 import com.finovago.p2p.repository.GiftCardRepository;
+import com.finovago.p2p.repository.IdempotencyKeyRepository;
 import com.finovago.p2p.repository.MerchantRepository;
 import com.finovago.p2p.repository.RefreshTokenRepository;
 import com.finovago.p2p.repository.UserRepository;
@@ -41,6 +43,9 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private GiftCardHoldRepository giftCardHoldRepository;
+
+    @Autowired
+    private IdempotencyKeyRepository idempotencyKeyRepository;
 
     @Autowired
     private MerchantRepository merchantRepository;
@@ -65,6 +70,7 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        idempotencyKeyRepository.deleteAll();
         giftCardHoldRepository.deleteAll();
         giftCardRepository.deleteAll();
         refreshTokenRepository.deleteAll();
@@ -92,7 +98,7 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_reserve_hold_without_touching_real_balance() {
-        HoldResponse response = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 40.0));
+        HoldResponse response = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 40.0), UUID.randomUUID().toString());
 
         assertEquals("PENDING", response.status());
         assertEquals(60.0, response.remainingAvailableBalance());
@@ -101,15 +107,15 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_fail_reserve_when_amount_exceeds_available_balance() {
-        giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 70.0));
+        giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 70.0), UUID.randomUUID().toString());
 
         assertThrows(InsufficientAvailableBalanceException.class,
-                () -> giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 40.0)));
+                () -> giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 40.0), UUID.randomUUID().toString()));
     }
 
     @Test
     void should_capture_hold_and_deduct_real_balance() {
-        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 40.0));
+        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 40.0), UUID.randomUUID().toString());
 
         HoldResponse captured = giftCardHoldService.capture(reserved.holdId());
 
@@ -119,7 +125,7 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_fail_on_double_capture_and_not_double_deduct() {
-        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 40.0));
+        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 40.0), UUID.randomUUID().toString());
         giftCardHoldService.capture(reserved.holdId());
 
         assertThrows(HoldAlreadyFinalizedException.class, () -> giftCardHoldService.capture(reserved.holdId()));
@@ -128,19 +134,19 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_release_hold_and_free_up_available_balance_for_new_reserve() {
-        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 70.0));
+        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 70.0), UUID.randomUUID().toString());
 
         HoldResponse released = giftCardHoldService.release(reserved.holdId());
         assertEquals("RELEASED", released.status());
         assertEquals(100.0, reloadCard().getBalance());
 
-        HoldResponse secondReserve = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 70.0));
+        HoldResponse secondReserve = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 70.0), UUID.randomUUID().toString());
         assertEquals("PENDING", secondReserve.status());
     }
 
     @Test
     void should_fail_on_double_release() {
-        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 40.0));
+        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 40.0), UUID.randomUUID().toString());
         giftCardHoldService.release(reserved.holdId());
 
         assertThrows(HoldAlreadyFinalizedException.class, () -> giftCardHoldService.release(reserved.holdId()));
@@ -154,7 +160,7 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_return_not_found_when_another_merchant_tries_to_capture_or_release() {
-        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 40.0));
+        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 40.0), UUID.randomUUID().toString());
 
         Merchant otherMerchant = merchantRepository.save(new Merchant("Other Merchant", "other@example.com"));
         SecurityContextHolder.getContext().setAuthentication(

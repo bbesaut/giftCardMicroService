@@ -32,11 +32,13 @@ import com.finovago.p2p.repository.GiftCardHoldRepository;
 import com.finovago.p2p.repository.GiftCardRepository;
 import com.finovago.p2p.security.CurrentUserContext;
 import com.finovago.p2p.service.GiftCardHoldService;
+import com.finovago.p2p.service.IdempotencyKeyService;
 
 @ExtendWith(MockitoExtension.class)
 class GiftCardHoldServiceUnitTest {
     private static final Long MERCHANT_ID = 1L;
     private static final long TTL_MINUTES = 15L;
+    private static final String IDEMPOTENCY_KEY = "client-hold-key";
 
     @Mock
     private GiftCardHoldRepository giftCardHoldRepository;
@@ -47,6 +49,9 @@ class GiftCardHoldServiceUnitTest {
     @Mock
     private CurrentUserContext currentUserContext;
 
+    @Mock
+    private IdempotencyKeyService idempotencyKeyService;
+
     private GiftCardHoldService giftCardHoldService;
 
     private Merchant merchant;
@@ -54,8 +59,11 @@ class GiftCardHoldServiceUnitTest {
     @BeforeEach
     void setUp() {
         merchant = new Merchant("Test Merchant", "merchant@example.com");
-        giftCardHoldService = new GiftCardHoldService(giftCardHoldRepository, giftCardRepository, currentUserContext, TTL_MINUTES);
+        giftCardHoldService = new GiftCardHoldService(giftCardHoldRepository, giftCardRepository, currentUserContext, idempotencyKeyService, TTL_MINUTES);
         lenient().when(currentUserContext.currentMerchantId()).thenReturn(MERCHANT_ID);
+        lenient().when(idempotencyKeyService.hashRequest(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString())).thenReturn("hash");
+        lenient().when(idempotencyKeyService.claim(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(HoldResponse.class)))
+                .thenReturn(Optional.empty());
     }
 
     private GiftCard activeCard(String code, double balance) {
@@ -73,10 +81,33 @@ class GiftCardHoldServiceUnitTest {
         when(giftCardHoldRepository.save(org.mockito.ArgumentMatchers.any(GiftCardHold.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        HoldResponse response = giftCardHoldService.reserve(new ReserveRequest(cardCode, 50.0));
+        HoldResponse response = giftCardHoldService.reserve(new ReserveRequest(cardCode, 50.0), IDEMPOTENCY_KEY);
 
         assertEquals("PENDING", response.status());
         assertEquals(30.0, response.remainingAvailableBalance());
+    }
+
+    @Test
+    void reserve_returnsCachedResponse_withoutTouchingBusinessLogic_whenIdempotencyKeyAlreadyCompleted() {
+        HoldResponse cached = new HoldResponse(1L, "PENDING", LocalDateTime.now().plusMinutes(15), 50.0);
+        when(idempotencyKeyService.claim(MERCHANT_ID, IDEMPOTENCY_KEY, "hash", HoldResponse.class)).thenReturn(Optional.of(cached));
+
+        HoldResponse response = giftCardHoldService.reserve(new ReserveRequest("GC-CACHED", 50.0), IDEMPOTENCY_KEY);
+
+        assertEquals(cached, response);
+        verify(giftCardRepository, never()).findByMerchantIdAndCardCodeForUpdate(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(idempotencyKeyService, never()).complete(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void reserve_discardsClaim_whenBusinessLogicFails() {
+        when(giftCardRepository.findByMerchantIdAndCardCodeForUpdate(MERCHANT_ID, "MISSING")).thenReturn(Optional.empty());
+
+        assertThrows(UnknownGiftCardException.class,
+                () -> giftCardHoldService.reserve(new ReserveRequest("MISSING", 10.0), IDEMPOTENCY_KEY));
+
+        verify(idempotencyKeyService).discard(MERCHANT_ID, IDEMPOTENCY_KEY);
+        verify(idempotencyKeyService, never()).complete(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -88,7 +119,7 @@ class GiftCardHoldServiceUnitTest {
         when(giftCardHoldRepository.sumPendingHoldAmounts(card.getId())).thenReturn(60.0);
 
         assertThrows(InsufficientAvailableBalanceException.class,
-                () -> giftCardHoldService.reserve(new ReserveRequest(cardCode, 50.0)));
+                () -> giftCardHoldService.reserve(new ReserveRequest(cardCode, 50.0), IDEMPOTENCY_KEY));
     }
 
     @Test
@@ -96,7 +127,7 @@ class GiftCardHoldServiceUnitTest {
         when(giftCardRepository.findByMerchantIdAndCardCodeForUpdate(MERCHANT_ID, "MISSING")).thenReturn(Optional.empty());
 
         assertThrows(UnknownGiftCardException.class,
-                () -> giftCardHoldService.reserve(new ReserveRequest("MISSING", 10.0)));
+                () -> giftCardHoldService.reserve(new ReserveRequest("MISSING", 10.0), IDEMPOTENCY_KEY));
     }
 
     @Test
@@ -107,7 +138,7 @@ class GiftCardHoldServiceUnitTest {
         when(giftCardRepository.findByMerchantIdAndCardCodeForUpdate(MERCHANT_ID, cardCode)).thenReturn(Optional.of(card));
 
         assertThrows(InactiveGiftCardException.class,
-                () -> giftCardHoldService.reserve(new ReserveRequest(cardCode, 10.0)));
+                () -> giftCardHoldService.reserve(new ReserveRequest(cardCode, 10.0), IDEMPOTENCY_KEY));
     }
 
     @Test
@@ -118,7 +149,7 @@ class GiftCardHoldServiceUnitTest {
         when(giftCardRepository.findByMerchantIdAndCardCodeForUpdate(MERCHANT_ID, cardCode)).thenReturn(Optional.of(card));
 
         assertThrows(ExpiredGiftCardException.class,
-                () -> giftCardHoldService.reserve(new ReserveRequest(cardCode, 10.0)));
+                () -> giftCardHoldService.reserve(new ReserveRequest(cardCode, 10.0), IDEMPOTENCY_KEY));
     }
 
     @Test

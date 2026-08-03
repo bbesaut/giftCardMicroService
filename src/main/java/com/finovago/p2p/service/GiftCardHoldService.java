@@ -1,6 +1,7 @@
 package com.finovago.p2p.service;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,23 +28,50 @@ public class GiftCardHoldService {
     private final GiftCardHoldRepository giftCardHoldRepository;
     private final GiftCardRepository giftCardRepository;
     private final CurrentUserContext currentUserContext;
+    private final IdempotencyKeyService idempotencyKeyService;
     private final long holdTtlMinutes;
 
     public GiftCardHoldService(
             GiftCardHoldRepository giftCardHoldRepository,
             GiftCardRepository giftCardRepository,
             CurrentUserContext currentUserContext,
+            IdempotencyKeyService idempotencyKeyService,
             @Value("${app.holds.ttl-minutes:15}") long holdTtlMinutes) {
         this.giftCardHoldRepository = giftCardHoldRepository;
         this.giftCardRepository = giftCardRepository;
         this.currentUserContext = currentUserContext;
+        this.idempotencyKeyService = idempotencyKeyService;
         this.holdTtlMinutes = holdTtlMinutes;
     }
 
+    /**
+     * claim()/complete()/discard() call a different bean (IdempotencyKeyService), so their
+     * REQUIRES_NEW transactions correctly nest inside this method's transaction despite it
+     * being a single @Transactional method - unlike a self-invoked inner method, this doesn't
+     * risk losing the pessimistic lock held below for the whole reserve.
+     */
     @Transactional
-    public HoldResponse reserve(ReserveRequest request) {
+    public HoldResponse reserve(ReserveRequest request, String idempotencyKey) {
         Long merchantId = currentUserContext.currentMerchantId();
+        String requestHash = idempotencyKeyService.hashRequest(request.giftCardCode(), String.valueOf(request.amount()));
 
+        Optional<HoldResponse> cached = idempotencyKeyService.claim(merchantId, idempotencyKey, requestHash, HoldResponse.class);
+        if (cached.isPresent()) {
+            log.info("Idempotency-Key {} already completed, returning cached result", idempotencyKey);
+            return cached.get();
+        }
+
+        try {
+            HoldResponse response = reserveWithoutIdempotency(merchantId, request);
+            idempotencyKeyService.complete(merchantId, idempotencyKey, response);
+            return response;
+        } catch (RuntimeException e) {
+            idempotencyKeyService.discard(merchantId, idempotencyKey);
+            throw e;
+        }
+    }
+
+    private HoldResponse reserveWithoutIdempotency(Long merchantId, ReserveRequest request) {
         // Locks the gift_card row for the whole transaction: the available-balance check below
         // reads across gift_card and gift_card_hold, so the invariant being protected is
         // per-gift-card and must be serialized at that granularity.

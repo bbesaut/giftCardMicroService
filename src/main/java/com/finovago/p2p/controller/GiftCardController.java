@@ -166,17 +166,21 @@ public class GiftCardController
         description = "Earmark an amount against a gift card's balance without deducting it yet. The hold must later be "
                     + "confirmed via capture or cancelled via release, and auto-expires if left pending too long. "
                     + "Unlike redeem, an amount exceeding the available balance (balance minus other pending holds) IS an error. "
-                    + "Requires authentication (JWT token, MERCHANT role)."
+                    + "Requires authentication (JWT token, MERCHANT role). "
+                    + "Requires the Idempotency-Key header: safely retry a reservation after a network failure by resending the same key - "
+                    + "a completed request replays its cached result instead of reserving a second hold."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "Created - Hold reserved, status PENDING",
             content = @Content(schema = @Schema(implementation = HoldResponse.class))),
-        @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request body (missing or invalid fields)",
+        @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request body (missing or invalid fields), or missing Idempotency-Key header",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"The gift card code cannot be blank\"}"))),
         @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
         @ApiResponse(responseCode = "404", description = "Not Found - Gift card with specified code does not exist",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Not Found\",\"message\":\"Gift card not found\"}"))),
+        @ApiResponse(responseCode = "409", description = "Conflict - Idempotency-Key already used with a different request payload, or a request with this key is still being processed",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Conflict\",\"message\":\"This Idempotency-Key was already used with a different request payload\"}"))),
         @ApiResponse(responseCode = "422", description = "Unprocessable Entity - Card is inactive/expired, or available balance is insufficient to reserve this amount",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unprocessable Entity\",\"message\":\"Insufficient available balance to reserve this amount\"}"))),
         @ApiResponse(responseCode = "429", description = "Too Many Requests - Rate limit exceeded for this IP (max 10 attempts/minute)",
@@ -186,9 +190,11 @@ public class GiftCardController
     })
     @PostMapping("/reserve")
     @ResponseStatus(HttpStatus.CREATED)
-    public HoldResponse reserveGiftCard(@Valid @RequestBody ReserveRequest request) {
-        log.info("Received hold reservation request. Code: {}, Amount: {}", request.giftCardCode(), request.amount());
-        return giftCardHoldService.reserve(request);
+    public HoldResponse reserveGiftCard(
+            @Valid @RequestBody ReserveRequest request,
+            @RequestHeader("Idempotency-Key") String idempotencyKey) {
+        log.info("Received hold reservation request. Code: {}, Amount: {}, IdempotencyKey: {}", request.giftCardCode(), request.amount(), idempotencyKey);
+        return giftCardHoldService.reserve(request, idempotencyKey);
     }
 
     @Operation(

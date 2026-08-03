@@ -35,17 +35,8 @@ public class IdempotencyKey {
     @Column(nullable = false, length = 20)
     private IdempotencyStatus status;
 
-    @Column(name = "response_status")
-    private String responseStatus;
-
-    @Column(name = "deducted_amount")
-    private Double deductedAmount;
-
-    @Column(name = "remaining_balance")
-    private Double remainingBalance;
-
-    @Column(name = "remaining_to_pay")
-    private Double remainingToPay;
+    @Column(name = "response_body", columnDefinition = "TEXT")
+    private String responseBody;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -70,11 +61,8 @@ public class IdempotencyKey {
         return this.status == IdempotencyStatus.IN_PROGRESS;
     }
 
-    public void complete(String responseStatus, double deductedAmount, double remainingBalance, double remainingToPay) {
+    public void complete(String responseBody) {
         this.status = IdempotencyStatus.COMPLETED;
-        this.responseStatus = responseStatus;
-        this.deductedAmount = deductedAmount;
-        this.remainingBalance = remainingBalance;
-        this.remainingToPay = remainingToPay;
+        this.responseBody = responseBody;
     }
 }
