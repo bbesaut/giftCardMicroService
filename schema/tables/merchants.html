@@ -120,6 +120,10 @@
                                                 <td class="constraint detail">gift_card_hold_merchant_id_fkey<span title='Restrict delete:&#10;Parent cannot be deleted if children exist'>R</span></td>
                                             </tr>
                                             <tr>
+                                                <td title="idempotency_key.merchant_id references merchants.id via idempotency_key_merchant_id_fkey"><a href='idempotency_key.html'>idempotency_key</a><span class='relatedKey'>.merchant_id</span></td>
+                                                <td class="constraint detail">idempotency_key_merchant_id_fkey<span title='Restrict delete:&#10;Parent cannot be deleted if children exist'>R</span></td>
+                                            </tr>
+                                            <tr>
                                                 <td title="users.merchant_id references merchants.id via users_merchant_id_fkey"><a href='users.html'>users</a><span class='relatedKey'>.merchant_id</span></td>
                                                 <td class="constraint detail">users_merchant_id_fkey<span title='Restrict delete:&#10;Parent cannot be deleted if children exist'>R</span></td>
                                             </tr>
@@ -252,20 +256,22 @@
                                 <div class="tab-content no-padding">
                                     <div class="chart tab-pane active" id="oneDegreeImg-chart" style="position: relative; overflow-x:auto;">
                                         <map id="oneDegreeRelationshipsDiagram" name="oneDegreeRelationshipsDiagram">
-<area shape="rect" id="node1" href="gift_card.html" target="_top" title="gift_card" alt="" coords="364,5,553,181">
-<area shape="rect" id="node2" href="merchants.html" target="_top" title="merchants" alt="" coords="5,156,320,372">
-<area shape="rect" id="node3" href="gift_card_hold.html" target="_top" title="gift_card_hold" alt="" coords="597,39,801,273">
-<area shape="rect" id="node4" href="users.html" target="_top" title="users" alt="" coords="379,235,539,411">
+<area shape="rect" id="node1" href="gift_card.html" target="_top" title="gift_card" alt="" coords="387,5,576,181">
+<area shape="rect" id="node2" href="merchants.html" target="_top" title="merchants" alt="" coords="5,209,320,425">
+<area shape="rect" id="node3" href="gift_card_hold.html" target="_top" title="gift_card_hold" alt="" coords="643,39,847,273">
+<area shape="rect" id="node4" href="idempotency_key.html" target="_top" title="idempotency_key" alt="" coords="364,235,599,440">
+<area shape="rect" id="node5" href="users.html" target="_top" title="users" alt="" coords="401,457,561,633">
 </map>
                                         <a name='diagram'><img id="oneDegreeImg" src="../diagrams/tables/merchants.1degree.png" usemap="#oneDegreeRelationshipsDiagram" class="diagram" border="0" align="left"></a>
                                     </div>
                                     <div class="chart tab-pane " id="twodegreesDegreeImg-chart" style="position: relative; overflow-x:auto;">
                                         <map id="twoDegreesRelationshipsDiagram" name="twoDegreesRelationshipsDiagram">
-<area shape="rect" id="node1" href="gift_card.html" target="_top" title="gift_card" alt="" coords="364,29,553,205">
-<area shape="rect" id="node2" href="merchants.html" target="_top" title="merchants" alt="" coords="5,180,320,396">
-<area shape="rect" id="node3" href="gift_card_hold.html" target="_top" title="gift_card_hold" alt="" coords="603,5,807,240">
-<area shape="rect" id="node4" href="refresh_tokens.html" target="_top" title="refresh_tokens" alt="" coords="597,261,812,349">
-<area shape="rect" id="node5" href="users.html" target="_top" title="users" alt="" coords="379,259,539,435">
+<area shape="rect" id="node1" href="gift_card.html" target="_top" title="gift_card" alt="" coords="387,5,576,181">
+<area shape="rect" id="node2" href="merchants.html" target="_top" title="merchants" alt="" coords="5,209,320,425">
+<area shape="rect" id="node3" href="gift_card_hold.html" target="_top" title="gift_card_hold" alt="" coords="648,39,852,273">
+<area shape="rect" id="node4" href="idempotency_key.html" target="_top" title="idempotency_key" alt="" coords="364,235,599,440">
+<area shape="rect" id="node5" href="refresh_tokens.html" target="_top" title="refresh_tokens" alt="" coords="643,460,857,548">
+<area shape="rect" id="node6" href="users.html" target="_top" title="users" alt="" coords="401,457,561,633">
 </map>
                                         <a name='diagram'><img id="twodegreesDegreeImg" src="../diagrams/tables/merchants.2degrees.png" usemap="#twoDegreesRelationshipsDiagram" class="diagram" border="0" align="left"></a>
                                     </div>

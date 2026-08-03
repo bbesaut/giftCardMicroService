@@ -300,12 +300,12 @@
                                 </thead>
                                 <tbody>
                                 <tr>
-                                    <td>gift_card_hold_status_check</td>
-                                    <td>((status)::text = ANY ((ARRAY[&#39;PENDING&#39;::character varying, &#39;CAPTURED&#39;::character varying, &#39;RELEASED&#39;::character varying, &#39;EXPIRED&#39;::character varying])::text[]))</td>
-                                </tr>
-                                <tr>
                                     <td>gift_card_hold_amount_check</td>
                                     <td>(amount &gt; (0)::double precision)</td>
+                                </tr>
+                                <tr>
+                                    <td>gift_card_hold_status_check</td>
+                                    <td>((status)::text = ANY ((ARRAY[&#39;PENDING&#39;::character varying, &#39;CAPTURED&#39;::character varying, &#39;RELEASED&#39;::character varying, &#39;EXPIRED&#39;::character varying])::text[]))</td>
                                 </tr>
                                 </tbody>
                             </table>
@@ -338,10 +338,11 @@
                                     </div>
                                     <div class="chart tab-pane " id="twodegreesDegreeImg-chart" style="position: relative; overflow-x:auto;">
                                         <map id="twoDegreesRelationshipsDiagram" name="twoDegreesRelationshipsDiagram">
-<area shape="rect" id="node1" href="gift_card.html" target="_top" title="gift_card" alt="" coords="228,5,417,181">
-<area shape="rect" id="node2" href="merchants.html" target="_top" title="merchants" alt="" coords="5,159,184,276">
-<area shape="rect" id="node3" href="gift_card_hold.html" target="_top" title="gift_card_hold" alt="" coords="461,36,777,311">
-<area shape="rect" id="node4" href="users.html" target="_top" title="users" alt="" coords="249,235,397,323">
+<area shape="rect" id="node1" href="gift_card.html" target="_top" title="gift_card" alt="" coords="251,5,440,181">
+<area shape="rect" id="node2" href="merchants.html" target="_top" title="merchants" alt="" coords="5,196,184,313">
+<area shape="rect" id="node3" href="gift_card_hold.html" target="_top" title="gift_card_hold" alt="" coords="507,36,823,311">
+<area shape="rect" id="node4" href="idempotency_key.html" target="_top" title="idempotency_key" alt="" coords="228,235,463,323">
+<area shape="rect" id="node5" href="users.html" target="_top" title="users" alt="" coords="271,340,419,428">
 </map>
                                         <a name='diagram'><img id="twodegreesDegreeImg" src="../diagrams/tables/gift_card_hold.2degrees.png" usemap="#twoDegreesRelationshipsDiagram" class="diagram" border="0" align="left"></a>
                                     </div>

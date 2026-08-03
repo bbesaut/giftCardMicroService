@@ -1,6 +1,7 @@
 merchants
 gift_card
 users
+idempotency_key
 refresh_tokens
 gift_card_hold
 flyway_schema_history

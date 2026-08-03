@@ -1,6 +1,7 @@
 flyway_schema_history
 gift_card_hold
 refresh_tokens
+idempotency_key
 users
 gift_card
 merchants
