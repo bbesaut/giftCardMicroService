@@ -1,6 +1,9 @@
 package com.finovago.p2p.unit;
 import java.time.LocalDate;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.Executor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -10,12 +13,18 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.GiftCardResponse;
+import com.finovago.p2p.dto.RedemptionRequest;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.exception.ExpiredGiftCardException;
 import com.finovago.p2p.exception.InactiveGiftCardException;
@@ -26,11 +35,13 @@ import com.finovago.p2p.repository.GiftCardRepository;
 import com.finovago.p2p.repository.MerchantRepository;
 import com.finovago.p2p.security.CurrentUserContext;
 import com.finovago.p2p.service.GiftCardService;
+import com.finovago.p2p.service.IdempotencyKeyService;
 
 @ExtendWith(MockitoExtension.class)
 class GiftCardServiceUnitTest
 {
     private static final Long MERCHANT_ID = 1L;
+    private static final String IDEMPOTENCY_KEY = "client-key-abc";
 
     @Mock
     private GiftCardRepository giftCardRepository;
@@ -40,6 +51,12 @@ class GiftCardServiceUnitTest
 
     @Mock
     private CurrentUserContext currentUserContext;
+
+    @Mock
+    private IdempotencyKeyService idempotencyKeyService;
+
+    @Mock
+    private Executor taskExecutor;
 
     @InjectMocks
     private GiftCardService giftCardService;
@@ -51,6 +68,11 @@ class GiftCardServiceUnitTest
         merchant = new Merchant("Test Merchant", "merchant@example.com");
         lenient().when(currentUserContext.currentMerchantId()).thenReturn(MERCHANT_ID);
         lenient().when(merchantRepository.getReferenceById(MERCHANT_ID)).thenReturn(merchant);
+        // Runs the supplyAsync task synchronously on the calling thread so tests don't need to wait on a real pool.
+        lenient().doAnswer(invocation -> {
+            invocation.getArgument(0, Runnable.class).run();
+            return null;
+        }).when(taskExecutor).execute(any());
     }
 
     @Test
@@ -108,6 +130,52 @@ class GiftCardServiceUnitTest
         assertEquals(30.0, response.deductedAmount());
         assertEquals(70.0, response.remainingBalance());
         assertEquals(0.0, response.remainingToPay());
+    }
+
+    @Test
+    void redeemGiftCardAsync_returnsCachedResponse_withoutTouchingBusinessLogic_whenIdempotencyKeyAlreadyCompleted() {
+        RedemptionResponse cached = new RedemptionResponse("SUCCESS", 30.0, 70.0, 0.0);
+        when(idempotencyKeyService.hashRequest("VALID123", 30.0)).thenReturn("hash");
+        when(idempotencyKeyService.claim(MERCHANT_ID, IDEMPOTENCY_KEY, "hash")).thenReturn(Optional.of(cached));
+
+        CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(
+                new RedemptionRequest(30.0, "VALID123"), IDEMPOTENCY_KEY);
+
+        assertEquals(cached, future.join());
+        verify(giftCardRepository, never()).findByMerchantIdAndCardCode(any(), any());
+        verify(idempotencyKeyService, never()).complete(any(), any(), any());
+    }
+
+    @Test
+    void redeemGiftCardAsync_executesAndRecordsCompletion_whenNoCachedResponse() {
+        String cardCode = "VALID123";
+        GiftCard activeCard = new GiftCard(merchant, cardCode, 100.0, true, LocalDate.now().plusDays(30));
+        when(idempotencyKeyService.hashRequest(cardCode, 30.0)).thenReturn("hash");
+        when(idempotencyKeyService.claim(MERCHANT_ID, IDEMPOTENCY_KEY, "hash")).thenReturn(Optional.empty());
+        when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.of(activeCard));
+
+        CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(
+                new RedemptionRequest(30.0, cardCode), IDEMPOTENCY_KEY);
+        RedemptionResponse response = future.join();
+
+        assertEquals(30.0, response.deductedAmount());
+        verify(idempotencyKeyService).complete(eq(MERCHANT_ID), eq(IDEMPOTENCY_KEY), eq(response));
+    }
+
+    @Test
+    void redeemGiftCardAsync_discardsClaim_whenBusinessLogicFails() {
+        String unknownCode = "MISSING";
+        when(idempotencyKeyService.hashRequest(unknownCode, 30.0)).thenReturn("hash");
+        when(idempotencyKeyService.claim(MERCHANT_ID, IDEMPOTENCY_KEY, "hash")).thenReturn(Optional.empty());
+        when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, unknownCode)).thenReturn(Optional.empty());
+
+        CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(
+                new RedemptionRequest(30.0, unknownCode), IDEMPOTENCY_KEY);
+
+        CompletionException thrown = assertThrows(CompletionException.class, future::join);
+        assertEquals(UnknownGiftCardException.class, thrown.getCause().getClass());
+        verify(idempotencyKeyService).discard(MERCHANT_ID, IDEMPOTENCY_KEY);
+        verify(idempotencyKeyService, never()).complete(any(), any(), any());
     }
 
     @Test

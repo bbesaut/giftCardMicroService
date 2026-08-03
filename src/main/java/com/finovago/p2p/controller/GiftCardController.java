@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -51,17 +52,21 @@ public class GiftCardController
     @Operation(
         summary = "Redeem a gift card",
         description = "Redeem a specified amount from a gift card using its code. The request will be processed asynchronously and returns a CompletableFuture. "
-                    + "Requires authentication (JWT token). MDC correlation ID is automatically propagated to async threads."
+                    + "Requires authentication (JWT token). MDC correlation ID is automatically propagated to async threads. "
+                    + "Requires the Idempotency-Key header: safely retry a redemption after a network failure by resending the same key - "
+                    + "a completed request replays its cached result instead of deducting the balance again."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "202", description = "Accepted - Redemption request accepted and being processed asynchronously",
             content = @Content(schema = @Schema(implementation = RedemptionResponse.class))),
-        @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request body (missing or invalid fields)",
+        @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request body (missing or invalid fields) or missing Idempotency-Key header",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"The gift card code cannot be blank\"}"))),
         @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
         @ApiResponse(responseCode = "404", description = "Not Found - Gift card with specified code does not exist",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Not Found\",\"message\":\"Gift card not found\"}"))),
+        @ApiResponse(responseCode = "409", description = "Conflict - Idempotency-Key already used with a different request payload, or a request with this key is still being processed",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Conflict\",\"message\":\"This Idempotency-Key was already used with a different request payload\"}"))),
         @ApiResponse(responseCode = "422", description = "Unprocessable Entity - Gift card is inactive or has expired. "
                     + "Note: an amount exceeding the balance is NOT an error - the response returns a SUCCESS status with a non-zero remainingToPay.",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unprocessable Entity\",\"message\":\"Gift card has expired\"}"))),
@@ -72,10 +77,12 @@ public class GiftCardController
     })
     @PostMapping("/redeem")
     @ResponseStatus(HttpStatus.ACCEPTED)
-    public CompletableFuture<RedemptionResponse> redeemGiftCard(@Valid @RequestBody RedemptionRequest request) {
-        log.info("Received redemption request. Code: {}, Amount: {}", request.giftCardCode(), request.amount());
+    public CompletableFuture<RedemptionResponse> redeemGiftCard(
+            @Valid @RequestBody RedemptionRequest request,
+            @RequestHeader("Idempotency-Key") String idempotencyKey) {
+        log.info("Received redemption request. Code: {}, Amount: {}, IdempotencyKey: {}", request.giftCardCode(), request.amount(), idempotencyKey);
 
-        return giftCardService.redeemGiftCardAsync(request);
+        return giftCardService.redeemGiftCardAsync(request, idempotencyKey);
     }
 
     @Operation(
