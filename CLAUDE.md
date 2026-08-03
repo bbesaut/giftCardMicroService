@@ -47,6 +47,7 @@ An up-to-date ER diagram is generated automatically by `.github/workflows/schema
 - **Exception handling**: GlobalExceptionHandler with custom exceptions
 - **Response timing**: ResponseTimeFilter adds `X-Response-Time` header to all responses (in milliseconds)
 - **Rate limiting**: RateLimitFilter caps `login`/`lookup`/`redeem` at 10 requests/minute per IP (in-memory, per-instance only â€” see `app.rate-limit.*` properties). Disabled under the `test` profile.
+- **Idempotency**: `POST /giftcards/redeem` requires an `Idempotency-Key` header. `IdempotencyKeyService` claims the key in its own transaction (REQUIRES_NEW) before the redemption runs, so concurrent duplicates are caught by a DB unique constraint (`merchant_id`, `idempotency_key`); a completed claim replays its cached response, a failed one is discarded so retries can proceed cleanly. `IdempotencyKeyCleanupScheduler` sweeps expired entries (see `app.idempotency.*` properties).
 
 ### Response Timing Header (X-Response-Time)
 Every response includes an `X-Response-Time` header with the request processing time in milliseconds. This is a best practice for:
@@ -200,6 +201,8 @@ All gift card endpoints below are scoped to the calling MERCHANT's own tenant â€
 ### POST /api/v1/giftcards/redeem
 **Description**: Redeem a specified amount from a gift card using its code, scoped to the caller's merchant. The request is processed asynchronously. Requires authentication (MERCHANT role).
 
+**Idempotency**: Requires an `Idempotency-Key` header (client-generated, e.g. a UUID, one per redemption attempt â€” not per HTTP call). If the connection drops before the response arrives, retry the exact same request with the **same** key: a request that already completed replays its cached result instead of deducting the balance again. Reusing a key with a different `giftCardCode`/`amount` returns `409 Conflict`, as does retrying while the original request is still in flight. Keys are scoped per merchant and expire after `app.idempotency.ttl-hours` (default 24h; swept by `IdempotencyKeyCleanupScheduler`).
+
 **Request** (RedemptionRequest):
 ```json
 {
@@ -207,6 +210,7 @@ All gift card endpoints below are scoped to the calling MERCHANT's own tenant â€
   "amount": 50.0
 }
 ```
+Header: `Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000`
 
 **Response** (RedemptionResponse - HTTP 202 Accepted):
 ```json
@@ -219,9 +223,10 @@ All gift card endpoints below are scoped to the calling MERCHANT's own tenant â€
 ```
 
 **Error Responses**:
-- `400 Bad Request`: Invalid request body (missing or invalid fields)
+- `400 Bad Request`: Invalid request body (missing or invalid fields), or missing `Idempotency-Key` header
 - `401 Unauthorized`: Missing or invalid JWT token
 - `404 Not Found`: Gift card with specified code does not exist for the caller's merchant
+- `409 Conflict`: `Idempotency-Key` reused with a different request payload, or a request with this key is still being processed
 - `422 Unprocessable Entity`: Card is inactive or has expired (an amount exceeding the balance is NOT an error â€” the response returns `SUCCESS` with a non-zero `remainingToPay`)
 - `429 Too Many Requests`: Rate limit exceeded (max 10 attempts/minute per IP)
 - `500 Internal Server Error`: Server error

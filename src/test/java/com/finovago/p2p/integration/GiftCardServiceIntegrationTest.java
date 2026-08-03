@@ -1,6 +1,7 @@
 package com.finovago.p2p.integration;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -22,6 +23,7 @@ import com.finovago.p2p.exception.ExpiredGiftCardException;
 import com.finovago.p2p.model.GiftCard;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.repository.GiftCardRepository;
+import com.finovago.p2p.repository.IdempotencyKeyRepository;
 import com.finovago.p2p.repository.MerchantRepository;
 import com.finovago.p2p.security.AuthenticatedUser;
 import com.finovago.p2p.service.GiftCardService;
@@ -35,6 +37,9 @@ class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
     private MerchantRepository merchantRepository;
 
     @Autowired
+    private IdempotencyKeyRepository idempotencyKeyRepository;
+
+    @Autowired
     private GiftCardService giftCardService;
 
     private Long merchantId;
@@ -44,7 +49,8 @@ class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
         // Redemption runs on a separate thread pool (see GiftCardService#redeemGiftCardAsync), so this
         // class deliberately does NOT use @Transactional — a test-managed transaction is bound to the
         // main thread only, and the async thread wouldn't see uncommitted data. Rows are cleaned up
-        // manually instead (gift_card first: it has a FK to merchants).
+        // manually instead, children before merchants (both gift_card and idempotency_key have a FK to merchants).
+        idempotencyKeyRepository.deleteAll();
         giftCardRepository.deleteAll();
         merchantRepository.deleteAll();
 
@@ -89,7 +95,7 @@ class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
 
         double amountToRedeem = 30.0;
         RedemptionRequest redemptionRequest = new RedemptionRequest(amountToRedeem, giftCardCode);
-        CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(redemptionRequest);
+        CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(redemptionRequest, UUID.randomUUID().toString());
         RedemptionResponse response = future.join();
 
         assertEquals(0.0, response.remainingToPay());
@@ -143,7 +149,7 @@ class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
 
         double amountToRedeem = 100.0;
         RedemptionRequest request = new RedemptionRequest(amountToRedeem, giftCardCode);
-        CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(request);
+        CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(request, UUID.randomUUID().toString());
         RedemptionResponse response = future.join();
 
         assertEquals(50.0, response.remainingToPay());
@@ -163,7 +169,7 @@ class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
 
         double amountToRedeem = 50.0;
         RedemptionRequest request = new RedemptionRequest(amountToRedeem, expiredCardCode);
-        CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(request);
+        CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(request, UUID.randomUUID().toString());
 
         try {
             future.join();

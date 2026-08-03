@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -90,6 +91,42 @@ public class GlobalExceptionHandler {
                 .body(Map.of(
                     "error", "Unprocessable Entity",
                     "message", ex.getMessage()
+                ));
+    }
+
+    @ExceptionHandler(IdempotencyKeyConflictException.class)
+    public ResponseEntity<Object> handleIdempotencyKeyConflictException(IdempotencyKeyConflictException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(Map.of(
+                    "error", "Conflict",
+                    "message", ex.getMessage()
+                ));
+    }
+
+    @ExceptionHandler(IdempotencyKeyInProgressException.class)
+    public ResponseEntity<Object> handleIdempotencyKeyInProgressException(IdempotencyKeyInProgressException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(Map.of(
+                    "error", "Conflict",
+                    "message", ex.getMessage()
+                ));
+    }
+
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    public ResponseEntity<Object> handleMissingRequestHeaderException(MissingRequestHeaderException ex) {
+        log.warn("Missing required header: {}", ex.getHeaderName());
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(Map.of(
+                    "error", "Bad Request",
+                    "message", "The " + ex.getHeaderName() + " header is required"
                 ));
     }
 

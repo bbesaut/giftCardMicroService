@@ -27,6 +27,7 @@ public class GiftCardService {
     private final GiftCardRepository giftCardRepository;
     private final MerchantRepository merchantRepository;
     private final CurrentUserContext currentUserContext;
+    private final IdempotencyKeyService idempotencyKeyService;
     private final Executor taskExecutor;
     private static final Logger log = LoggerFactory.getLogger(GiftCardService.class);
 
@@ -34,17 +35,34 @@ public class GiftCardService {
             GiftCardRepository giftCardRepository,
             MerchantRepository merchantRepository,
             CurrentUserContext currentUserContext,
+            IdempotencyKeyService idempotencyKeyService,
             @Qualifier("taskExecutor") Executor taskExecutor) {
         this.giftCardRepository = giftCardRepository;
         this.merchantRepository = merchantRepository;
         this.currentUserContext = currentUserContext;
+        this.idempotencyKeyService = idempotencyKeyService;
         this.taskExecutor = taskExecutor;
     }
 
-    public CompletableFuture<RedemptionResponse> redeemGiftCardAsync(RedemptionRequest request) {
+    public CompletableFuture<RedemptionResponse> redeemGiftCardAsync(RedemptionRequest request, String idempotencyKey) {
         Long merchantId = currentUserContext.currentMerchantId();
         return CompletableFuture.supplyAsync(() -> {
-                return executeRedemptionSync(merchantId, request.giftCardCode(), request.amount());
+            String requestHash = idempotencyKeyService.hashRequest(request.giftCardCode(), request.amount());
+
+            Optional<RedemptionResponse> cached = idempotencyKeyService.claim(merchantId, idempotencyKey, requestHash);
+            if (cached.isPresent()) {
+                log.info("Idempotency-Key {} already completed, returning cached result", idempotencyKey);
+                return cached.get();
+            }
+
+            try {
+                RedemptionResponse response = executeRedemptionSync(merchantId, request.giftCardCode(), request.amount());
+                idempotencyKeyService.complete(merchantId, idempotencyKey, response);
+                return response;
+            } catch (RuntimeException e) {
+                idempotencyKeyService.discard(merchantId, idempotencyKey);
+                throw e;
+            }
         }, taskExecutor);
     }
 

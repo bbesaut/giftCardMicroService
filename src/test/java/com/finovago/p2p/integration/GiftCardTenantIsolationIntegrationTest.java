@@ -23,6 +23,7 @@ import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.model.Role;
 import com.finovago.p2p.model.User;
 import com.finovago.p2p.repository.GiftCardRepository;
+import com.finovago.p2p.repository.IdempotencyKeyRepository;
 import com.finovago.p2p.repository.MerchantRepository;
 import com.finovago.p2p.repository.RefreshTokenRepository;
 import com.finovago.p2p.repository.UserRepository;
@@ -53,6 +54,9 @@ class GiftCardTenantIsolationIntegrationTest extends AbstractIntegrationTest {
     private GiftCardRepository giftCardRepository;
 
     @Autowired
+    private IdempotencyKeyRepository idempotencyKeyRepository;
+
+    @Autowired
     private RefreshTokenRepository refreshTokenRepository;
 
     @Autowired
@@ -66,6 +70,7 @@ class GiftCardTenantIsolationIntegrationTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        idempotencyKeyRepository.deleteAll();
         giftCardRepository.deleteAll();
         refreshTokenRepository.deleteAll();
         userRepository.deleteAll();
@@ -130,6 +135,7 @@ class GiftCardTenantIsolationIntegrationTest extends AbstractIntegrationTest {
 
         MvcResult result = mockMvc.perform(post("/api/v1/giftcards/redeem")
                         .header(AUTHORIZATION, "Bearer " + merchantBToken)
+                        .header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"giftCardCode\":\"" + SHARED_CODE + "\",\"amount\":10.0}"))
                 .andExpect(request().asyncStarted())
@@ -150,6 +156,7 @@ class GiftCardTenantIsolationIntegrationTest extends AbstractIntegrationTest {
 
         MvcResult result = mockMvc.perform(post("/api/v1/giftcards/redeem")
                         .header(AUTHORIZATION, "Bearer " + merchantAToken)
+                        .header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"giftCardCode\":\"" + SHARED_CODE + "\",\"amount\":10.0}"))
                 .andExpect(request().asyncStarted())
