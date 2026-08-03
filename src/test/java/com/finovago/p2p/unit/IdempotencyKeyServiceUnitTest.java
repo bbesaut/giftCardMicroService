@@ -20,6 +20,7 @@ import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.exception.IdempotencyKeyConflictException;
 import com.finovago.p2p.exception.IdempotencyKeyInProgressException;
@@ -39,11 +40,11 @@ class IdempotencyKeyServiceUnitTest {
 
     @BeforeEach
     void setUp() {
-        idempotencyKeyService = new IdempotencyKeyService(idempotencyKeyRepository, 24);
+        idempotencyKeyService = new IdempotencyKeyService(idempotencyKeyRepository, new ObjectMapper(), 24);
     }
 
     private String hash(String code, double amount) {
-        return idempotencyKeyService.hashRequest(code, amount);
+        return idempotencyKeyService.hashRequest(code, String.valueOf(amount));
     }
 
     @Test
@@ -51,7 +52,7 @@ class IdempotencyKeyServiceUnitTest {
         String requestHash = hash("GC-1", 10.0);
         when(idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(MERCHANT_ID, KEY)).thenReturn(Optional.empty());
 
-        Optional<RedemptionResponse> result = idempotencyKeyService.claim(MERCHANT_ID, KEY, requestHash);
+        Optional<RedemptionResponse> result = idempotencyKeyService.claim(MERCHANT_ID, KEY, requestHash, RedemptionResponse.class);
 
         assertTrue(result.isEmpty());
         verify(idempotencyKeyRepository).saveAndFlush(ArgumentMatchers.any(IdempotencyKey.class));
@@ -61,10 +62,10 @@ class IdempotencyKeyServiceUnitTest {
     void claim_returnsCachedResponse_whenSameKeyAlreadyCompletedWithSameRequest() {
         String requestHash = hash("GC-1", 10.0);
         IdempotencyKey completed = new IdempotencyKey(MERCHANT_ID, KEY, requestHash, LocalDateTime.now().plusHours(1));
-        completed.complete("SUCCESS", 10.0, 40.0, 0.0);
+        completed.complete("{\"status\":\"SUCCESS\",\"deductedAmount\":10.0,\"remainingBalance\":40.0,\"remainingToPay\":0.0}");
         when(idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(MERCHANT_ID, KEY)).thenReturn(Optional.of(completed));
 
-        Optional<RedemptionResponse> result = idempotencyKeyService.claim(MERCHANT_ID, KEY, requestHash);
+        Optional<RedemptionResponse> result = idempotencyKeyService.claim(MERCHANT_ID, KEY, requestHash, RedemptionResponse.class);
 
         assertTrue(result.isPresent());
         assertEquals(new RedemptionResponse("SUCCESS", 10.0, 40.0, 0.0), result.get());
@@ -77,17 +78,18 @@ class IdempotencyKeyServiceUnitTest {
         IdempotencyKey inProgress = new IdempotencyKey(MERCHANT_ID, KEY, requestHash, LocalDateTime.now().plusHours(1));
         when(idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(MERCHANT_ID, KEY)).thenReturn(Optional.of(inProgress));
 
-        assertThrows(IdempotencyKeyInProgressException.class, () -> idempotencyKeyService.claim(MERCHANT_ID, KEY, requestHash));
+        assertThrows(IdempotencyKeyInProgressException.class,
+                () -> idempotencyKeyService.claim(MERCHANT_ID, KEY, requestHash, RedemptionResponse.class));
     }
 
     @Test
     void claim_throwsConflict_whenSameKeyReusedWithDifferentPayload() {
         IdempotencyKey completed = new IdempotencyKey(MERCHANT_ID, KEY, hash("GC-1", 10.0), LocalDateTime.now().plusHours(1));
-        completed.complete("SUCCESS", 10.0, 40.0, 0.0);
+        completed.complete("{\"status\":\"SUCCESS\",\"deductedAmount\":10.0,\"remainingBalance\":40.0,\"remainingToPay\":0.0}");
         when(idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(MERCHANT_ID, KEY)).thenReturn(Optional.of(completed));
 
         assertThrows(IdempotencyKeyConflictException.class,
-                () -> idempotencyKeyService.claim(MERCHANT_ID, KEY, hash("GC-1", 999.0)));
+                () -> idempotencyKeyService.claim(MERCHANT_ID, KEY, hash("GC-1", 999.0), RedemptionResponse.class));
     }
 
     @Test
@@ -101,20 +103,21 @@ class IdempotencyKeyServiceUnitTest {
         when(idempotencyKeyRepository.saveAndFlush(ArgumentMatchers.any(IdempotencyKey.class)))
                 .thenThrow(new DataIntegrityViolationException("unique violation"));
 
-        assertThrows(IdempotencyKeyInProgressException.class, () -> idempotencyKeyService.claim(MERCHANT_ID, KEY, requestHash));
+        assertThrows(IdempotencyKeyInProgressException.class,
+                () -> idempotencyKeyService.claim(MERCHANT_ID, KEY, requestHash, RedemptionResponse.class));
         verify(idempotencyKeyRepository, times(2)).findByMerchantIdAndIdempotencyKey(MERCHANT_ID, KEY);
     }
 
     @Test
-    void complete_marksExistingClaimAsCompleted() {
+    void complete_marksExistingClaimAsCompletedWithSerializedResponse() {
         String requestHash = hash("GC-1", 10.0);
         IdempotencyKey claim = new IdempotencyKey(MERCHANT_ID, KEY, requestHash, LocalDateTime.now().plusHours(1));
         when(idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(MERCHANT_ID, KEY)).thenReturn(Optional.of(claim));
 
         idempotencyKeyService.complete(MERCHANT_ID, KEY, new RedemptionResponse("SUCCESS", 10.0, 40.0, 0.0));
 
-        assertEquals(10.0, claim.getDeductedAmount());
         assertTrue(!claim.isInProgress());
+        assertTrue(claim.getResponseBody().contains("\"deductedAmount\":10.0"));
     }
 
     @Test

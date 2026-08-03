@@ -135,8 +135,8 @@ class GiftCardServiceUnitTest
     @Test
     void redeemGiftCardAsync_returnsCachedResponse_withoutTouchingBusinessLogic_whenIdempotencyKeyAlreadyCompleted() {
         RedemptionResponse cached = new RedemptionResponse("SUCCESS", 30.0, 70.0, 0.0);
-        when(idempotencyKeyService.hashRequest("VALID123", 30.0)).thenReturn("hash");
-        when(idempotencyKeyService.claim(MERCHANT_ID, IDEMPOTENCY_KEY, "hash")).thenReturn(Optional.of(cached));
+        when(idempotencyKeyService.hashRequest("VALID123", "30.0")).thenReturn("hash");
+        when(idempotencyKeyService.claim(MERCHANT_ID, IDEMPOTENCY_KEY, "hash", RedemptionResponse.class)).thenReturn(Optional.of(cached));
 
         CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(
                 new RedemptionRequest(30.0, "VALID123"), IDEMPOTENCY_KEY);
@@ -150,8 +150,8 @@ class GiftCardServiceUnitTest
     void redeemGiftCardAsync_executesAndRecordsCompletion_whenNoCachedResponse() {
         String cardCode = "VALID123";
         GiftCard activeCard = new GiftCard(merchant, cardCode, 100.0, true, LocalDate.now().plusDays(30));
-        when(idempotencyKeyService.hashRequest(cardCode, 30.0)).thenReturn("hash");
-        when(idempotencyKeyService.claim(MERCHANT_ID, IDEMPOTENCY_KEY, "hash")).thenReturn(Optional.empty());
+        when(idempotencyKeyService.hashRequest(cardCode, "30.0")).thenReturn("hash");
+        when(idempotencyKeyService.claim(MERCHANT_ID, IDEMPOTENCY_KEY, "hash", RedemptionResponse.class)).thenReturn(Optional.empty());
         when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.of(activeCard));
 
         CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(
@@ -165,8 +165,8 @@ class GiftCardServiceUnitTest
     @Test
     void redeemGiftCardAsync_discardsClaim_whenBusinessLogicFails() {
         String unknownCode = "MISSING";
-        when(idempotencyKeyService.hashRequest(unknownCode, 30.0)).thenReturn("hash");
-        when(idempotencyKeyService.claim(MERCHANT_ID, IDEMPOTENCY_KEY, "hash")).thenReturn(Optional.empty());
+        when(idempotencyKeyService.hashRequest(unknownCode, "30.0")).thenReturn("hash");
+        when(idempotencyKeyService.claim(MERCHANT_ID, IDEMPOTENCY_KEY, "hash", RedemptionResponse.class)).thenReturn(Optional.empty());
         when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, unknownCode)).thenReturn(Optional.empty());
 
         CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(
