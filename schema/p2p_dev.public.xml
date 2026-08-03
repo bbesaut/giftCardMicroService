@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <database name="p2p_dev" schema="public" type="PostgreSQL - 17.10">
    <tables>
-      <table name="flyway_schema_history" numRows="13" remarks="" schema="public" type="TABLE">
+      <table name="flyway_schema_history" numRows="14" remarks="" schema="public" type="TABLE">
          <column autoUpdated="false" defaultValue="null" digits="0" id="0" name="installed_rank" nullable="false" remarks="" size="10" type="int4" typeCode="4"/>
          <column autoUpdated="false" defaultValue="null" digits="0" id="1" name="version" nullable="true" remarks="" size="50" type="varchar" typeCode="12"/>
          <column autoUpdated="false" defaultValue="null" digits="0" id="2" name="description" nullable="false" remarks="" size="200" type="varchar" typeCode="12"/>
@@ -23,6 +23,7 @@
       <table name="gift_card" numRows="0" remarks="" schema="public" type="TABLE">
          <column autoUpdated="true" defaultValue="null" digits="0" id="0" name="id" nullable="false" remarks="" size="19" type="int8" typeCode="-5">
             <child column="gift_card_id" foreignKey="gift_card_hold_gift_card_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="gift_card_hold"/>
+            <child column="gift_card_id" foreignKey="gift_card_ledger_gift_card_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="gift_card_ledger"/>
          </column>
          <column autoUpdated="false" defaultValue="null" digits="0" id="1" name="card_code" nullable="false" remarks="" size="255" type="varchar" typeCode="12"/>
          <column autoUpdated="false" defaultValue="null" digits="17" id="2" name="balance" nullable="false" remarks="" size="17" type="float8" typeCode="8"/>
@@ -74,6 +75,32 @@
          <checkConstraint constraint="(amount &gt; (0)::double precision)" name="gift_card_hold_amount_check"/>
          <checkConstraint constraint="((status)::text = ANY ((ARRAY['PENDING'::character varying, 'CAPTURED'::character varying, 'RELEASED'::character varying, 'EXPIRED'::character varying])::text[]))" name="gift_card_hold_status_check"/>
       </table>
+      <table name="gift_card_ledger" numRows="0" remarks="" schema="public" type="TABLE">
+         <column autoUpdated="true" defaultValue="null" digits="0" id="0" name="id" nullable="false" remarks="" size="19" type="int8" typeCode="-5"/>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="1" name="gift_card_id" nullable="false" remarks="" size="19" type="int8" typeCode="-5">
+            <parent column="id" foreignKey="gift_card_ledger_gift_card_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="gift_card"/>
+         </column>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="2" name="merchant_id" nullable="false" remarks="" size="19" type="int8" typeCode="-5">
+            <parent column="id" foreignKey="gift_card_ledger_merchant_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="merchants"/>
+         </column>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="3" name="entry_type" nullable="false" remarks="" size="20" type="varchar" typeCode="12"/>
+         <column autoUpdated="false" defaultValue="null" digits="17" id="4" name="amount" nullable="false" remarks="" size="17" type="float8" typeCode="8"/>
+         <column autoUpdated="false" defaultValue="null" digits="17" id="5" name="balance_after" nullable="false" remarks="" size="17" type="float8" typeCode="8"/>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="6" name="reference_id" nullable="true" remarks="" size="19" type="int8" typeCode="-5"/>
+         <column autoUpdated="false" defaultValue="now()" digits="6" id="7" name="created_at" nullable="false" remarks="" size="29" type="timestamp" typeCode="93"/>
+         <primaryKey column="id" sequenceNumberInPK="1"/>
+         <index name="gift_card_ledger_pkey" unique="true">
+            <column ascending="true" name="id"/>
+         </index>
+         <index name="idx_gift_card_ledger_giftcard_created_at" unique="false">
+            <column ascending="true" name="gift_card_id"/>
+            <column ascending="true" name="created_at"/>
+         </index>
+         <index name="idx_gift_card_ledger_merchant_id" unique="false">
+            <column ascending="true" name="merchant_id"/>
+         </index>
+         <checkConstraint constraint="((entry_type)::text = ANY ((ARRAY['CREATION'::character varying, 'REDEMPTION'::character varying, 'HOLD_PLACED'::character varying, 'HOLD_CAPTURED'::character varying, 'HOLD_RELEASED'::character varying])::text[]))" name="gift_card_ledger_entry_type_check"/>
+      </table>
       <table name="idempotency_key" numRows="0" remarks="" schema="public" type="TABLE">
          <column autoUpdated="true" defaultValue="null" digits="0" id="0" name="id" nullable="false" remarks="" size="19" type="int8" typeCode="-5"/>
          <column autoUpdated="false" defaultValue="null" digits="0" id="1" name="merchant_id" nullable="false" remarks="" size="19" type="int8" typeCode="-5">
@@ -102,6 +129,7 @@
          <column autoUpdated="true" defaultValue="null" digits="0" id="0" name="id" nullable="false" remarks="" size="19" type="int8" typeCode="-5">
             <child column="merchant_id" foreignKey="gift_card_merchant_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="gift_card"/>
             <child column="merchant_id" foreignKey="gift_card_hold_merchant_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="gift_card_hold"/>
+            <child column="merchant_id" foreignKey="gift_card_ledger_merchant_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="gift_card_ledger"/>
             <child column="merchant_id" foreignKey="idempotency_key_merchant_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="idempotency_key"/>
             <child column="merchant_id" foreignKey="users_merchant_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="users"/>
          </column>

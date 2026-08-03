@@ -3,7 +3,7 @@
     <head>
         <meta charset="utf-8">
         <meta http-equiv="X-UA-Compatible" content="IE=edge">
-        <title>merchants - p2p_dev Database</title>
+        <title>gift_card_ledger - p2p_dev Database</title>
         <!-- Tell the browser to be responsive to screen width -->
         <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" name="viewport">
         <link rel="icon" type="image/png" sizes="16x16" href="../favicon.png">
@@ -73,7 +73,7 @@
             <div class="content-wrapper">
                 <!-- Content Header (Page header) -->
                 <section class="content-header">
-                    <h1>merchants</h1><p><span id="recordNumber">1</span> rows</p><br />
+                    <h1>gift_card_ledger</h1><p><span id="recordNumber">0</span> rows</p><br />
                 </section>
                 <!-- Main content -->
                 <section class="content">
@@ -111,26 +111,6 @@
                                     <td>null</td>
                                     <td>
                                         <table border='0' cellspacing='0' cellpadding='0'>
-                                            <tr>
-                                                <td title="gift_card.merchant_id references merchants.id via gift_card_merchant_id_fkey"><a href='gift_card.html'>gift_card</a><span class='relatedKey'>.merchant_id</span></td>
-                                                <td class="constraint detail">gift_card_merchant_id_fkey<span title='Restrict delete:&#10;Parent cannot be deleted if children exist'>R</span></td>
-                                            </tr>
-                                            <tr>
-                                                <td title="gift_card_hold.merchant_id references merchants.id via gift_card_hold_merchant_id_fkey"><a href='gift_card_hold.html'>gift_card_hold</a><span class='relatedKey'>.merchant_id</span></td>
-                                                <td class="constraint detail">gift_card_hold_merchant_id_fkey<span title='Restrict delete:&#10;Parent cannot be deleted if children exist'>R</span></td>
-                                            </tr>
-                                            <tr>
-                                                <td title="gift_card_ledger.merchant_id references merchants.id via gift_card_ledger_merchant_id_fkey"><a href='gift_card_ledger.html'>gift_card_ledger</a><span class='relatedKey'>.merchant_id</span></td>
-                                                <td class="constraint detail">gift_card_ledger_merchant_id_fkey<span title='Restrict delete:&#10;Parent cannot be deleted if children exist'>R</span></td>
-                                            </tr>
-                                            <tr>
-                                                <td title="idempotency_key.merchant_id references merchants.id via idempotency_key_merchant_id_fkey"><a href='idempotency_key.html'>idempotency_key</a><span class='relatedKey'>.merchant_id</span></td>
-                                                <td class="constraint detail">idempotency_key_merchant_id_fkey<span title='Restrict delete:&#10;Parent cannot be deleted if children exist'>R</span></td>
-                                            </tr>
-                                            <tr>
-                                                <td title="users.merchant_id references merchants.id via users_merchant_id_fkey"><a href='users.html'>users</a><span class='relatedKey'>.merchant_id</span></td>
-                                                <td class="constraint detail">users_merchant_id_fkey<span title='Restrict delete:&#10;Parent cannot be deleted if children exist'>R</span></td>
-                                            </tr>
                                         </table>
                                     </td>
                                     <td>
@@ -140,9 +120,51 @@
                                     <td></td>
                                 </tr>
                                 <tr>
-                                    <td><span id="name">name</span></td>
+                                    <td class='foreignKey' title='Foreign Key'><i class='icon ion-key iconkey' style='padding-left: 5px;'></i><span id="gift_card_id">gift_card_id</span></td>
+                                    <td>int8</td>
+                                    <td>19</td>
+                                    <td title=''></td>
+                                    <td title=''></td>
+                                    <td>null</td>
+                                    <td>
+                                        <table border='0' cellspacing='0' cellpadding='0'>
+                                        </table>
+                                    </td>
+                                    <td>
+                                        <table border='0' cellspacing='0' cellpadding='0'>
+                                            <tr>
+                                                <td title="gift_card_ledger.gift_card_id references gift_card.id via gift_card_ledger_gift_card_id_fkey"><a href='gift_card.html'>gift_card</a><span class='relatedKey'>.id</span></td>
+                                                <td class="constraint detail">gift_card_ledger_gift_card_id_fkey<span title='Restrict delete:&#10;Parent cannot be deleted if children exist'>R</span></td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td class='foreignKey' title='Foreign Key'><i class='icon ion-key iconkey' style='padding-left: 5px;'></i><span id="merchant_id">merchant_id</span></td>
+                                    <td>int8</td>
+                                    <td>19</td>
+                                    <td title=''></td>
+                                    <td title=''></td>
+                                    <td>null</td>
+                                    <td>
+                                        <table border='0' cellspacing='0' cellpadding='0'>
+                                        </table>
+                                    </td>
+                                    <td>
+                                        <table border='0' cellspacing='0' cellpadding='0'>
+                                            <tr>
+                                                <td title="gift_card_ledger.merchant_id references merchants.id via gift_card_ledger_merchant_id_fkey"><a href='merchants.html'>merchants</a><span class='relatedKey'>.id</span></td>
+                                                <td class="constraint detail">gift_card_ledger_merchant_id_fkey<span title='Restrict delete:&#10;Parent cannot be deleted if children exist'>R</span></td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td><span id="entry_type">entry_type</span></td>
                                     <td>varchar</td>
-                                    <td>255</td>
+                                    <td>20</td>
                                     <td title=''></td>
                                     <td title=''></td>
                                     <td>null</td>
@@ -157,9 +179,43 @@
                                     <td></td>
                                 </tr>
                                 <tr>
-                                    <td><span id="contact_email">contact_email</span></td>
-                                    <td>varchar</td>
-                                    <td>255</td>
+                                    <td><span id="amount">amount</span></td>
+                                    <td>float8</td>
+                                    <td>17,17</td>
+                                    <td title=''></td>
+                                    <td title=''></td>
+                                    <td>null</td>
+                                    <td>
+                                        <table border='0' cellspacing='0' cellpadding='0'>
+                                        </table>
+                                    </td>
+                                    <td>
+                                        <table border='0' cellspacing='0' cellpadding='0'>
+                                        </table>
+                                    </td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td><span id="balance_after">balance_after</span></td>
+                                    <td>float8</td>
+                                    <td>17,17</td>
+                                    <td title=''></td>
+                                    <td title=''></td>
+                                    <td>null</td>
+                                    <td>
+                                        <table border='0' cellspacing='0' cellpadding='0'>
+                                        </table>
+                                    </td>
+                                    <td>
+                                        <table border='0' cellspacing='0' cellpadding='0'>
+                                        </table>
+                                    </td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td><span id="reference_id">reference_id</span></td>
+                                    <td>int8</td>
+                                    <td>19</td>
                                     <td title='nullable'>√</td>
                                     <td title=''></td>
                                     <td>null</td>
@@ -174,24 +230,7 @@
                                     <td></td>
                                 </tr>
                                 <tr>
-                                    <td><span id="active">active</span></td>
-                                    <td>bool</td>
-                                    <td>1</td>
-                                    <td title=''></td>
-                                    <td title=''></td>
-                                    <td>true</td>
-                                    <td>
-                                        <table border='0' cellspacing='0' cellpadding='0'>
-                                        </table>
-                                    </td>
-                                    <td>
-                                        <table border='0' cellspacing='0' cellpadding='0'>
-                                        </table>
-                                    </td>
-                                    <td></td>
-                                </tr>
-                                <tr>
-                                    <td><span id="created_at">created_at</span></td>
+                                    <td class='indexedColumn' title='Indexed'><i class='fa fa-sitemap fa-rotate-120' style='padding-right: 5px;'></i><span id="created_at">created_at</span></td>
                                     <td>timestamp</td>
                                     <td>29,6</td>
                                     <td title=''></td>
@@ -232,14 +271,52 @@
                                 </thead>
                                 <tbody>
                                 <tr>
-                                    <td class='primaryKey' title='Primary Key'><i class='icon ion-key iconkey'></i> merchants_pkey</td>
+                                    <td class='primaryKey' title='Primary Key'><i class='icon ion-key iconkey'></i> gift_card_ledger_pkey</td>
                                     <td>Primary key</td>
                                     <td><span title='Ascending'>Asc</span></td>
                                     <td>id</td>
                                 </tr>
+                                <tr>
+                                    <td title='Indexed'>idx_gift_card_ledger_giftcard_created_at</td>
+                                    <td>Performance</td>
+                                    <td><span title='Ascending'>Asc</span>/<span title='Ascending'>Asc</span></td>
+                                    <td>gift_card_id + created_at</td>
+                                </tr>
+                                <tr>
+                                    <td title='Indexed'>idx_gift_card_ledger_merchant_id</td>
+                                    <td>Performance</td>
+                                    <td><span title='Ascending'>Asc</span></td>
+                                    <td>merchant_id</td>
+                                </tr>
                                 </tbody>
                             </table>
                         </div><!-- /.box-body -->
+                    </div>
+                    <div class="box box-primary">
+                        <div class="box-header with-border">
+                            <i class="fa fa-sitemap"></i>
+                            <h3 class="box-title">Check Constraints</h3>
+                            <div class="box-tools pull-right">
+                                <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
+                                <button type="button" class="btn btn-box-tool" data-widget="remove"><i class="fa fa-times"></i></button>
+                            </div>
+                        </div>
+                        <div class="box-body">
+                            <table id="check_table" class="table table-bordered table-striped dataTable" role="grid">
+                                <thead align='left'>
+                                <tr>
+                                    <th>Constraint Name</th>
+                                    <th>Constraint</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                <tr>
+                                    <td>gift_card_ledger_entry_type_check</td>
+                                    <td>((entry_type)::text = ANY ((ARRAY[&#39;CREATION&#39;::character varying, &#39;REDEMPTION&#39;::character varying, &#39;HOLD_PLACED&#39;::character varying, &#39;HOLD_CAPTURED&#39;::character varying, &#39;HOLD_RELEASED&#39;::character varying])::text[]))</td>
+                                </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                     <div class="box box-primary">
                         <div class="box-header with-border">
@@ -260,26 +337,22 @@
                                 <div class="tab-content no-padding">
                                     <div class="chart tab-pane active" id="oneDegreeImg-chart" style="position: relative; overflow-x:auto;">
                                         <map id="oneDegreeRelationshipsDiagram" name="oneDegreeRelationshipsDiagram">
-<area shape="rect" id="node1" href="gift_card.html" target="_top" title="gift_card" alt="" coords="387,156,576,332">
-<area shape="rect" id="node2" href="merchants.html" target="_top" title="merchants" alt="" coords="5,307,320,523">
-<area shape="rect" id="node3" href="gift_card_hold.html" target="_top" title="gift_card_hold" alt="" coords="651,5,855,240">
-<area shape="rect" id="node4" href="gift_card_ledger.html" target="_top" title="gift_card_ledger" alt="" coords="643,257,864,463">
-<area shape="rect" id="node5" href="idempotency_key.html" target="_top" title="idempotency_key" alt="" coords="364,385,599,591">
-<area shape="rect" id="node6" href="users.html" target="_top" title="users" alt="" coords="401,608,561,784">
+<area shape="rect" id="node1" href="gift_card.html" target="_top" title="gift_card" alt="" coords="228,5,417,181">
+<area shape="rect" id="node2" href="merchants.html" target="_top" title="merchants" alt="" coords="5,112,184,229">
+<area shape="rect" id="node3" href="gift_card_ledger.html" target="_top" title="gift_card_ledger" alt="" coords="461,36,796,340">
 </map>
-                                        <a name='diagram'><img id="oneDegreeImg" src="../diagrams/tables/merchants.1degree.png" usemap="#oneDegreeRelationshipsDiagram" class="diagram" border="0" align="left"></a>
+                                        <a name='diagram'><img id="oneDegreeImg" src="../diagrams/tables/gift_card_ledger.1degree.png" usemap="#oneDegreeRelationshipsDiagram" class="diagram" border="0" align="left"></a>
                                     </div>
                                     <div class="chart tab-pane " id="twodegreesDegreeImg-chart" style="position: relative; overflow-x:auto;">
                                         <map id="twoDegreesRelationshipsDiagram" name="twoDegreesRelationshipsDiagram">
-<area shape="rect" id="node1" href="gift_card.html" target="_top" title="gift_card" alt="" coords="387,156,576,332">
-<area shape="rect" id="node2" href="merchants.html" target="_top" title="merchants" alt="" coords="5,307,320,523">
-<area shape="rect" id="node3" href="gift_card_hold.html" target="_top" title="gift_card_hold" alt="" coords="651,5,855,240">
-<area shape="rect" id="node4" href="gift_card_ledger.html" target="_top" title="gift_card_ledger" alt="" coords="643,257,864,463">
-<area shape="rect" id="node5" href="idempotency_key.html" target="_top" title="idempotency_key" alt="" coords="364,385,599,591">
-<area shape="rect" id="node6" href="refresh_tokens.html" target="_top" title="refresh_tokens" alt="" coords="646,611,861,699">
-<area shape="rect" id="node7" href="users.html" target="_top" title="users" alt="" coords="401,608,561,784">
+<area shape="rect" id="node1" href="gift_card.html" target="_top" title="gift_card" alt="" coords="251,63,440,239">
+<area shape="rect" id="node2" href="merchants.html" target="_top" title="merchants" alt="" coords="5,216,184,333">
+<area shape="rect" id="node3" href="gift_card_hold.html" target="_top" title="gift_card_hold" alt="" coords="572,5,776,93">
+<area shape="rect" id="node4" href="gift_card_ledger.html" target="_top" title="gift_card_ledger" alt="" coords="507,140,841,444">
+<area shape="rect" id="node5" href="idempotency_key.html" target="_top" title="idempotency_key" alt="" coords="228,292,463,380">
+<area shape="rect" id="node6" href="users.html" target="_top" title="users" alt="" coords="271,397,419,485">
 </map>
-                                        <a name='diagram'><img id="twodegreesDegreeImg" src="../diagrams/tables/merchants.2degrees.png" usemap="#twoDegreesRelationshipsDiagram" class="diagram" border="0" align="left"></a>
+                                        <a name='diagram'><img id="twodegreesDegreeImg" src="../diagrams/tables/gift_card_ledger.2degrees.png" usemap="#twoDegreesRelationshipsDiagram" class="diagram" border="0" align="left"></a>
                                     </div>
                                 </div>
                             </div>

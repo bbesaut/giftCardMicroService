@@ -4,4 +4,5 @@ users
 idempotency_key
 refresh_tokens
 gift_card_hold
+gift_card_ledger
 flyway_schema_history
