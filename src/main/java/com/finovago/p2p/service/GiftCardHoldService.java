@@ -17,6 +17,7 @@ import com.finovago.p2p.exception.InsufficientAvailableBalanceException;
 import com.finovago.p2p.exception.UnknownGiftCardException;
 import com.finovago.p2p.model.GiftCard;
 import com.finovago.p2p.model.GiftCardHold;
+import com.finovago.p2p.model.LedgerEntryType;
 import com.finovago.p2p.repository.GiftCardHoldRepository;
 import com.finovago.p2p.repository.GiftCardRepository;
 import com.finovago.p2p.security.CurrentUserContext;
@@ -29,6 +30,7 @@ public class GiftCardHoldService {
     private final GiftCardRepository giftCardRepository;
     private final CurrentUserContext currentUserContext;
     private final IdempotencyKeyService idempotencyKeyService;
+    private final LedgerService ledgerService;
     private final long holdTtlMinutes;
 
     public GiftCardHoldService(
@@ -36,11 +38,13 @@ public class GiftCardHoldService {
             GiftCardRepository giftCardRepository,
             CurrentUserContext currentUserContext,
             IdempotencyKeyService idempotencyKeyService,
+            LedgerService ledgerService,
             @Value("${app.holds.ttl-minutes:15}") long holdTtlMinutes) {
         this.giftCardHoldRepository = giftCardHoldRepository;
         this.giftCardRepository = giftCardRepository;
         this.currentUserContext = currentUserContext;
         this.idempotencyKeyService = idempotencyKeyService;
+        this.ledgerService = ledgerService;
         this.holdTtlMinutes = holdTtlMinutes;
     }
 
@@ -91,6 +95,8 @@ public class GiftCardHoldService {
         GiftCardHold hold = new GiftCardHold(giftCard, merchantId, request.amount(), expiresAt);
         GiftCardHold saved = giftCardHoldRepository.save(hold);
 
+        ledgerService.record(giftCard, merchantId, LedgerEntryType.HOLD_PLACED, request.amount(), giftCard.getBalance(), saved.getId());
+
         log.info("Reserved hold [{}] for {} on card [{}]", saved.getId(), request.amount(), request.giftCardCode());
 
         return new HoldResponse(saved.getId(), saved.getStatus().name(), saved.getExpiresAt(), available - request.amount());
@@ -121,6 +127,8 @@ public class GiftCardHoldService {
         hold.capture();
         giftCardHoldRepository.save(hold);
 
+        ledgerService.record(giftCard, merchantId, LedgerEntryType.HOLD_CAPTURED, hold.getAmount(), giftCard.getBalance(), hold.getId());
+
         log.info("Captured hold [{}], deducted {} from card [{}]", hold.getId(), hold.getAmount(), giftCard.getCardCode());
 
         return new HoldResponse(hold.getId(), hold.getStatus().name(), hold.getExpiresAt(), null);
@@ -139,6 +147,8 @@ public class GiftCardHoldService {
 
         hold.release();
         giftCardHoldRepository.save(hold);
+
+        ledgerService.record(hold.getGiftCard(), merchantId, LedgerEntryType.HOLD_RELEASED, hold.getAmount(), hold.getGiftCard().getBalance(), hold.getId());
 
         log.info("Released hold [{}]", hold.getId());
 

@@ -14,6 +14,7 @@ import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyDouble;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.lenient;
@@ -30,12 +31,14 @@ import com.finovago.p2p.exception.ExpiredGiftCardException;
 import com.finovago.p2p.exception.InactiveGiftCardException;
 import com.finovago.p2p.exception.UnknownGiftCardException;
 import com.finovago.p2p.model.GiftCard;
+import com.finovago.p2p.model.LedgerEntryType;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.repository.GiftCardRepository;
 import com.finovago.p2p.repository.MerchantRepository;
 import com.finovago.p2p.security.CurrentUserContext;
 import com.finovago.p2p.service.GiftCardService;
 import com.finovago.p2p.service.IdempotencyKeyService;
+import com.finovago.p2p.service.LedgerService;
 
 @ExtendWith(MockitoExtension.class)
 class GiftCardServiceUnitTest
@@ -54,6 +57,9 @@ class GiftCardServiceUnitTest
 
     @Mock
     private IdempotencyKeyService idempotencyKeyService;
+
+    @Mock
+    private LedgerService ledgerService;
 
     @Mock
     private Executor taskExecutor;
@@ -104,6 +110,7 @@ class GiftCardServiceUnitTest
         when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, fakeGiftCardCode)).thenReturn(Optional.of(inactiveGiftCard));
 
         assertThrows(InactiveGiftCardException.class, () -> giftCardService.executeRedemptionSync(MERCHANT_ID, fakeGiftCardCode, 50.0));
+        verify(ledgerService, never()).record(any(), any(), any(), anyDouble(), anyDouble(), any());
     }
 
     @Test
@@ -130,6 +137,7 @@ class GiftCardServiceUnitTest
         assertEquals(30.0, response.deductedAmount());
         assertEquals(70.0, response.remainingBalance());
         assertEquals(0.0, response.remainingToPay());
+        verify(ledgerService).record(activeCard, MERCHANT_ID, LedgerEntryType.REDEMPTION, 30.0, 70.0, null);
     }
 
     @Test
@@ -188,6 +196,7 @@ class GiftCardServiceUnitTest
         assertThrows(IllegalArgumentException.class, () ->
             giftCardService.createGiftCard(new GiftCardCreateRequest(existingCode, 0, false, LocalDate.now().plusDays(30)))
         );
+        verify(ledgerService, never()).record(any(), any(), any(), anyDouble(), anyDouble(), any());
     }
 
     @Test
@@ -202,6 +211,7 @@ class GiftCardServiceUnitTest
         var response = giftCardService.createGiftCard(new GiftCardCreateRequest(cardCode, 100.0, true, null));
 
         assertEquals(expectedDate, response.expirationDate());
+        verify(ledgerService).record(savedCard, MERCHANT_ID, LedgerEntryType.CREATION, 100.0, 100.0, null);
     }
 
     @Test
@@ -218,6 +228,7 @@ class GiftCardServiceUnitTest
         assertEquals(20.0, response.deductedAmount());
         assertEquals(0.0, response.remainingBalance());
         assertEquals(30.0, response.remainingToPay());
+        verify(ledgerService).record(activeCard, MERCHANT_ID, LedgerEntryType.REDEMPTION, 20.0, 0.0, null);
     }
 
     @Test

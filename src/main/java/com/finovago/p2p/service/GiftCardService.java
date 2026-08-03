@@ -17,6 +17,7 @@ import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.dto.RedemptionRequest;
 import com.finovago.p2p.exception.UnknownGiftCardException;
 import com.finovago.p2p.model.GiftCard;
+import com.finovago.p2p.model.LedgerEntryType;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.repository.GiftCardRepository;
 import com.finovago.p2p.repository.MerchantRepository;
@@ -28,6 +29,7 @@ public class GiftCardService {
     private final MerchantRepository merchantRepository;
     private final CurrentUserContext currentUserContext;
     private final IdempotencyKeyService idempotencyKeyService;
+    private final LedgerService ledgerService;
     private final Executor taskExecutor;
     private static final Logger log = LoggerFactory.getLogger(GiftCardService.class);
 
@@ -36,11 +38,13 @@ public class GiftCardService {
             MerchantRepository merchantRepository,
             CurrentUserContext currentUserContext,
             IdempotencyKeyService idempotencyKeyService,
+            LedgerService ledgerService,
             @Qualifier("taskExecutor") Executor taskExecutor) {
         this.giftCardRepository = giftCardRepository;
         this.merchantRepository = merchantRepository;
         this.currentUserContext = currentUserContext;
         this.idempotencyKeyService = idempotencyKeyService;
+        this.ledgerService = ledgerService;
         this.taskExecutor = taskExecutor;
     }
 
@@ -100,6 +104,8 @@ public class GiftCardService {
 
         giftCardRepository.save(giftCard);
 
+        ledgerService.record(giftCard, merchantId, LedgerEntryType.REDEMPTION, deducted, giftCard.getBalance(), null);
+
         long duration = System.currentTimeMillis() - startTime;
 
         log.info("Redemption done in {}ms. Remaining balance: {}", duration, giftCard.getBalance());
@@ -130,6 +136,8 @@ public class GiftCardService {
 
         GiftCard giftCard = new GiftCard(merchant, request.giftCardCode(), request.balance(), request.active(), request.expirationDate());
         GiftCard savedCard = giftCardRepository.save(giftCard);
+
+        ledgerService.record(savedCard, merchantId, LedgerEntryType.CREATION, savedCard.getBalance(), savedCard.getBalance(), null);
 
         log.info("Administrative Event: Gift card [{}] successfully registered into database vault.", request.giftCardCode());
 
