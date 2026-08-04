@@ -1,5 +1,6 @@
 package com.finovago.p2p.security;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.MalformedJwtException;
 import io.jsonwebtoken.security.SignatureException;
@@ -8,6 +9,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
@@ -19,12 +21,14 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final RoleHierarchy roleHierarchy;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public JwtAuthenticationFilter(JwtService jwtService, @Lazy RoleHierarchy roleHierarchy) {
         this.jwtService = jwtService;
@@ -85,8 +89,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
 
         } catch (ExpiredJwtException | MalformedJwtException | SignatureException e) {
-            request.setAttribute("authException", e);
-            throw e;
+            // Thrown from within a servlet Filter, upstream of DispatcherServlet: Spring MVC's
+            // @ExceptionHandler machinery (GlobalExceptionHandler) never sees exceptions thrown here,
+            // so the response must be written directly instead of rethrown (which would otherwise
+            // reach the container as an uncaught exception and produce a generic 500).
+            String message = (e instanceof ExpiredJwtException)
+                    ? "Token has expired. Please log in again to obtain a new token."
+                    : "Invalid token, altered or corrupted.";
+
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+            response.getWriter().write(objectMapper.writeValueAsString(Map.of(
+                    "status", 401,
+                    "error", "Unauthorized",
+                    "message", message
+            )));
         }
     }
 }
