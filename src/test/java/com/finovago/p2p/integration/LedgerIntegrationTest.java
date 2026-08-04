@@ -1,5 +1,6 @@
 package com.finovago.p2p.integration;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -97,17 +98,21 @@ class LedgerIntegrationTest extends AbstractIntegrationTest {
         return giftCardRepository.findByMerchantIdAndCardCode(merchantId, CARD_CODE).orElseThrow();
     }
 
-    private double reconstructBalanceFromLedger(Long giftCardId) {
+    private static void assertMoneyEquals(BigDecimal expected, BigDecimal actual) {
+        assertEquals(0, expected.compareTo(actual), () -> "expected " + expected + " but was " + actual);
+    }
+
+    private BigDecimal reconstructBalanceFromLedger(Long giftCardId) {
         return ledgerEntryRepository.findByGiftCardIdOrderByCreatedAtAsc(giftCardId).stream()
                 .filter(entry -> entry.getEntryType() != LedgerEntryType.HOLD_PLACED
                         && entry.getEntryType() != LedgerEntryType.HOLD_RELEASED)
-                .mapToDouble(entry -> entry.getEntryType() == LedgerEntryType.CREATION ? entry.getAmount() : -entry.getAmount())
-                .sum();
+                .map(entry -> entry.getEntryType() == LedgerEntryType.CREATION ? entry.getAmount() : entry.getAmount().negate())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     @Test
     void createGiftCard_writesCreationLedgerEntry() {
-        giftCardService.createGiftCard(new GiftCardCreateRequest(CARD_CODE, 100.0, true, LocalDate.now().plusYears(1)));
+        giftCardService.createGiftCard(new GiftCardCreateRequest(CARD_CODE, BigDecimal.valueOf(100.0), true, LocalDate.now().plusYears(1)));
 
         GiftCard card = reloadCard();
         List<LedgerEntry> entries = ledgerEntryRepository.findByGiftCardIdOrderByCreatedAtAsc(card.getId());
@@ -115,20 +120,20 @@ class LedgerIntegrationTest extends AbstractIntegrationTest {
         assertEquals(1, entries.size());
         LedgerEntry entry = entries.get(0);
         assertEquals(LedgerEntryType.CREATION, entry.getEntryType());
-        assertEquals(100.0, entry.getAmount());
-        assertEquals(100.0, entry.getBalanceAfter());
+        assertMoneyEquals(BigDecimal.valueOf(100.0), entry.getAmount());
+        assertMoneyEquals(BigDecimal.valueOf(100.0), entry.getBalanceAfter());
         assertEquals(merchantId, entry.getMerchantId());
     }
 
     @Test
     void fullLifecycle_createRedeemReserveCapture_ledgerReconstructsFinalBalance() {
-        giftCardService.createGiftCard(new GiftCardCreateRequest(CARD_CODE, 100.0, true, LocalDate.now().plusYears(1)));
+        giftCardService.createGiftCard(new GiftCardCreateRequest(CARD_CODE, BigDecimal.valueOf(100.0), true, LocalDate.now().plusYears(1)));
 
         CompletableFuture<RedemptionResponse> redemption = giftCardService.redeemGiftCardAsync(
-                new RedemptionRequest(20.0, CARD_CODE), UUID.randomUUID().toString());
+                new RedemptionRequest(BigDecimal.valueOf(20.0), CARD_CODE), UUID.randomUUID().toString());
         redemption.join();
 
-        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 30.0), UUID.randomUUID().toString());
+        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, BigDecimal.valueOf(30.0)), UUID.randomUUID().toString());
         giftCardHoldService.capture(reserved.holdId());
 
         GiftCard card = reloadCard();
@@ -142,31 +147,31 @@ class LedgerIntegrationTest extends AbstractIntegrationTest {
                 LedgerEntryType.HOLD_CAPTURED
         ), entries.stream().map(LedgerEntry::getEntryType).toList());
 
-        assertEquals(50.0, card.getBalance());
-        assertEquals(card.getBalance(), reconstructBalanceFromLedger(card.getId()));
+        assertMoneyEquals(BigDecimal.valueOf(50.0), card.getBalance());
+        assertMoneyEquals(card.getBalance(), reconstructBalanceFromLedger(card.getId()));
     }
 
     @Test
     void placedThenReleasedHold_doesNotAffectReconstructedBalance() {
-        giftCardService.createGiftCard(new GiftCardCreateRequest(CARD_CODE, 100.0, true, LocalDate.now().plusYears(1)));
+        giftCardService.createGiftCard(new GiftCardCreateRequest(CARD_CODE, BigDecimal.valueOf(100.0), true, LocalDate.now().plusYears(1)));
 
-        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 40.0), UUID.randomUUID().toString());
+        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, BigDecimal.valueOf(40.0)), UUID.randomUUID().toString());
         giftCardHoldService.release(reserved.holdId());
 
         GiftCard card = reloadCard();
         List<LedgerEntry> entries = ledgerEntryRepository.findByGiftCardIdOrderByCreatedAtAsc(card.getId());
 
         assertEquals(3, entries.size());
-        assertEquals(100.0, card.getBalance());
-        assertEquals(card.getBalance(), reconstructBalanceFromLedger(card.getId()));
+        assertMoneyEquals(BigDecimal.valueOf(100.0), card.getBalance());
+        assertMoneyEquals(card.getBalance(), reconstructBalanceFromLedger(card.getId()));
     }
 
     @Test
     void failedRedemption_writesNoLedgerEntry() {
-        giftCardService.createGiftCard(new GiftCardCreateRequest(CARD_CODE, 100.0, true, LocalDate.now().minusDays(1)));
+        giftCardService.createGiftCard(new GiftCardCreateRequest(CARD_CODE, BigDecimal.valueOf(100.0), true, LocalDate.now().minusDays(1)));
 
         CompletableFuture<RedemptionResponse> redemption = giftCardService.redeemGiftCardAsync(
-                new RedemptionRequest(20.0, CARD_CODE), UUID.randomUUID().toString());
+                new RedemptionRequest(BigDecimal.valueOf(20.0), CARD_CODE), UUID.randomUUID().toString());
 
         try {
             redemption.join();
@@ -186,13 +191,13 @@ class LedgerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void ledgerEntries_areScopedPerMerchant_notMixedAcrossTenants() {
-        giftCardService.createGiftCard(new GiftCardCreateRequest(CARD_CODE, 100.0, true, LocalDate.now().plusYears(1)));
+        giftCardService.createGiftCard(new GiftCardCreateRequest(CARD_CODE, BigDecimal.valueOf(100.0), true, LocalDate.now().plusYears(1)));
 
         Merchant otherMerchant = merchantRepository.save(new Merchant("Other Merchant", "other@example.com"));
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(
                         new AuthenticatedUser("other@example.com", "MERCHANT", otherMerchant.getId()), null, List.of()));
-        giftCardService.createGiftCard(new GiftCardCreateRequest(CARD_CODE, 200.0, true, LocalDate.now().plusYears(1)));
+        giftCardService.createGiftCard(new GiftCardCreateRequest(CARD_CODE, BigDecimal.valueOf(200.0), true, LocalDate.now().plusYears(1)));
 
         List<LedgerEntry> allEntries = ledgerEntryRepository.findAll();
         assertEquals(2, allEntries.size());

@@ -1,4 +1,6 @@
 package com.finovago.p2p.service;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -51,7 +53,7 @@ public class GiftCardService {
     public CompletableFuture<RedemptionResponse> redeemGiftCardAsync(RedemptionRequest request, String idempotencyKey) {
         Long merchantId = currentUserContext.currentMerchantId();
         return CompletableFuture.supplyAsync(() -> {
-            String requestHash = idempotencyKeyService.hashRequest(request.giftCardCode(), String.valueOf(request.amount()));
+            String requestHash = idempotencyKeyService.hashRequest(request.giftCardCode(), request.amount().setScale(2, RoundingMode.HALF_UP).toPlainString());
 
             Optional<RedemptionResponse> cached = idempotencyKeyService.claim(merchantId, idempotencyKey, requestHash, RedemptionResponse.class);
             if (cached.isPresent()) {
@@ -71,7 +73,7 @@ public class GiftCardService {
     }
 
     @Transactional
-    public RedemptionResponse executeRedemptionSync(Long merchantId, String code, double amount) {
+    public RedemptionResponse executeRedemptionSync(Long merchantId, String code, BigDecimal amount) {
 
         log.info("Processing database validation for card code: {}", code);
 
@@ -81,7 +83,7 @@ public class GiftCardService {
             throw new IllegalArgumentException("Card code invalid");
         }
 
-        if (amount <= 0) {
+        if (amount == null || amount.signum() <= 0) {
             throw new IllegalArgumentException("Amount must be greater than zero");
         }
 
@@ -90,15 +92,15 @@ public class GiftCardService {
 
         giftCard.ensureUsable();
 
-        double deducted;
-        double remainingToPay = 0;
+        BigDecimal deducted;
+        BigDecimal remainingToPay = BigDecimal.ZERO.setScale(2);
 
-        if (giftCard.getBalance() > amount) {
+        if (giftCard.getBalance().compareTo(amount) > 0) {
             giftCard.deductBalance(amount);
             deducted = amount;
         } else {
             deducted = giftCard.getBalance();
-            remainingToPay = amount - giftCard.getBalance();
+            remainingToPay = amount.subtract(giftCard.getBalance());
             giftCard.drainCard();
         }
 

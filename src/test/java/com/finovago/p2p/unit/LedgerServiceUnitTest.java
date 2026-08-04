@@ -1,5 +1,6 @@
 package com.finovago.p2p.unit;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -34,12 +35,12 @@ class LedgerServiceUnitTest {
     void setUp() {
         ledgerService = new LedgerService(ledgerEntryRepository);
         Merchant merchant = new Merchant("Test Merchant", "merchant@example.com");
-        giftCard = new GiftCard(merchant, "GC-1", 100.0, true, LocalDate.now().plusDays(30));
+        giftCard = new GiftCard(merchant, "GC-1", BigDecimal.valueOf(100.0), true, LocalDate.now().plusDays(30));
     }
 
     @Test
     void record_savesLedgerEntry_withAllFieldsPopulated() {
-        ledgerService.record(giftCard, 1L, LedgerEntryType.REDEMPTION, 30.0, 70.0, 42L);
+        ledgerService.record(giftCard, 1L, LedgerEntryType.REDEMPTION, BigDecimal.valueOf(30.0), BigDecimal.valueOf(70.0), 42L);
 
         ArgumentCaptor<LedgerEntry> captor = ArgumentCaptor.forClass(LedgerEntry.class);
         verify(ledgerEntryRepository).save(captor.capture());
@@ -48,14 +49,14 @@ class LedgerServiceUnitTest {
         assertEquals(giftCard, saved.getGiftCard());
         assertEquals(1L, saved.getMerchantId());
         assertEquals(LedgerEntryType.REDEMPTION, saved.getEntryType());
-        assertEquals(30.0, saved.getAmount());
-        assertEquals(70.0, saved.getBalanceAfter());
+        assertEquals(0, BigDecimal.valueOf(30.0).compareTo(saved.getAmount()));
+        assertEquals(0, BigDecimal.valueOf(70.0).compareTo(saved.getBalanceAfter()));
         assertEquals(42L, saved.getReferenceId());
     }
 
     @Test
     void record_savesLedgerEntry_withNullReferenceId() {
-        ledgerService.record(giftCard, 1L, LedgerEntryType.CREATION, 100.0, 100.0, null);
+        ledgerService.record(giftCard, 1L, LedgerEntryType.CREATION, BigDecimal.valueOf(100.0), BigDecimal.valueOf(100.0), null);
 
         ArgumentCaptor<LedgerEntry> captor = ArgumentCaptor.forClass(LedgerEntry.class);
         verify(ledgerEntryRepository).save(captor.capture());

@@ -1,5 +1,6 @@
 package com.finovago.p2p.unit;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -68,7 +69,7 @@ class IdempotencyKeyServiceUnitTest {
         Optional<RedemptionResponse> result = idempotencyKeyService.claim(MERCHANT_ID, KEY, requestHash, RedemptionResponse.class);
 
         assertTrue(result.isPresent());
-        assertEquals(new RedemptionResponse("SUCCESS", 10.0, 40.0, 0.0), result.get());
+        assertEquals(new RedemptionResponse("SUCCESS", BigDecimal.valueOf(10.0), BigDecimal.valueOf(40.0), BigDecimal.valueOf(0.0)), result.get());
         verify(idempotencyKeyRepository, never()).saveAndFlush(ArgumentMatchers.any());
     }
 
@@ -114,7 +115,7 @@ class IdempotencyKeyServiceUnitTest {
         IdempotencyKey claim = new IdempotencyKey(MERCHANT_ID, KEY, requestHash, LocalDateTime.now().plusHours(1));
         when(idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(MERCHANT_ID, KEY)).thenReturn(Optional.of(claim));
 
-        idempotencyKeyService.complete(MERCHANT_ID, KEY, new RedemptionResponse("SUCCESS", 10.0, 40.0, 0.0));
+        idempotencyKeyService.complete(MERCHANT_ID, KEY, new RedemptionResponse("SUCCESS", BigDecimal.valueOf(10.0), BigDecimal.valueOf(40.0), BigDecimal.valueOf(0.0)));
 
         assertTrue(!claim.isInProgress());
         assertTrue(claim.getResponseBody().contains("\"deductedAmount\":10.0"));

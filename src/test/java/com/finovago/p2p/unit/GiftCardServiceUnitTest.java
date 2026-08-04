@@ -1,4 +1,5 @@
 package com.finovago.p2p.unit;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -14,7 +15,6 @@ import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.anyDouble;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.lenient;
@@ -81,73 +81,77 @@ class GiftCardServiceUnitTest
         }).when(taskExecutor).execute(any());
     }
 
+    private static void assertMoneyEquals(BigDecimal expected, BigDecimal actual) {
+        assertEquals(0, expected.compareTo(actual), () -> "expected " + expected + " but was " + actual);
+    }
+
     @Test
     void should_throw_exception_when_card_code_is_invalid()
     {
-        assertThrows(IllegalArgumentException.class, () -> giftCardService.executeRedemptionSync(MERCHANT_ID, null, 100.0));
-        assertThrows(IllegalArgumentException.class, () -> giftCardService.executeRedemptionSync(MERCHANT_ID, "", 100.0));
+        assertThrows(IllegalArgumentException.class, () -> giftCardService.executeRedemptionSync(MERCHANT_ID, null, BigDecimal.valueOf(100.0)));
+        assertThrows(IllegalArgumentException.class, () -> giftCardService.executeRedemptionSync(MERCHANT_ID, "", BigDecimal.valueOf(100.0)));
     }
 
     @Test
     void should_throw_exception_when_amount_is_invalid()
     {
-        assertThrows(IllegalArgumentException.class, () -> giftCardService.executeRedemptionSync(MERCHANT_ID, "VALID_CODE", 0.0));
-        assertThrows(IllegalArgumentException.class, () -> giftCardService.executeRedemptionSync(MERCHANT_ID, "VALID_CODE", -50.0));
+        assertThrows(IllegalArgumentException.class, () -> giftCardService.executeRedemptionSync(MERCHANT_ID, "VALID_CODE", BigDecimal.ZERO));
+        assertThrows(IllegalArgumentException.class, () -> giftCardService.executeRedemptionSync(MERCHANT_ID, "VALID_CODE", BigDecimal.valueOf(-50.0)));
     }
 
     @Test
     void should_throw_exception_when_gift_card_not_found()
     {
         when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, "INVALID_CODE")).thenReturn(Optional.empty());
-        assertThrows(UnknownGiftCardException.class, () -> giftCardService.executeRedemptionSync(MERCHANT_ID, "INVALID_CODE", 100.0));
+        assertThrows(UnknownGiftCardException.class, () -> giftCardService.executeRedemptionSync(MERCHANT_ID, "INVALID_CODE", BigDecimal.valueOf(100.0)));
     }
 
     @Test
     void should_throw_exception_when_gift_card_is_not_active()
     {
         String fakeGiftCardCode = "ABC123";
-        GiftCard inactiveGiftCard = new GiftCard(merchant, fakeGiftCardCode, 100.0, false, LocalDate.now().plusDays(30));
+        GiftCard inactiveGiftCard = new GiftCard(merchant, fakeGiftCardCode, BigDecimal.valueOf(100.0), false, LocalDate.now().plusDays(30));
         when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, fakeGiftCardCode)).thenReturn(Optional.of(inactiveGiftCard));
 
-        assertThrows(InactiveGiftCardException.class, () -> giftCardService.executeRedemptionSync(MERCHANT_ID, fakeGiftCardCode, 50.0));
-        verify(ledgerService, never()).record(any(), any(), any(), anyDouble(), anyDouble(), any());
+        assertThrows(InactiveGiftCardException.class, () -> giftCardService.executeRedemptionSync(MERCHANT_ID, fakeGiftCardCode, BigDecimal.valueOf(50.0)));
+        verify(ledgerService, never()).record(any(), any(), any(), any(BigDecimal.class), any(BigDecimal.class), any());
     }
 
     @Test
     void should_throw_exception_when_gift_card_is_expired()
     {
         String expiredCardCode = "EXPIRED123";
-        GiftCard expiredCard = new GiftCard(merchant, expiredCardCode, 100.0, true, LocalDate.now().minusDays(1));
+        GiftCard expiredCard = new GiftCard(merchant, expiredCardCode, BigDecimal.valueOf(100.0), true, LocalDate.now().minusDays(1));
         when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, expiredCardCode)).thenReturn(Optional.of(expiredCard));
 
-        assertThrows(ExpiredGiftCardException.class, () -> giftCardService.executeRedemptionSync(MERCHANT_ID, expiredCardCode, 50.0));
+        assertThrows(ExpiredGiftCardException.class, () -> giftCardService.executeRedemptionSync(MERCHANT_ID, expiredCardCode, BigDecimal.valueOf(50.0)));
     }
 
     @Test
     void should_deduct_balance_when_sufficient_funds()
     {
         String cardCode = "VALID123";
-        GiftCard activeCard = new GiftCard(merchant, cardCode, 100.0, true, LocalDate.now().plusDays(30));
+        GiftCard activeCard = new GiftCard(merchant, cardCode, BigDecimal.valueOf(100.0), true, LocalDate.now().plusDays(30));
 
         when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.of(activeCard));
 
-        RedemptionResponse response = giftCardService.executeRedemptionSync(MERCHANT_ID, cardCode, 30.0);
+        RedemptionResponse response = giftCardService.executeRedemptionSync(MERCHANT_ID, cardCode, BigDecimal.valueOf(30.0));
 
         assertEquals("SUCCESS", response.status());
-        assertEquals(30.0, response.deductedAmount());
-        assertEquals(70.0, response.remainingBalance());
-        assertEquals(0.0, response.remainingToPay());
-        verify(ledgerService).record(activeCard, MERCHANT_ID, LedgerEntryType.REDEMPTION, 30.0, 70.0, null);
+        assertMoneyEquals(BigDecimal.valueOf(30.0), response.deductedAmount());
+        assertMoneyEquals(BigDecimal.valueOf(70.0), response.remainingBalance());
+        assertMoneyEquals(BigDecimal.ZERO, response.remainingToPay());
+        verify(ledgerService).record(eq(activeCard), eq(MERCHANT_ID), eq(LedgerEntryType.REDEMPTION), eq(BigDecimal.valueOf(30.0)), eq(BigDecimal.valueOf(70.0)), eq(null));
     }
 
     @Test
     void redeemGiftCardAsync_returnsCachedResponse_withoutTouchingBusinessLogic_whenIdempotencyKeyAlreadyCompleted() {
-        RedemptionResponse cached = new RedemptionResponse("SUCCESS", 30.0, 70.0, 0.0);
-        when(idempotencyKeyService.hashRequest("VALID123", "30.0")).thenReturn("hash");
+        RedemptionResponse cached = new RedemptionResponse("SUCCESS", BigDecimal.valueOf(30.0), BigDecimal.valueOf(70.0), BigDecimal.ZERO);
+        when(idempotencyKeyService.hashRequest("VALID123", "30.00")).thenReturn("hash");
         when(idempotencyKeyService.claim(MERCHANT_ID, IDEMPOTENCY_KEY, "hash", RedemptionResponse.class)).thenReturn(Optional.of(cached));
 
         CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(
-                new RedemptionRequest(30.0, "VALID123"), IDEMPOTENCY_KEY);
+                new RedemptionRequest(BigDecimal.valueOf(30.0), "VALID123"), IDEMPOTENCY_KEY);
 
         assertEquals(cached, future.join());
         verify(giftCardRepository, never()).findByMerchantIdAndCardCode(any(), any());
@@ -157,28 +161,28 @@ class GiftCardServiceUnitTest
     @Test
     void redeemGiftCardAsync_executesAndRecordsCompletion_whenNoCachedResponse() {
         String cardCode = "VALID123";
-        GiftCard activeCard = new GiftCard(merchant, cardCode, 100.0, true, LocalDate.now().plusDays(30));
-        when(idempotencyKeyService.hashRequest(cardCode, "30.0")).thenReturn("hash");
+        GiftCard activeCard = new GiftCard(merchant, cardCode, BigDecimal.valueOf(100.0), true, LocalDate.now().plusDays(30));
+        when(idempotencyKeyService.hashRequest(cardCode, "30.00")).thenReturn("hash");
         when(idempotencyKeyService.claim(MERCHANT_ID, IDEMPOTENCY_KEY, "hash", RedemptionResponse.class)).thenReturn(Optional.empty());
         when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.of(activeCard));
 
         CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(
-                new RedemptionRequest(30.0, cardCode), IDEMPOTENCY_KEY);
+                new RedemptionRequest(BigDecimal.valueOf(30.0), cardCode), IDEMPOTENCY_KEY);
         RedemptionResponse response = future.join();
 
-        assertEquals(30.0, response.deductedAmount());
+        assertMoneyEquals(BigDecimal.valueOf(30.0), response.deductedAmount());
         verify(idempotencyKeyService).complete(eq(MERCHANT_ID), eq(IDEMPOTENCY_KEY), eq(response));
     }
 
     @Test
     void redeemGiftCardAsync_discardsClaim_whenBusinessLogicFails() {
         String unknownCode = "MISSING";
-        when(idempotencyKeyService.hashRequest(unknownCode, "30.0")).thenReturn("hash");
+        when(idempotencyKeyService.hashRequest(unknownCode, "30.00")).thenReturn("hash");
         when(idempotencyKeyService.claim(MERCHANT_ID, IDEMPOTENCY_KEY, "hash", RedemptionResponse.class)).thenReturn(Optional.empty());
         when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, unknownCode)).thenReturn(Optional.empty());
 
         CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(
-                new RedemptionRequest(30.0, unknownCode), IDEMPOTENCY_KEY);
+                new RedemptionRequest(BigDecimal.valueOf(30.0), unknownCode), IDEMPOTENCY_KEY);
 
         CompletionException thrown = assertThrows(CompletionException.class, future::join);
         assertEquals(UnknownGiftCardException.class, thrown.getCause().getClass());
@@ -189,46 +193,47 @@ class GiftCardServiceUnitTest
     @Test
     void should_throw_exception_when_code_already_exists() {
         String existingCode = "ALREADY_EXISTS";
-        GiftCard fakeExistingCard = new GiftCard(merchant, existingCode, 100.0, true, LocalDate.now().plusDays(30));
+        GiftCard fakeExistingCard = new GiftCard(merchant, existingCode, BigDecimal.valueOf(100.0), true, LocalDate.now().plusDays(30));
 
         when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, existingCode)).thenReturn(Optional.of(fakeExistingCard));
 
         assertThrows(IllegalArgumentException.class, () ->
-            giftCardService.createGiftCard(new GiftCardCreateRequest(existingCode, 0, false, LocalDate.now().plusDays(30)))
+            giftCardService.createGiftCard(new GiftCardCreateRequest(existingCode, BigDecimal.ZERO, false, LocalDate.now().plusDays(30)))
         );
-        verify(ledgerService, never()).record(any(), any(), any(), anyDouble(), anyDouble(), any());
+        verify(ledgerService, never()).record(any(), any(), any(), any(BigDecimal.class), any(BigDecimal.class), any());
     }
 
     @Test
     void should_use_default_expiration_date_when_not_provided() {
         String cardCode = "DEFAULT_DATE";
         LocalDate expectedDate = LocalDate.now().plusYears(2);
-        GiftCard savedCard = new GiftCard(merchant, cardCode, 100.0, true, expectedDate);
+        GiftCard savedCard = new GiftCard(merchant, cardCode, BigDecimal.valueOf(100.0), true, expectedDate);
 
         when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.empty());
         when(giftCardRepository.save(ArgumentMatchers.any(GiftCard.class))).thenReturn(savedCard);
 
-        var response = giftCardService.createGiftCard(new GiftCardCreateRequest(cardCode, 100.0, true, null));
+        var response = giftCardService.createGiftCard(new GiftCardCreateRequest(cardCode, BigDecimal.valueOf(100.0), true, null));
 
         assertEquals(expectedDate, response.expirationDate());
-        verify(ledgerService).record(savedCard, MERCHANT_ID, LedgerEntryType.CREATION, 100.0, 100.0, null);
+        verify(ledgerService).record(eq(savedCard), eq(MERCHANT_ID), eq(LedgerEntryType.CREATION), eq(BigDecimal.valueOf(100.0)), eq(BigDecimal.valueOf(100.0)), eq(null));
     }
 
     @Test
     void should_drain_card_when_insufficient_funds()
     {
         String cardCode = "VALID456";
-        GiftCard activeCard = new GiftCard(merchant, cardCode, 20.0, true, LocalDate.now().plusDays(30));
+        GiftCard activeCard = new GiftCard(merchant, cardCode, BigDecimal.valueOf(20.0), true, LocalDate.now().plusDays(30));
 
         when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.of(activeCard));
 
-        RedemptionResponse response = giftCardService.executeRedemptionSync(MERCHANT_ID, cardCode, 50.0);
+        RedemptionResponse response = giftCardService.executeRedemptionSync(MERCHANT_ID, cardCode, BigDecimal.valueOf(50.0));
 
         assertEquals("SUCCESS", response.status());
-        assertEquals(20.0, response.deductedAmount());
-        assertEquals(0.0, response.remainingBalance());
-        assertEquals(30.0, response.remainingToPay());
-        verify(ledgerService).record(activeCard, MERCHANT_ID, LedgerEntryType.REDEMPTION, 20.0, 0.0, null);
+        assertMoneyEquals(BigDecimal.valueOf(20.0), response.deductedAmount());
+        assertMoneyEquals(BigDecimal.ZERO, response.remainingBalance());
+        assertMoneyEquals(BigDecimal.valueOf(30.0), response.remainingToPay());
+        // drainCard() zeroes the balance as "0.00" (scale 2), not the bare BigDecimal.ZERO (scale 0).
+        verify(ledgerService).record(eq(activeCard), eq(MERCHANT_ID), eq(LedgerEntryType.REDEMPTION), eq(BigDecimal.valueOf(20.0)), eq(BigDecimal.ZERO.setScale(2)), eq(null));
     }
 
     @Test
@@ -236,14 +241,14 @@ class GiftCardServiceUnitTest
     {
         String cardCode = "LOOKUP123";
         LocalDate expirationDate = LocalDate.now().plusDays(30);
-        GiftCard giftCard = new GiftCard(merchant, cardCode, 150.0, true, expirationDate);
+        GiftCard giftCard = new GiftCard(merchant, cardCode, BigDecimal.valueOf(150.0), true, expirationDate);
 
         when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.of(giftCard));
 
         GiftCardResponse response = giftCardService.lookupGiftCard(cardCode);
 
         assertEquals(cardCode, response.giftCardCode());
-        assertEquals(150.0, response.balance());
+        assertMoneyEquals(BigDecimal.valueOf(150.0), response.balance());
         assertEquals(true, response.active());
         assertEquals(expirationDate, response.expirationDate());
     }

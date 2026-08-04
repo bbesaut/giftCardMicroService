@@ -1,5 +1,7 @@
 package com.finovago.p2p.service;
 
+import java.math.BigDecimal;
+
 import org.springframework.stereotype.Service;
 
 import com.finovago.p2p.model.GiftCard;
@@ -20,7 +22,7 @@ public class LedgerService {
      * Appends a ledger row. Never call this outside the same transaction as the balance
      * mutation it records - the two must commit or roll back together.
      */
-    public void record(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, double amount, double balanceAfter, Long referenceId) {
+    public void record(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, Long referenceId) {
         ledgerEntryRepository.save(new LedgerEntry(giftCard, merchantId, entryType, amount, balanceAfter, referenceId));
     }
 }

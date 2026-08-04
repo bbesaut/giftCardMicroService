@@ -1,5 +1,6 @@
 package com.finovago.p2p.model;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 import jakarta.annotation.Nullable;
@@ -29,7 +30,8 @@ public class GiftCard
     private Long id;
     @Column(nullable = false)
     private String cardCode;
-    private double balance;
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal balance;
     private boolean active;
     private LocalDate expirationDate;
 
@@ -37,7 +39,7 @@ public class GiftCard
     @JoinColumn(name = "merchant_id", nullable = false)
     private Merchant merchant;
 
-    public GiftCard(Merchant merchant, String cardCode, double balance, boolean active, @Nullable LocalDate expirationDate) {
+    public GiftCard(Merchant merchant, String cardCode, BigDecimal balance, boolean active, @Nullable LocalDate expirationDate) {
         this.merchant = merchant;
         this.cardCode = cardCode;
         this.balance = balance;
@@ -54,12 +56,12 @@ public class GiftCard
         }
     }
 
-    public void deductBalance(double amount) {
-        this.balance -= amount;
+    public void deductBalance(BigDecimal amount) {
+        this.balance = this.balance.subtract(amount);
     }
 
     public void drainCard() {
-        this.balance = 0.0;
+        this.balance = BigDecimal.ZERO.setScale(2);
         this.active = false;
     }
 }

@@ -1,5 +1,6 @@
 package com.finovago.p2p.integration;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -89,7 +90,7 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
                 new UsernamePasswordAuthenticationToken(
                         new AuthenticatedUser("merchant@example.com", "MERCHANT", merchantId), null, List.of()));
 
-        giftCardService.createGiftCard(new GiftCardCreateRequest(CARD_CODE, 100.0, true, LocalDate.now().plusYears(1)));
+        giftCardService.createGiftCard(new GiftCardCreateRequest(CARD_CODE, BigDecimal.valueOf(100.0), true, LocalDate.now().plusYears(1)));
     }
 
     @AfterEach
@@ -101,57 +102,61 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
         return giftCardRepository.findByMerchantIdAndCardCode(merchantId, CARD_CODE).orElseThrow();
     }
 
+    private static void assertMoneyEquals(BigDecimal expected, BigDecimal actual) {
+        assertEquals(0, expected.compareTo(actual), () -> "expected " + expected + " but was " + actual);
+    }
+
     @Test
     void should_reserve_hold_without_touching_real_balance() {
-        HoldResponse response = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 40.0), UUID.randomUUID().toString());
+        HoldResponse response = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, BigDecimal.valueOf(40.0)), UUID.randomUUID().toString());
 
         assertEquals("PENDING", response.status());
-        assertEquals(60.0, response.remainingAvailableBalance());
-        assertEquals(100.0, reloadCard().getBalance());
+        assertMoneyEquals(BigDecimal.valueOf(60.0), response.remainingAvailableBalance());
+        assertMoneyEquals(BigDecimal.valueOf(100.0), reloadCard().getBalance());
     }
 
     @Test
     void should_fail_reserve_when_amount_exceeds_available_balance() {
-        giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 70.0), UUID.randomUUID().toString());
+        giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, BigDecimal.valueOf(70.0)), UUID.randomUUID().toString());
 
         assertThrows(InsufficientAvailableBalanceException.class,
-                () -> giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 40.0), UUID.randomUUID().toString()));
+                () -> giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, BigDecimal.valueOf(40.0)), UUID.randomUUID().toString()));
     }
 
     @Test
     void should_capture_hold_and_deduct_real_balance() {
-        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 40.0), UUID.randomUUID().toString());
+        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, BigDecimal.valueOf(40.0)), UUID.randomUUID().toString());
 
         HoldResponse captured = giftCardHoldService.capture(reserved.holdId());
 
         assertEquals("CAPTURED", captured.status());
-        assertEquals(60.0, reloadCard().getBalance());
+        assertMoneyEquals(BigDecimal.valueOf(60.0), reloadCard().getBalance());
     }
 
     @Test
     void should_fail_on_double_capture_and_not_double_deduct() {
-        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 40.0), UUID.randomUUID().toString());
+        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, BigDecimal.valueOf(40.0)), UUID.randomUUID().toString());
         giftCardHoldService.capture(reserved.holdId());
 
         assertThrows(HoldAlreadyFinalizedException.class, () -> giftCardHoldService.capture(reserved.holdId()));
-        assertEquals(60.0, reloadCard().getBalance());
+        assertMoneyEquals(BigDecimal.valueOf(60.0), reloadCard().getBalance());
     }
 
     @Test
     void should_release_hold_and_free_up_available_balance_for_new_reserve() {
-        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 70.0), UUID.randomUUID().toString());
+        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, BigDecimal.valueOf(70.0)), UUID.randomUUID().toString());
 
         HoldResponse released = giftCardHoldService.release(reserved.holdId());
         assertEquals("RELEASED", released.status());
-        assertEquals(100.0, reloadCard().getBalance());
+        assertMoneyEquals(BigDecimal.valueOf(100.0), reloadCard().getBalance());
 
-        HoldResponse secondReserve = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 70.0), UUID.randomUUID().toString());
+        HoldResponse secondReserve = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, BigDecimal.valueOf(70.0)), UUID.randomUUID().toString());
         assertEquals("PENDING", secondReserve.status());
     }
 
     @Test
     void should_fail_on_double_release() {
-        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 40.0), UUID.randomUUID().toString());
+        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, BigDecimal.valueOf(40.0)), UUID.randomUUID().toString());
         giftCardHoldService.release(reserved.holdId());
 
         assertThrows(HoldAlreadyFinalizedException.class, () -> giftCardHoldService.release(reserved.holdId()));
@@ -165,7 +170,7 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_return_not_found_when_another_merchant_tries_to_capture_or_release() {
-        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, 40.0), UUID.randomUUID().toString());
+        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, BigDecimal.valueOf(40.0)), UUID.randomUUID().toString());
 
         Merchant otherMerchant = merchantRepository.save(new Merchant("Other Merchant", "other@example.com"));
         SecurityContextHolder.getContext().setAuthentication(
@@ -180,7 +185,7 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
     void should_expire_pending_hold_past_ttl_via_scheduler_sweep() {
         GiftCard card = reloadCard();
         GiftCardHold expiredHold = giftCardHoldRepository.save(
-                new GiftCardHold(card, merchantId, 40.0, LocalDateTime.now().minusMinutes(1)));
+                new GiftCardHold(card, merchantId, BigDecimal.valueOf(40.0), LocalDateTime.now().minusMinutes(1)));
 
         holdExpirationScheduler.sweepExpiredHolds();
 
