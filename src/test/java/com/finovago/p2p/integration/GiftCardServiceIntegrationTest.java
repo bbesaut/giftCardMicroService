@@ -27,6 +27,8 @@ import com.finovago.p2p.repository.GiftCardRepository;
 import com.finovago.p2p.repository.IdempotencyKeyRepository;
 import com.finovago.p2p.repository.LedgerEntryRepository;
 import com.finovago.p2p.repository.MerchantRepository;
+import com.finovago.p2p.repository.RefreshTokenRepository;
+import com.finovago.p2p.repository.UserRepository;
 import com.finovago.p2p.security.AuthenticatedUser;
 import com.finovago.p2p.service.GiftCardService;
 
@@ -45,6 +47,12 @@ class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
     private LedgerEntryRepository ledgerEntryRepository;
 
     @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
     private GiftCardService giftCardService;
 
     private Long merchantId;
@@ -54,10 +62,13 @@ class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
         // Redemption runs on a separate thread pool (see GiftCardService#redeemGiftCardAsync), so this
         // class deliberately does NOT use @Transactional — a test-managed transaction is bound to the
         // main thread only, and the async thread wouldn't see uncommitted data. Rows are cleaned up
-        // manually instead, children before merchants (both gift_card and idempotency_key have a FK to merchants).
+        // manually instead, children before merchants (gift_card, idempotency_key and users all have
+        // a FK to merchants).
         idempotencyKeyRepository.deleteAll();
         ledgerEntryRepository.deleteAll();
         giftCardRepository.deleteAll();
+        refreshTokenRepository.deleteAll();
+        userRepository.deleteAll();
         merchantRepository.deleteAll();
 
         Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "merchant@example.com"));
