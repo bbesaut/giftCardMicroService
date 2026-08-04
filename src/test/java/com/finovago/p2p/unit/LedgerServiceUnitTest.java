@@ -2,22 +2,27 @@ package com.finovago.p2p.unit;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.finovago.p2p.model.GiftCard;
 import com.finovago.p2p.model.LedgerEntry;
 import com.finovago.p2p.model.LedgerEntryType;
 import com.finovago.p2p.model.Merchant;
+import com.finovago.p2p.repository.LedgerDiscrepancy;
 import com.finovago.p2p.repository.LedgerEntryRepository;
 import com.finovago.p2p.service.LedgerService;
 
@@ -62,5 +67,13 @@ class LedgerServiceUnitTest {
         verify(ledgerEntryRepository).save(captor.capture());
 
         assertNull(captor.getValue().getReferenceId());
+    }
+
+    @Test
+    void findBalanceDiscrepancies_delegatesToRepository() {
+        List<LedgerDiscrepancy> discrepancies = List.of(mock(LedgerDiscrepancy.class));
+        when(ledgerEntryRepository.findBalanceDiscrepancies()).thenReturn(discrepancies);
+
+        assertSame(discrepancies, ledgerService.findBalanceDiscrepancies());
     }
 }
