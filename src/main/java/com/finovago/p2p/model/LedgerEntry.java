@@ -1,5 +1,6 @@
 package com.finovago.p2p.model;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import jakarta.annotation.Nullable;
@@ -36,11 +37,11 @@ public class LedgerEntry {
     @Column(name = "entry_type", nullable = false, length = 20)
     private LedgerEntryType entryType;
 
-    @Column(nullable = false)
-    private double amount;
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal amount;
 
-    @Column(name = "balance_after", nullable = false)
-    private double balanceAfter;
+    @Column(name = "balance_after", nullable = false, precision = 19, scale = 2)
+    private BigDecimal balanceAfter;
 
     @Column(name = "reference_id")
     private Long referenceId;
@@ -48,7 +49,7 @@ public class LedgerEntry {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
-    public LedgerEntry(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, double amount, double balanceAfter, @Nullable Long referenceId) {
+    public LedgerEntry(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, @Nullable Long referenceId) {
         this.giftCard = giftCard;
         this.merchantId = merchantId;
         this.entryType = entryType;

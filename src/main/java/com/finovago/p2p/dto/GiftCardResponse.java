@@ -1,5 +1,6 @@
 package com.finovago.p2p.dto;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -10,7 +11,7 @@ public record GiftCardResponse(
     String giftCardCode,
 
     @Schema(description = "Current balance", example = "100.0")
-    double balance,
+    BigDecimal balance,
 
     @Schema(description = "Indicates if the gift card is active", example = "true")
     boolean active,

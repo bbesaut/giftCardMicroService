@@ -1,5 +1,7 @@
 package com.finovago.p2p.service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -57,7 +59,7 @@ public class GiftCardHoldService {
     @Transactional
     public HoldResponse reserve(ReserveRequest request, String idempotencyKey) {
         Long merchantId = currentUserContext.currentMerchantId();
-        String requestHash = idempotencyKeyService.hashRequest(request.giftCardCode(), String.valueOf(request.amount()));
+        String requestHash = idempotencyKeyService.hashRequest(request.giftCardCode(), request.amount().setScale(2, RoundingMode.HALF_UP).toPlainString());
 
         Optional<HoldResponse> cached = idempotencyKeyService.claim(merchantId, idempotencyKey, requestHash, HoldResponse.class);
         if (cached.isPresent()) {
@@ -84,22 +86,26 @@ public class GiftCardHoldService {
 
         giftCard.ensureUsable();
 
-        double pendingHeld = giftCardHoldRepository.sumPendingHoldAmounts(giftCard.getId());
-        double available = giftCard.getBalance() - pendingHeld;
+        // @Digits on ReserveRequest already rejects more than 2 decimal places, so this only pads
+        // the scale (e.g. "1" -> "1.00") - see GiftCardService#executeRedemptionSync for the same pattern.
+        BigDecimal amount = request.amount().setScale(2, RoundingMode.HALF_UP);
 
-        if (available < request.amount()) {
+        BigDecimal pendingHeld = giftCardHoldRepository.sumPendingHoldAmounts(giftCard.getId());
+        BigDecimal available = giftCard.getBalance().subtract(pendingHeld);
+
+        if (available.compareTo(amount) < 0) {
             throw new InsufficientAvailableBalanceException("Insufficient available balance to reserve this amount");
         }
 
         LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(holdTtlMinutes);
-        GiftCardHold hold = new GiftCardHold(giftCard, merchantId, request.amount(), expiresAt);
+        GiftCardHold hold = new GiftCardHold(giftCard, merchantId, amount, expiresAt);
         GiftCardHold saved = giftCardHoldRepository.save(hold);
 
-        ledgerService.record(giftCard, merchantId, LedgerEntryType.HOLD_PLACED, request.amount(), giftCard.getBalance(), saved.getId());
+        ledgerService.record(giftCard, merchantId, LedgerEntryType.HOLD_PLACED, amount, giftCard.getBalance(), saved.getId());
 
-        log.info("Reserved hold [{}] for {} on card [{}]", saved.getId(), request.amount(), request.giftCardCode());
+        log.info("Reserved hold [{}] for {} on card [{}]", saved.getId(), amount, request.giftCardCode());
 
-        return new HoldResponse(saved.getId(), saved.getStatus().name(), saved.getExpiresAt(), available - request.amount());
+        return new HoldResponse(saved.getId(), saved.getStatus().name(), saved.getExpiresAt(), available.subtract(amount));
     }
 
     @Transactional

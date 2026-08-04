@@ -1,5 +1,6 @@
 package com.finovago.p2p.repository;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -30,7 +31,7 @@ public interface GiftCardHoldRepository extends JpaRepository<GiftCardHold, Long
 
     // Used by reserve() to compute availableBalance under the already-held gift_card lock.
     @Query("select coalesce(sum(h.amount), 0) from GiftCardHold h where h.giftCard.id = :giftCardId and h.status = 'PENDING'")
-    double sumPendingHoldAmounts(@Param("giftCardId") Long giftCardId);
+    BigDecimal sumPendingHoldAmounts(@Param("giftCardId") Long giftCardId);
 
     // Unlocked read for the scheduler's periodic sweep; each candidate is re-locked individually
     // via findByIdForUpdate right before being expired.
