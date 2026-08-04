@@ -87,6 +87,12 @@ public class GiftCardService {
             throw new IllegalArgumentException("Amount must be greater than zero");
         }
 
+        // @Digits on RedemptionRequest already rejects more than 2 decimal places, so this only
+        // pads the scale (e.g. "1" -> "1.00") - it never rounds away precision. Doing it here,
+        // before the amount touches the balance/ledger/response, keeps every downstream value at
+        // a consistent scale instead of echoing back whatever scale the client happened to send.
+        amount = amount.setScale(2, RoundingMode.HALF_UP);
+
         GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, code)
                 .orElseThrow(() -> new UnknownGiftCardException("Gift card not found"));
 
@@ -136,7 +142,9 @@ public class GiftCardService {
         // getReferenceById avoids an extra round-trip to load the full Merchant just to set the FK.
         Merchant merchant = merchantRepository.getReferenceById(merchantId);
 
-        GiftCard giftCard = new GiftCard(merchant, request.giftCardCode(), request.balance(), request.active(), request.expirationDate());
+        // See executeRedemptionSync for why this is a plain setScale, not a rounding decision.
+        BigDecimal balance = request.balance().setScale(2, RoundingMode.HALF_UP);
+        GiftCard giftCard = new GiftCard(merchant, request.giftCardCode(), balance, request.active(), request.expirationDate());
         GiftCard savedCard = giftCardRepository.save(giftCard);
 
         ledgerService.record(savedCard, merchantId, LedgerEntryType.CREATION, savedCard.getBalance(), savedCard.getBalance(), null);

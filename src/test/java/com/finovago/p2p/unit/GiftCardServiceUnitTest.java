@@ -141,7 +141,9 @@ class GiftCardServiceUnitTest
         assertMoneyEquals(BigDecimal.valueOf(30.0), response.deductedAmount());
         assertMoneyEquals(BigDecimal.valueOf(70.0), response.remainingBalance());
         assertMoneyEquals(BigDecimal.ZERO, response.remainingToPay());
-        verify(ledgerService).record(eq(activeCard), eq(MERCHANT_ID), eq(LedgerEntryType.REDEMPTION), eq(BigDecimal.valueOf(30.0)), eq(BigDecimal.valueOf(70.0)), eq(null));
+        // executeRedemptionSync normalizes the incoming amount to scale 2, so the ledger record
+        // reflects "30.00"/"70.00", not the scale-1 literals the request/entity were built with.
+        verify(ledgerService).record(eq(activeCard), eq(MERCHANT_ID), eq(LedgerEntryType.REDEMPTION), eq(new BigDecimal("30.00")), eq(new BigDecimal("70.00")), eq(null));
     }
 
     @Test

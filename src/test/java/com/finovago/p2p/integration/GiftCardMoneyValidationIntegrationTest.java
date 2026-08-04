@@ -1,7 +1,11 @@
 package com.finovago.p2p.integration;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.http.HttpHeaders.AUTHORIZATION;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -121,5 +125,31 @@ class GiftCardMoneyValidationIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"giftCardCode\":\"PRECISE-3\",\"amount\":10.001}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void should_normalizeRedeemResponse_toTwoDecimalPlaces_regardlessOfInputScale() throws Exception {
+        mockMvc.perform(post("/api/v1/giftcards/create")
+                        .header(AUTHORIZATION, "Bearer " + merchantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"giftCardCode\":\"PRECISE-4\",\"balance\":100,\"active\":true}"))
+                .andExpect(status().isCreated());
+
+        // "amount":1 is a bare integer in the JSON - the response must still show "1.00", proving
+        // the value actually deducted (not just echoed back at whatever scale the client sent).
+        MvcResult result = mockMvc.perform(post("/api/v1/giftcards/redeem")
+                        .header(AUTHORIZATION, "Bearer " + merchantToken)
+                        .header("Idempotency-Key", java.util.UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"giftCardCode\":\"PRECISE-4\",\"amount\":1}"))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        // jsonPath().value() compares numerically (1 == 1.00), so it can't tell "1" from "1.00" -
+        // asserting on the raw body is the only way to prove the scale was actually normalized.
+        mockMvc.perform(asyncDispatch(result))
+                .andExpect(status().isAccepted())
+                .andExpect(content().string(containsString("\"deductedAmount\":1.00")))
+                .andExpect(content().string(containsString("\"remainingBalance\":99.00")));
     }
 }

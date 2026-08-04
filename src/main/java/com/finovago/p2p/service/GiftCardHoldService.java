@@ -86,22 +86,26 @@ public class GiftCardHoldService {
 
         giftCard.ensureUsable();
 
+        // @Digits on ReserveRequest already rejects more than 2 decimal places, so this only pads
+        // the scale (e.g. "1" -> "1.00") - see GiftCardService#executeRedemptionSync for the same pattern.
+        BigDecimal amount = request.amount().setScale(2, RoundingMode.HALF_UP);
+
         BigDecimal pendingHeld = giftCardHoldRepository.sumPendingHoldAmounts(giftCard.getId());
         BigDecimal available = giftCard.getBalance().subtract(pendingHeld);
 
-        if (available.compareTo(request.amount()) < 0) {
+        if (available.compareTo(amount) < 0) {
             throw new InsufficientAvailableBalanceException("Insufficient available balance to reserve this amount");
         }
 
         LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(holdTtlMinutes);
-        GiftCardHold hold = new GiftCardHold(giftCard, merchantId, request.amount(), expiresAt);
+        GiftCardHold hold = new GiftCardHold(giftCard, merchantId, amount, expiresAt);
         GiftCardHold saved = giftCardHoldRepository.save(hold);
 
-        ledgerService.record(giftCard, merchantId, LedgerEntryType.HOLD_PLACED, request.amount(), giftCard.getBalance(), saved.getId());
+        ledgerService.record(giftCard, merchantId, LedgerEntryType.HOLD_PLACED, amount, giftCard.getBalance(), saved.getId());
 
-        log.info("Reserved hold [{}] for {} on card [{}]", saved.getId(), request.amount(), request.giftCardCode());
+        log.info("Reserved hold [{}] for {} on card [{}]", saved.getId(), amount, request.giftCardCode());
 
-        return new HoldResponse(saved.getId(), saved.getStatus().name(), saved.getExpiresAt(), available.subtract(request.amount()));
+        return new HoldResponse(saved.getId(), saved.getStatus().name(), saved.getExpiresAt(), available.subtract(amount));
     }
 
     @Transactional

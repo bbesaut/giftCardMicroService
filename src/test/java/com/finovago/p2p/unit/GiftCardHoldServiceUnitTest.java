@@ -94,7 +94,9 @@ class GiftCardHoldServiceUnitTest {
 
         assertEquals("PENDING", response.status());
         assertMoneyEquals(BigDecimal.valueOf(30.0), response.remainingAvailableBalance());
-        verify(ledgerService).record(card, MERCHANT_ID, LedgerEntryType.HOLD_PLACED, BigDecimal.valueOf(50.0), BigDecimal.valueOf(100.0), null);
+        // reserve() normalizes the incoming amount to scale 2, so the ledger record reflects
+        // "50.00", not the scale-1 literal the request was built with.
+        verify(ledgerService).record(card, MERCHANT_ID, LedgerEntryType.HOLD_PLACED, new BigDecimal("50.00"), BigDecimal.valueOf(100.0), null);
     }
 
     @Test
