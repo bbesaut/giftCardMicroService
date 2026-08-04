@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <database name="p2p_dev" schema="public" type="PostgreSQL - 17.10">
    <tables>
-      <table name="flyway_schema_history" numRows="15" remarks="" schema="public" type="TABLE">
+      <table name="flyway_schema_history" numRows="16" remarks="" schema="public" type="TABLE">
          <column autoUpdated="false" defaultValue="null" digits="0" id="0" name="installed_rank" nullable="false" remarks="" size="10" type="int4" typeCode="4"/>
          <column autoUpdated="false" defaultValue="null" digits="0" id="1" name="version" nullable="true" remarks="" size="50" type="varchar" typeCode="12"/>
          <column autoUpdated="false" defaultValue="null" digits="0" id="2" name="description" nullable="false" remarks="" size="200" type="varchar" typeCode="12"/>
@@ -154,6 +154,9 @@
          <primaryKey column="id" sequenceNumberInPK="1"/>
          <index name="refresh_tokens_pkey" unique="true">
             <column ascending="true" name="id"/>
+         </index>
+         <index name="idx_refresh_tokens_expiry_date" unique="false">
+            <column ascending="true" name="expiry_date"/>
          </index>
          <index name="idx_refresh_tokens_token_hash" unique="false">
             <column ascending="true" name="token_hash"/>
