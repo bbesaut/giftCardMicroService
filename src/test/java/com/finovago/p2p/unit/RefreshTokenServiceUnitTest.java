@@ -1,6 +1,7 @@
 package com.finovago.p2p.unit;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -113,5 +114,18 @@ class RefreshTokenServiceUnitTest {
 
         assertTrue(existing.isRevoked());
         verify(refreshTokenRepository).save(existing);
+    }
+
+    @Test
+    void deleteExpired_removesOnlyExpiredEntries() {
+        Instant cutoff = Instant.now();
+        User user = new User("client@example.com", "hashed", Role.MERCHANT, null);
+        RefreshToken expired = new RefreshToken("hash", user, cutoff.minusSeconds(60));
+
+        when(refreshTokenRepository.findByExpiryDateBefore(cutoff)).thenReturn(List.of(expired));
+
+        refreshTokenService.deleteExpired(cutoff);
+
+        verify(refreshTokenRepository).deleteAll(List.of(expired));
     }
 }
