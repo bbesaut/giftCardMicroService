@@ -1,6 +1,7 @@
 package com.finovago.p2p.unit;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -25,12 +26,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.GiftCardResponse;
+import com.finovago.p2p.dto.LedgerEntryResponse;
 import com.finovago.p2p.dto.RedemptionRequest;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.exception.ExpiredGiftCardException;
 import com.finovago.p2p.exception.InactiveGiftCardException;
 import com.finovago.p2p.exception.UnknownGiftCardException;
 import com.finovago.p2p.model.GiftCard;
+import com.finovago.p2p.model.LedgerEntry;
 import com.finovago.p2p.model.LedgerEntryType;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.repository.GiftCardRepository;
@@ -262,5 +265,36 @@ class GiftCardServiceUnitTest
         when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, nonExistentCode)).thenReturn(Optional.empty());
 
         assertThrows(UnknownGiftCardException.class, () -> giftCardService.lookupGiftCard(nonExistentCode));
+    }
+
+    @Test
+    void should_return_ledger_entries_oldest_first_on_getLedger()
+    {
+        String cardCode = "LEDGER123";
+        GiftCard giftCard = new GiftCard(merchant, cardCode, BigDecimal.valueOf(70.0), true, LocalDate.now().plusDays(30));
+        LedgerEntry creation = new LedgerEntry(giftCard, MERCHANT_ID, LedgerEntryType.CREATION, new BigDecimal("100.00"), new BigDecimal("100.00"), null);
+        LedgerEntry redemption = new LedgerEntry(giftCard, MERCHANT_ID, LedgerEntryType.REDEMPTION, new BigDecimal("30.00"), new BigDecimal("70.00"), null);
+
+        when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.of(giftCard));
+        when(ledgerService.getEntriesForCard(giftCard.getId())).thenReturn(List.of(creation, redemption));
+
+        List<LedgerEntryResponse> response = giftCardService.getLedger(cardCode);
+
+        assertEquals(2, response.size());
+        assertEquals("CREATION", response.get(0).entryType());
+        assertMoneyEquals(new BigDecimal("100.00"), response.get(0).amount());
+        assertEquals("REDEMPTION", response.get(1).entryType());
+        assertMoneyEquals(new BigDecimal("30.00"), response.get(1).amount());
+        assertMoneyEquals(new BigDecimal("70.00"), response.get(1).balanceAfter());
+    }
+
+    @Test
+    void should_throw_exception_when_getting_ledger_for_non_existent_card()
+    {
+        String nonExistentCode = "NONEXISTENT";
+        when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, nonExistentCode)).thenReturn(Optional.empty());
+
+        assertThrows(UnknownGiftCardException.class, () -> giftCardService.getLedger(nonExistentCode));
+        verify(ledgerService, never()).getEntriesForCard(any());
     }
 }

@@ -198,6 +198,38 @@ All gift card endpoints below are scoped to the calling MERCHANT's own tenant �
 - `429 Too Many Requests`: Rate limit exceeded (max 10 attempts/minute per IP)
 - `500 Internal Server Error`: Database or unexpected server error
 
+### GET /api/v1/giftcards/{code}/ledger
+**Description**: Retrieve the full append-only history of balance-affecting operations (creation, redemptions, holds) for a specific gift card, oldest first, scoped to the caller's merchant. Useful for customer support ("why did my balance change") without querying the database directly. Requires authentication (MERCHANT role).
+
+**Path Parameters**:
+- `code` (String): The gift card code
+
+**Response** (List of LedgerEntryResponse - HTTP 200):
+```json
+[
+  {
+    "entryType": "CREATION",
+    "amount": 100.00,
+    "balanceAfter": 100.00,
+    "referenceId": null,
+    "createdAt": "2026-07-23T15:30:00"
+  },
+  {
+    "entryType": "REDEMPTION",
+    "amount": 30.00,
+    "balanceAfter": 70.00,
+    "referenceId": null,
+    "createdAt": "2026-07-24T09:12:00"
+  }
+]
+```
+
+**Error Responses**:
+- `401 Unauthorized`: Missing or invalid JWT token
+- `404 Not Found`: Gift card with specified code does not exist for the caller's merchant
+- `429 Too Many Requests`: Rate limit exceeded (max 10 attempts/minute per IP)
+- `500 Internal Server Error`: Database or unexpected server error
+
 ### POST /api/v1/giftcards/redeem
 **Description**: Redeem a specified amount from a gift card using its code, scoped to the caller's merchant. The request is processed asynchronously. Requires authentication (MERCHANT role).
 
@@ -334,6 +366,14 @@ Response for redemption operations
 - `deductedAmount` (double): Amount successfully deducted
 - `remainingBalance` (double): Balance after deduction
 - `remainingToPay` (double): Amount still owed if balance was insufficient
+
+### LedgerEntryResponse
+Response for a single gift card ledger entry (GET /api/v1/giftcards/{code}/ledger)
+- `entryType` (String): Kind of operation (CREATION, REDEMPTION, HOLD_PLACED, HOLD_CAPTURED, HOLD_RELEASED)
+- `amount` (BigDecimal): Amount involved in this operation
+- `balanceAfter` (BigDecimal): Gift card balance immediately after this operation
+- `referenceId` (Long, nullable): Identifier of the related hold, if any
+- `createdAt` (LocalDateTime): Timestamp at which this entry was recorded
 
 ## ⚠️ Error Responses
 

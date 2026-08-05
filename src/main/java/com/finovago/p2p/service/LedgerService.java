@@ -32,4 +32,9 @@ public class LedgerService {
     public List<LedgerDiscrepancy> findBalanceDiscrepancies() {
         return ledgerEntryRepository.findBalanceDiscrepancies();
     }
+
+    /** Full history for a single card, oldest first. Caller is responsible for tenant scoping. */
+    public List<LedgerEntry> getEntriesForCard(Long giftCardId) {
+        return ledgerEntryRepository.findByGiftCardIdOrderByCreatedAtAsc(giftCardId);
+    }
 }

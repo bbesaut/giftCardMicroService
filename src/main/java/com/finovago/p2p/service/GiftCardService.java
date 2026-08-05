@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.GiftCardResponse;
+import com.finovago.p2p.dto.LedgerEntryResponse;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.dto.RedemptionRequest;
 import com.finovago.p2p.exception.UnknownGiftCardException;
@@ -183,5 +184,25 @@ public class GiftCardService {
                 giftCard.getExpirationDate(),
                 merchantId
         );
+    }
+
+    @Transactional(readOnly = true)
+    public List<LedgerEntryResponse> getLedger(String code) {
+        log.info("Fetching ledger for gift card with code: {}", code);
+
+        Long merchantId = currentUserContext.currentMerchantId();
+        GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, code)
+                .orElseThrow(() -> new UnknownGiftCardException("Gift card not found"));
+
+        return ledgerService.getEntriesForCard(giftCard.getId())
+                .stream()
+                .map(entry -> new LedgerEntryResponse(
+                        entry.getEntryType().name(),
+                        entry.getAmount(),
+                        entry.getBalanceAfter(),
+                        entry.getReferenceId(),
+                        entry.getCreatedAt()
+                ))
+                .toList();
     }
 }

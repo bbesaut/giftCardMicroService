@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.GiftCardResponse;
 import com.finovago.p2p.dto.HoldResponse;
+import com.finovago.p2p.dto.LedgerEntryResponse;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.dto.RedemptionRequest;
 import com.finovago.p2p.dto.ReserveRequest;
@@ -159,6 +160,31 @@ public class GiftCardController
     public GiftCardResponse lookupGiftCard(@PathVariable String code) {
         log.info("Received gift card lookup request. Code: {}", code);
         return giftCardService.lookupGiftCard(code);
+    }
+
+    @Operation(
+        summary = "Get a gift card's ledger history",
+        description = "Retrieve the full append-only history of balance-affecting operations (creation, redemptions, holds) for a specific gift card. "
+                    + "Entries are returned oldest first. Useful for customer support investigations ('why did my balance change'). "
+                    + "Requires authentication (JWT token, MERCHANT role)."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "OK - Successfully retrieved the ledger history",
+            content = @Content(schema = @Schema(implementation = LedgerEntryResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
+        @ApiResponse(responseCode = "404", description = "Not Found - Gift card with specified code does not exist",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Not Found\",\"message\":\"Gift card not found\"}"))),
+        @ApiResponse(responseCode = "429", description = "Too Many Requests - Rate limit exceeded for this IP (max 10 attempts/minute)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Too Many Requests\",\"message\":\"Too many requests. Please try again later.\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
+    })
+    @GetMapping("/{code}/ledger")
+    @ResponseStatus(HttpStatus.OK)
+    public List<LedgerEntryResponse> getLedger(@PathVariable String code) {
+        log.info("Received gift card ledger request. Code: {}", code);
+        return giftCardService.getLedger(code);
     }
 
     @Operation(

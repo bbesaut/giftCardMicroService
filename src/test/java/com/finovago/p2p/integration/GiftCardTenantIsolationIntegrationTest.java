@@ -173,4 +173,44 @@ class GiftCardTenantIsolationIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.deductedAmount").value(10.0))
                 .andExpect(jsonPath("$.remainingBalance").value(90.0));
     }
+
+    @Test
+    void should_returnLedgerHistory_when_merchantFetchesOwnCard() throws Exception {
+        mockMvc.perform(post("/api/v1/giftcards/create")
+                        .header(AUTHORIZATION, "Bearer " + merchantAToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"giftCardCode\":\"" + SHARED_CODE + "\",\"balance\":100.0,\"active\":true}"))
+                .andExpect(status().isCreated());
+
+        MvcResult redeemResult = mockMvc.perform(post("/api/v1/giftcards/redeem")
+                        .header(AUTHORIZATION, "Bearer " + merchantAToken)
+                        .header("Idempotency-Key", java.util.UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"giftCardCode\":\"" + SHARED_CODE + "\",\"amount\":10.0}"))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        mockMvc.perform(asyncDispatch(redeemResult)).andExpect(status().isAccepted());
+
+        mockMvc.perform(get("/api/v1/giftcards/" + SHARED_CODE + "/ledger")
+                        .header(AUTHORIZATION, "Bearer " + merchantAToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].entryType").value("CREATION"))
+                .andExpect(jsonPath("$[0].balanceAfter").value(100.0))
+                .andExpect(jsonPath("$[1].entryType").value("REDEMPTION"))
+                .andExpect(jsonPath("$[1].balanceAfter").value(90.0));
+    }
+
+    @Test
+    void should_returnNotFound_when_merchantFetchesLedger_forAnotherMerchantsCard() throws Exception {
+        mockMvc.perform(post("/api/v1/giftcards/create")
+                        .header(AUTHORIZATION, "Bearer " + merchantAToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"giftCardCode\":\"" + SHARED_CODE + "\",\"balance\":100.0,\"active\":true}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/giftcards/" + SHARED_CODE + "/ledger")
+                        .header(AUTHORIZATION, "Bearer " + merchantBToken))
+                .andExpect(status().isNotFound());
+    }
 }
