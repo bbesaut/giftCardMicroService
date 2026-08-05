@@ -226,17 +226,19 @@ public class GiftCardController
     @Operation(
         summary = "Capture a hold",
         description = "Finalize a previously reserved hold: deducts the held amount from the gift card's real balance. "
+                    + "Idempotent by target state: retrying a capture that already succeeded (hold already CAPTURED) replays the same 200 response "
+                    + "rather than erroring. Retrying against a hold in a different terminal state (RELEASED/EXPIRED) is a genuine conflict and still returns 409. "
                     + "Requires authentication (JWT token, MERCHANT role)."
     )
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "OK - Hold captured, status CAPTURED",
+        @ApiResponse(responseCode = "200", description = "OK - Hold captured, status CAPTURED (or already was CAPTURED - replayed)",
             content = @Content(schema = @Schema(implementation = HoldResponse.class))),
         @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
         @ApiResponse(responseCode = "404", description = "Not Found - Hold with specified id does not exist for the caller's merchant",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Not Found\",\"message\":\"Hold not found\"}"))),
-        @ApiResponse(responseCode = "409", description = "Conflict - Hold is no longer PENDING (already captured, released, or expired)",
-            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Conflict\",\"message\":\"Hold is already CAPTURED\"}"))),
+        @ApiResponse(responseCode = "409", description = "Conflict - Hold is in a different terminal state (RELEASED or EXPIRED)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Conflict\",\"message\":\"Hold is already RELEASED\"}"))),
         @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
     })
@@ -250,17 +252,19 @@ public class GiftCardController
     @Operation(
         summary = "Release a hold",
         description = "Cancel a previously reserved hold: no balance deduction occurs and the held amount becomes available again. "
+                    + "Idempotent by target state: retrying a release that already succeeded (hold already RELEASED) replays the same 200 response "
+                    + "rather than erroring. Retrying against a hold in a different terminal state (CAPTURED/EXPIRED) is a genuine conflict and still returns 409. "
                     + "Requires authentication (JWT token, MERCHANT role)."
     )
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "OK - Hold released, status RELEASED",
+        @ApiResponse(responseCode = "200", description = "OK - Hold released, status RELEASED (or already was RELEASED - replayed)",
             content = @Content(schema = @Schema(implementation = HoldResponse.class))),
         @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
         @ApiResponse(responseCode = "404", description = "Not Found - Hold with specified id does not exist for the caller's merchant",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Not Found\",\"message\":\"Hold not found\"}"))),
-        @ApiResponse(responseCode = "409", description = "Conflict - Hold is no longer PENDING (already captured, released, or expired)",
-            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Conflict\",\"message\":\"Hold is already RELEASED\"}"))),
+        @ApiResponse(responseCode = "409", description = "Conflict - Hold is in a different terminal state (CAPTURED or EXPIRED)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Conflict\",\"message\":\"Hold is already CAPTURED\"}"))),
         @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
     })

@@ -183,7 +183,7 @@ class GiftCardHoldServiceUnitTest {
     }
 
     @Test
-    void should_throw_hold_already_finalized_on_double_capture() {
+    void should_replay_response_on_double_capture_without_double_deducting() {
         String cardCode = "GC-6";
         GiftCard card = activeCard(cardCode, 100.0);
         GiftCardHold hold = new GiftCardHold(card, MERCHANT_ID, BigDecimal.valueOf(30.0), LocalDateTime.now().plusMinutes(10));
@@ -191,10 +191,25 @@ class GiftCardHoldServiceUnitTest {
 
         when(giftCardHoldRepository.findByIdAndMerchantIdForUpdate(1L, MERCHANT_ID)).thenReturn(Optional.of(hold));
 
-        assertThrows(HoldAlreadyFinalizedException.class, () -> giftCardHoldService.capture(1L));
+        HoldResponse response = giftCardHoldService.capture(1L);
+
+        assertEquals("CAPTURED", response.status());
         verify(giftCardRepository, never()).findByMerchantIdAndCardCodeForUpdate(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         verify(ledgerService, never()).record(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void should_throw_hold_already_finalized_when_capturing_a_released_hold() {
+        String cardCode = "GC-6b";
+        GiftCard card = activeCard(cardCode, 100.0);
+        GiftCardHold hold = new GiftCardHold(card, MERCHANT_ID, BigDecimal.valueOf(30.0), LocalDateTime.now().plusMinutes(10));
+        hold.release();
+
+        when(giftCardHoldRepository.findByIdAndMerchantIdForUpdate(1L, MERCHANT_ID)).thenReturn(Optional.of(hold));
+
+        assertThrows(HoldAlreadyFinalizedException.class, () -> giftCardHoldService.capture(1L));
+        verify(giftCardRepository, never()).findByMerchantIdAndCardCodeForUpdate(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -231,7 +246,7 @@ class GiftCardHoldServiceUnitTest {
     }
 
     @Test
-    void should_throw_hold_already_finalized_on_double_release() {
+    void should_replay_response_on_double_release() {
         String cardCode = "GC-9";
         GiftCard card = activeCard(cardCode, 100.0);
         GiftCardHold hold = new GiftCardHold(card, MERCHANT_ID, BigDecimal.valueOf(30.0), LocalDateTime.now().plusMinutes(10));
@@ -239,9 +254,23 @@ class GiftCardHoldServiceUnitTest {
 
         when(giftCardHoldRepository.findByIdAndMerchantIdForUpdate(1L, MERCHANT_ID)).thenReturn(Optional.of(hold));
 
-        assertThrows(HoldAlreadyFinalizedException.class, () -> giftCardHoldService.release(1L));
+        HoldResponse response = giftCardHoldService.release(1L);
+
+        assertEquals("RELEASED", response.status());
         verify(ledgerService, never()).record(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void should_throw_hold_already_finalized_when_releasing_a_captured_hold() {
+        String cardCode = "GC-9b";
+        GiftCard card = activeCard(cardCode, 100.0);
+        GiftCardHold hold = new GiftCardHold(card, MERCHANT_ID, BigDecimal.valueOf(30.0), LocalDateTime.now().plusMinutes(10));
+        hold.capture();
+
+        when(giftCardHoldRepository.findByIdAndMerchantIdForUpdate(1L, MERCHANT_ID)).thenReturn(Optional.of(hold));
+
+        assertThrows(HoldAlreadyFinalizedException.class, () -> giftCardHoldService.release(1L));
     }
 
     @Test
