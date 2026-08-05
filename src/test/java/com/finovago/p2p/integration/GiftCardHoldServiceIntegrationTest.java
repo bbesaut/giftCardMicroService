@@ -134,12 +134,22 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void should_fail_on_double_capture_and_not_double_deduct() {
+    void should_replay_response_on_double_capture_and_not_double_deduct() {
         HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, BigDecimal.valueOf(40.0)), UUID.randomUUID().toString());
         giftCardHoldService.capture(reserved.holdId());
 
-        assertThrows(HoldAlreadyFinalizedException.class, () -> giftCardHoldService.capture(reserved.holdId()));
+        HoldResponse replayed = giftCardHoldService.capture(reserved.holdId());
+
+        assertEquals("CAPTURED", replayed.status());
         assertMoneyEquals(BigDecimal.valueOf(60.0), reloadCard().getBalance());
+    }
+
+    @Test
+    void should_fail_capturing_a_released_hold() {
+        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, BigDecimal.valueOf(40.0)), UUID.randomUUID().toString());
+        giftCardHoldService.release(reserved.holdId());
+
+        assertThrows(HoldAlreadyFinalizedException.class, () -> giftCardHoldService.capture(reserved.holdId()));
     }
 
     @Test
@@ -155,9 +165,19 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void should_fail_on_double_release() {
+    void should_replay_response_on_double_release() {
         HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, BigDecimal.valueOf(40.0)), UUID.randomUUID().toString());
         giftCardHoldService.release(reserved.holdId());
+
+        HoldResponse replayed = giftCardHoldService.release(reserved.holdId());
+
+        assertEquals("RELEASED", replayed.status());
+    }
+
+    @Test
+    void should_fail_releasing_a_captured_hold() {
+        HoldResponse reserved = giftCardHoldService.reserve(new ReserveRequest(CARD_CODE, BigDecimal.valueOf(40.0)), UUID.randomUUID().toString());
+        giftCardHoldService.capture(reserved.holdId());
 
         assertThrows(HoldAlreadyFinalizedException.class, () -> giftCardHoldService.release(reserved.holdId()));
     }
