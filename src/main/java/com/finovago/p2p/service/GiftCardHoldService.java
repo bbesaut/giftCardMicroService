@@ -19,6 +19,7 @@ import com.finovago.p2p.exception.InsufficientAvailableBalanceException;
 import com.finovago.p2p.exception.UnknownGiftCardException;
 import com.finovago.p2p.model.GiftCard;
 import com.finovago.p2p.model.GiftCardHold;
+import com.finovago.p2p.model.HoldStatus;
 import com.finovago.p2p.model.LedgerEntryType;
 import com.finovago.p2p.repository.GiftCardHoldRepository;
 import com.finovago.p2p.repository.GiftCardRepository;
@@ -115,6 +116,14 @@ public class GiftCardHoldService {
         GiftCardHold hold = giftCardHoldRepository.findByIdAndMerchantIdForUpdate(holdId, merchantId)
                 .orElseThrow(() -> new HoldNotFoundException("Hold not found"));
 
+        // Capture is idempotent by target state: retrying a capture that already succeeded
+        // replays the same 200 response instead of erroring, since re-asking for CAPTURED on an
+        // already-CAPTURED hold is not a real conflict. A different terminal state (RELEASED/
+        // EXPIRED) is a genuine conflict and still throws.
+        if (hold.getStatus() == HoldStatus.CAPTURED) {
+            return new HoldResponse(hold.getId(), hold.getStatus().name(), hold.getExpiresAt(), null);
+        }
+
         if (!hold.isPending()) {
             throw new HoldAlreadyFinalizedException("Hold is already " + hold.getStatus());
         }
@@ -146,6 +155,12 @@ public class GiftCardHoldService {
 
         GiftCardHold hold = giftCardHoldRepository.findByIdAndMerchantIdForUpdate(holdId, merchantId)
                 .orElseThrow(() -> new HoldNotFoundException("Hold not found"));
+
+        // Same idempotent-by-target-state replay as capture(): retrying a release that already
+        // succeeded returns the same 200 instead of erroring.
+        if (hold.getStatus() == HoldStatus.RELEASED) {
+            return new HoldResponse(hold.getId(), hold.getStatus().name(), hold.getExpiresAt(), null);
+        }
 
         if (!hold.isPending()) {
             throw new HoldAlreadyFinalizedException("Hold is already " + hold.getStatus());
