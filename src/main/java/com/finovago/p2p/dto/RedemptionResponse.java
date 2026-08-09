@@ -1,5 +1,7 @@
 package com.finovago.p2p.dto;
 
+import java.math.BigDecimal;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 
 @Schema(description = "Response object for the result of a gift card redemption.")
@@ -8,11 +10,11 @@ public record RedemptionResponse(
         String status,
 
         @Schema(description = "Amount deducted from the gift card", example = "50.0")
-        double deductedAmount,
+        BigDecimal deductedAmount,
 
         @Schema(description = "Remaining balance on the gift card", example = "50.0")
-        double remainingBalance,
+        BigDecimal remainingBalance,
 
         @Schema(description = "Remaining amount to be paid", example = "0.0")
-        double remainingToPay
+        BigDecimal remainingToPay
 ) {}

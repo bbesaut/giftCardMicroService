@@ -18,11 +18,13 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finovago.p2p.AbstractIntegrationTest;
+import com.finovago.p2p.config.PostgresTestcontainerInitializer;
 import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.model.Role;
 import com.finovago.p2p.model.User;
 import com.finovago.p2p.repository.GiftCardRepository;
+import com.finovago.p2p.repository.IdempotencyKeyRepository;
 import com.finovago.p2p.repository.MerchantRepository;
 import com.finovago.p2p.repository.RefreshTokenRepository;
 import com.finovago.p2p.repository.UserRepository;
@@ -53,6 +55,9 @@ class GiftCardTenantIsolationIntegrationTest extends AbstractIntegrationTest {
     private GiftCardRepository giftCardRepository;
 
     @Autowired
+    private IdempotencyKeyRepository idempotencyKeyRepository;
+
+    @Autowired
     private RefreshTokenRepository refreshTokenRepository;
 
     @Autowired
@@ -66,6 +71,8 @@ class GiftCardTenantIsolationIntegrationTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        idempotencyKeyRepository.deleteAll();
+        PostgresTestcontainerInitializer.executeAsMigrator("TRUNCATE TABLE gift_card_ledger RESTART IDENTITY");
         giftCardRepository.deleteAll();
         refreshTokenRepository.deleteAll();
         userRepository.deleteAll();
@@ -130,6 +137,7 @@ class GiftCardTenantIsolationIntegrationTest extends AbstractIntegrationTest {
 
         MvcResult result = mockMvc.perform(post("/api/v1/giftcards/redeem")
                         .header(AUTHORIZATION, "Bearer " + merchantBToken)
+                        .header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"giftCardCode\":\"" + SHARED_CODE + "\",\"amount\":10.0}"))
                 .andExpect(request().asyncStarted())
@@ -150,6 +158,7 @@ class GiftCardTenantIsolationIntegrationTest extends AbstractIntegrationTest {
 
         MvcResult result = mockMvc.perform(post("/api/v1/giftcards/redeem")
                         .header(AUTHORIZATION, "Bearer " + merchantAToken)
+                        .header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"giftCardCode\":\"" + SHARED_CODE + "\",\"amount\":10.0}"))
                 .andExpect(request().asyncStarted())
@@ -160,5 +169,45 @@ class GiftCardTenantIsolationIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.status").value("SUCCESS"))
                 .andExpect(jsonPath("$.deductedAmount").value(10.0))
                 .andExpect(jsonPath("$.remainingBalance").value(90.0));
+    }
+
+    @Test
+    void should_returnLedgerHistory_when_merchantFetchesOwnCard() throws Exception {
+        mockMvc.perform(post("/api/v1/giftcards/create")
+                        .header(AUTHORIZATION, "Bearer " + merchantAToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"giftCardCode\":\"" + SHARED_CODE + "\",\"balance\":100.0,\"active\":true}"))
+                .andExpect(status().isCreated());
+
+        MvcResult redeemResult = mockMvc.perform(post("/api/v1/giftcards/redeem")
+                        .header(AUTHORIZATION, "Bearer " + merchantAToken)
+                        .header("Idempotency-Key", java.util.UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"giftCardCode\":\"" + SHARED_CODE + "\",\"amount\":10.0}"))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        mockMvc.perform(asyncDispatch(redeemResult)).andExpect(status().isAccepted());
+
+        mockMvc.perform(get("/api/v1/giftcards/" + SHARED_CODE + "/ledger")
+                        .header(AUTHORIZATION, "Bearer " + merchantAToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].entryType").value("CREATION"))
+                .andExpect(jsonPath("$[0].balanceAfter").value(100.0))
+                .andExpect(jsonPath("$[1].entryType").value("REDEMPTION"))
+                .andExpect(jsonPath("$[1].balanceAfter").value(90.0));
+    }
+
+    @Test
+    void should_returnNotFound_when_merchantFetchesLedger_forAnotherMerchantsCard() throws Exception {
+        mockMvc.perform(post("/api/v1/giftcards/create")
+                        .header(AUTHORIZATION, "Bearer " + merchantAToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"giftCardCode\":\"" + SHARED_CODE + "\",\"balance\":100.0,\"active\":true}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/giftcards/" + SHARED_CODE + "/ledger")
+                        .header(AUTHORIZATION, "Bearer " + merchantBToken))
+                .andExpect(status().isNotFound());
     }
 }

@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.GiftCardResponse;
 import com.finovago.p2p.dto.HoldResponse;
+import com.finovago.p2p.dto.LedgerEntryResponse;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.dto.RedemptionRequest;
 import com.finovago.p2p.dto.ReserveRequest;
@@ -51,17 +53,21 @@ public class GiftCardController
     @Operation(
         summary = "Redeem a gift card",
         description = "Redeem a specified amount from a gift card using its code. The request will be processed asynchronously and returns a CompletableFuture. "
-                    + "Requires authentication (JWT token). MDC correlation ID is automatically propagated to async threads."
+                    + "Requires authentication (JWT token). MDC correlation ID is automatically propagated to async threads. "
+                    + "Requires the Idempotency-Key header: safely retry a redemption after a network failure by resending the same key - "
+                    + "a completed request replays its cached result instead of deducting the balance again."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "202", description = "Accepted - Redemption request accepted and being processed asynchronously",
             content = @Content(schema = @Schema(implementation = RedemptionResponse.class))),
-        @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request body (missing or invalid fields)",
+        @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request body (missing or invalid fields) or missing Idempotency-Key header",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"The gift card code cannot be blank\"}"))),
         @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
         @ApiResponse(responseCode = "404", description = "Not Found - Gift card with specified code does not exist",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Not Found\",\"message\":\"Gift card not found\"}"))),
+        @ApiResponse(responseCode = "409", description = "Conflict - Idempotency-Key already used with a different request payload, or a request with this key is still being processed",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Conflict\",\"message\":\"This Idempotency-Key was already used with a different request payload\"}"))),
         @ApiResponse(responseCode = "422", description = "Unprocessable Entity - Gift card is inactive or has expired. "
                     + "Note: an amount exceeding the balance is NOT an error - the response returns a SUCCESS status with a non-zero remainingToPay.",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unprocessable Entity\",\"message\":\"Gift card has expired\"}"))),
@@ -72,10 +78,12 @@ public class GiftCardController
     })
     @PostMapping("/redeem")
     @ResponseStatus(HttpStatus.ACCEPTED)
-    public CompletableFuture<RedemptionResponse> redeemGiftCard(@Valid @RequestBody RedemptionRequest request) {
-        log.info("Received redemption request. Code: {}, Amount: {}", request.giftCardCode(), request.amount());
+    public CompletableFuture<RedemptionResponse> redeemGiftCard(
+            @Valid @RequestBody RedemptionRequest request,
+            @RequestHeader("Idempotency-Key") String idempotencyKey) {
+        log.info("Received redemption request. Code: {}, Amount: {}, IdempotencyKey: {}", request.giftCardCode(), request.amount(), idempotencyKey);
 
-        return giftCardService.redeemGiftCardAsync(request);
+        return giftCardService.redeemGiftCardAsync(request, idempotencyKey);
     }
 
     @Operation(
@@ -155,21 +163,50 @@ public class GiftCardController
     }
 
     @Operation(
+        summary = "Get a gift card's ledger history",
+        description = "Retrieve the full append-only history of balance-affecting operations (creation, redemptions, holds) for a specific gift card. "
+                    + "Entries are returned oldest first. Useful for customer support investigations ('why did my balance change'). "
+                    + "Requires authentication (JWT token, MERCHANT role)."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "OK - Successfully retrieved the ledger history",
+            content = @Content(schema = @Schema(implementation = LedgerEntryResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
+        @ApiResponse(responseCode = "404", description = "Not Found - Gift card with specified code does not exist",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Not Found\",\"message\":\"Gift card not found\"}"))),
+        @ApiResponse(responseCode = "429", description = "Too Many Requests - Rate limit exceeded for this IP (max 10 attempts/minute)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Too Many Requests\",\"message\":\"Too many requests. Please try again later.\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
+    })
+    @GetMapping("/{code}/ledger")
+    @ResponseStatus(HttpStatus.OK)
+    public List<LedgerEntryResponse> getLedger(@PathVariable String code) {
+        log.info("Received gift card ledger request. Code: {}", code);
+        return giftCardService.getLedger(code);
+    }
+
+    @Operation(
         summary = "Reserve a hold on a gift card",
         description = "Earmark an amount against a gift card's balance without deducting it yet. The hold must later be "
                     + "confirmed via capture or cancelled via release, and auto-expires if left pending too long. "
                     + "Unlike redeem, an amount exceeding the available balance (balance minus other pending holds) IS an error. "
-                    + "Requires authentication (JWT token, MERCHANT role)."
+                    + "Requires authentication (JWT token, MERCHANT role). "
+                    + "Requires the Idempotency-Key header: safely retry a reservation after a network failure by resending the same key - "
+                    + "a completed request replays its cached result instead of reserving a second hold."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "Created - Hold reserved, status PENDING",
             content = @Content(schema = @Schema(implementation = HoldResponse.class))),
-        @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request body (missing or invalid fields)",
+        @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request body (missing or invalid fields), or missing Idempotency-Key header",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"The gift card code cannot be blank\"}"))),
         @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
         @ApiResponse(responseCode = "404", description = "Not Found - Gift card with specified code does not exist",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Not Found\",\"message\":\"Gift card not found\"}"))),
+        @ApiResponse(responseCode = "409", description = "Conflict - Idempotency-Key already used with a different request payload, or a request with this key is still being processed",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Conflict\",\"message\":\"This Idempotency-Key was already used with a different request payload\"}"))),
         @ApiResponse(responseCode = "422", description = "Unprocessable Entity - Card is inactive/expired, or available balance is insufficient to reserve this amount",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unprocessable Entity\",\"message\":\"Insufficient available balance to reserve this amount\"}"))),
         @ApiResponse(responseCode = "429", description = "Too Many Requests - Rate limit exceeded for this IP (max 10 attempts/minute)",
@@ -179,25 +216,29 @@ public class GiftCardController
     })
     @PostMapping("/reserve")
     @ResponseStatus(HttpStatus.CREATED)
-    public HoldResponse reserveGiftCard(@Valid @RequestBody ReserveRequest request) {
-        log.info("Received hold reservation request. Code: {}, Amount: {}", request.giftCardCode(), request.amount());
-        return giftCardHoldService.reserve(request);
+    public HoldResponse reserveGiftCard(
+            @Valid @RequestBody ReserveRequest request,
+            @RequestHeader("Idempotency-Key") String idempotencyKey) {
+        log.info("Received hold reservation request. Code: {}, Amount: {}, IdempotencyKey: {}", request.giftCardCode(), request.amount(), idempotencyKey);
+        return giftCardHoldService.reserve(request, idempotencyKey);
     }
 
     @Operation(
         summary = "Capture a hold",
         description = "Finalize a previously reserved hold: deducts the held amount from the gift card's real balance. "
+                    + "Idempotent by target state: retrying a capture that already succeeded (hold already CAPTURED) replays the same 200 response "
+                    + "rather than erroring. Retrying against a hold in a different terminal state (RELEASED/EXPIRED) is a genuine conflict and still returns 409. "
                     + "Requires authentication (JWT token, MERCHANT role)."
     )
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "OK - Hold captured, status CAPTURED",
+        @ApiResponse(responseCode = "200", description = "OK - Hold captured, status CAPTURED (or already was CAPTURED - replayed)",
             content = @Content(schema = @Schema(implementation = HoldResponse.class))),
         @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
         @ApiResponse(responseCode = "404", description = "Not Found - Hold with specified id does not exist for the caller's merchant",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Not Found\",\"message\":\"Hold not found\"}"))),
-        @ApiResponse(responseCode = "409", description = "Conflict - Hold is no longer PENDING (already captured, released, or expired)",
-            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Conflict\",\"message\":\"Hold is already CAPTURED\"}"))),
+        @ApiResponse(responseCode = "409", description = "Conflict - Hold is in a different terminal state (RELEASED or EXPIRED)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Conflict\",\"message\":\"Hold is already RELEASED\"}"))),
         @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
     })
@@ -211,17 +252,19 @@ public class GiftCardController
     @Operation(
         summary = "Release a hold",
         description = "Cancel a previously reserved hold: no balance deduction occurs and the held amount becomes available again. "
+                    + "Idempotent by target state: retrying a release that already succeeded (hold already RELEASED) replays the same 200 response "
+                    + "rather than erroring. Retrying against a hold in a different terminal state (CAPTURED/EXPIRED) is a genuine conflict and still returns 409. "
                     + "Requires authentication (JWT token, MERCHANT role)."
     )
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "OK - Hold released, status RELEASED",
+        @ApiResponse(responseCode = "200", description = "OK - Hold released, status RELEASED (or already was RELEASED - replayed)",
             content = @Content(schema = @Schema(implementation = HoldResponse.class))),
         @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
         @ApiResponse(responseCode = "404", description = "Not Found - Hold with specified id does not exist for the caller's merchant",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Not Found\",\"message\":\"Hold not found\"}"))),
-        @ApiResponse(responseCode = "409", description = "Conflict - Hold is no longer PENDING (already captured, released, or expired)",
-            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Conflict\",\"message\":\"Hold is already RELEASED\"}"))),
+        @ApiResponse(responseCode = "409", description = "Conflict - Hold is in a different terminal state (CAPTURED or EXPIRED)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Conflict\",\"message\":\"Hold is already CAPTURED\"}"))),
         @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
     })

@@ -1,9 +1,12 @@
 package com.finovago.p2p.integration;
 
 import static org.hamcrest.Matchers.notNullValue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.time.Instant;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,10 +18,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.finovago.p2p.AbstractIntegrationTest;
 import com.finovago.p2p.model.Merchant;
+import com.finovago.p2p.model.RefreshToken;
 import com.finovago.p2p.model.Role;
 import com.finovago.p2p.model.User;
 import com.finovago.p2p.repository.MerchantRepository;
+import com.finovago.p2p.repository.RefreshTokenRepository;
 import com.finovago.p2p.repository.UserRepository;
+import com.finovago.p2p.scheduler.RefreshTokenCleanupScheduler;
 
 @Transactional
 class AuthIntegrationTest extends AbstractIntegrationTest {
@@ -38,10 +44,18 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+
+    @Autowired
+    private RefreshTokenCleanupScheduler refreshTokenCleanupScheduler;
+
+    private User user;
+
     @BeforeEach
     void setUp() {
         Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "merchant@example.com"));
-        userRepository.save(new User(EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant));
+        user = userRepository.save(new User(EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant));
     }
 
     @Test
@@ -89,6 +103,19 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + EMAIL + "\",\"password\":\"wrong-password\"}"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_deleteExpiredRefreshToken_when_cleanupSweepRuns() {
+        RefreshToken expired = refreshTokenRepository.save(
+                new RefreshToken("expired-hash", user, Instant.now().minusSeconds(60)));
+        RefreshToken stillValid = refreshTokenRepository.save(
+                new RefreshToken("valid-hash", user, Instant.now().plusSeconds(3600)));
+
+        refreshTokenCleanupScheduler.sweepExpiredTokens();
+
+        assertTrue(refreshTokenRepository.findById(expired.getId()).isEmpty());
+        assertTrue(refreshTokenRepository.findById(stillValid.getId()).isPresent());
     }
 
     private String extractField(String json, String field) {

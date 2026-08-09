@@ -47,6 +47,7 @@ An up-to-date ER diagram is generated automatically by `.github/workflows/schema
 - **Exception handling**: GlobalExceptionHandler with custom exceptions
 - **Response timing**: ResponseTimeFilter adds `X-Response-Time` header to all responses (in milliseconds)
 - **Rate limiting**: RateLimitFilter caps `login`/`lookup`/`redeem` at 10 requests/minute per IP (in-memory, per-instance only — see `app.rate-limit.*` properties). Disabled under the `test` profile.
+- **Idempotency**: `POST /giftcards/redeem` and `POST /giftcards/reserve` require an `Idempotency-Key` header — any mutating endpoint without a natural uniqueness guard is a candidate (`create`/`register` are already covered by their own unique constraints; `capture`/`release` are idempotent by target state — a retry that already reached the requested terminal state (e.g. re-capturing an already-CAPTURED hold) replays the same 200 response; a retry hitting a *different* terminal state (e.g. capturing an already-RELEASED hold) is a genuine conflict and returns 409). `IdempotencyKeyService` is endpoint-agnostic: it claims the key in its own transaction (REQUIRES_NEW) before the business logic runs, so concurrent duplicates are caught by a DB unique constraint (`merchant_id`, `idempotency_key`); a completed claim replays its cached response (serialized as JSON, endpoint-specific DTO type), a failed one is discarded so retries can proceed cleanly. `IdempotencyKeyCleanupScheduler` sweeps expired entries (see `app.idempotency.*` properties).
 
 ### Response Timing Header (X-Response-Time)
 Every response includes an `X-Response-Time` header with the request processing time in milliseconds. This is a best practice for:
@@ -197,8 +198,42 @@ All gift card endpoints below are scoped to the calling MERCHANT's own tenant �
 - `429 Too Many Requests`: Rate limit exceeded (max 10 attempts/minute per IP)
 - `500 Internal Server Error`: Database or unexpected server error
 
+### GET /api/v1/giftcards/{code}/ledger
+**Description**: Retrieve the full append-only history of balance-affecting operations (creation, redemptions, holds) for a specific gift card, oldest first, scoped to the caller's merchant. Useful for customer support ("why did my balance change") without querying the database directly. Requires authentication (MERCHANT role).
+
+**Path Parameters**:
+- `code` (String): The gift card code
+
+**Response** (List of LedgerEntryResponse - HTTP 200):
+```json
+[
+  {
+    "entryType": "CREATION",
+    "amount": 100.00,
+    "balanceAfter": 100.00,
+    "referenceId": null,
+    "createdAt": "2026-07-23T15:30:00"
+  },
+  {
+    "entryType": "REDEMPTION",
+    "amount": 30.00,
+    "balanceAfter": 70.00,
+    "referenceId": null,
+    "createdAt": "2026-07-24T09:12:00"
+  }
+]
+```
+
+**Error Responses**:
+- `401 Unauthorized`: Missing or invalid JWT token
+- `404 Not Found`: Gift card with specified code does not exist for the caller's merchant
+- `429 Too Many Requests`: Rate limit exceeded (max 10 attempts/minute per IP)
+- `500 Internal Server Error`: Database or unexpected server error
+
 ### POST /api/v1/giftcards/redeem
 **Description**: Redeem a specified amount from a gift card using its code, scoped to the caller's merchant. The request is processed asynchronously. Requires authentication (MERCHANT role).
+
+**Idempotency**: Requires an `Idempotency-Key` header (client-generated, e.g. a UUID, one per redemption attempt — not per HTTP call). If the connection drops before the response arrives, retry the exact same request with the **same** key: a request that already completed replays its cached result instead of deducting the balance again. Reusing a key with a different `giftCardCode`/`amount` returns `409 Conflict`, as does retrying while the original request is still in flight. Keys are scoped per merchant and expire after `app.idempotency.ttl-hours` (default 24h; swept by `IdempotencyKeyCleanupScheduler`).
 
 **Request** (RedemptionRequest):
 ```json
@@ -207,6 +242,7 @@ All gift card endpoints below are scoped to the calling MERCHANT's own tenant �
   "amount": 50.0
 }
 ```
+Header: `Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000`
 
 **Response** (RedemptionResponse - HTTP 202 Accepted):
 ```json
@@ -219,9 +255,10 @@ All gift card endpoints below are scoped to the calling MERCHANT's own tenant �
 ```
 
 **Error Responses**:
-- `400 Bad Request`: Invalid request body (missing or invalid fields)
+- `400 Bad Request`: Invalid request body (missing or invalid fields), or missing `Idempotency-Key` header
 - `401 Unauthorized`: Missing or invalid JWT token
 - `404 Not Found`: Gift card with specified code does not exist for the caller's merchant
+- `409 Conflict`: `Idempotency-Key` reused with a different request payload, or a request with this key is still being processed
 - `422 Unprocessable Entity`: Card is inactive or has expired (an amount exceeding the balance is NOT an error — the response returns `SUCCESS` with a non-zero `remainingToPay`)
 - `429 Too Many Requests`: Rate limit exceeded (max 10 attempts/minute per IP)
 - `500 Internal Server Error`: Server error
@@ -329,6 +366,14 @@ Response for redemption operations
 - `deductedAmount` (double): Amount successfully deducted
 - `remainingBalance` (double): Balance after deduction
 - `remainingToPay` (double): Amount still owed if balance was insufficient
+
+### LedgerEntryResponse
+Response for a single gift card ledger entry (GET /api/v1/giftcards/{code}/ledger)
+- `entryType` (String): Kind of operation (CREATION, REDEMPTION, HOLD_PLACED, HOLD_CAPTURED, HOLD_RELEASED)
+- `amount` (BigDecimal): Amount involved in this operation
+- `balanceAfter` (BigDecimal): Gift card balance immediately after this operation
+- `referenceId` (Long, nullable): Identifier of the related hold, if any
+- `createdAt` (LocalDateTime): Timestamp at which this entry was recorded
 
 ## ⚠️ Error Responses
 

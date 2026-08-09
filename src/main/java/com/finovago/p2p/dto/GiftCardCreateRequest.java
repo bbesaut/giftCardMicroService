@@ -1,11 +1,14 @@
 package com.finovago.p2p.dto;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Nullable;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 
 @Schema(description = "Request object for creating a new gift card.")
@@ -15,8 +18,10 @@ public record GiftCardCreateRequest(
     String giftCardCode,
 
     @Schema(description = "Initial balance", example = "100.0")
+    @NotNull(message = "The balance is required")
     @PositiveOrZero(message = "The balance cannot be negative")
-    double balance,
+    @Digits(integer = 17, fraction = 2, message = "The balance cannot have more than 2 decimal places")
+    BigDecimal balance,
 
     @Schema(description = "Indicates if the gift card is active", example = "true")
     boolean active,

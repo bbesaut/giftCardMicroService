@@ -1,4 +1,6 @@
 package com.finovago.p2p.service;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -13,10 +15,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.GiftCardResponse;
+import com.finovago.p2p.dto.LedgerEntryResponse;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.dto.RedemptionRequest;
 import com.finovago.p2p.exception.UnknownGiftCardException;
 import com.finovago.p2p.model.GiftCard;
+import com.finovago.p2p.model.LedgerEntryType;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.repository.GiftCardRepository;
 import com.finovago.p2p.repository.MerchantRepository;
@@ -27,6 +31,8 @@ public class GiftCardService {
     private final GiftCardRepository giftCardRepository;
     private final MerchantRepository merchantRepository;
     private final CurrentUserContext currentUserContext;
+    private final IdempotencyKeyService idempotencyKeyService;
+    private final LedgerService ledgerService;
     private final Executor taskExecutor;
     private static final Logger log = LoggerFactory.getLogger(GiftCardService.class);
 
@@ -34,22 +40,41 @@ public class GiftCardService {
             GiftCardRepository giftCardRepository,
             MerchantRepository merchantRepository,
             CurrentUserContext currentUserContext,
+            IdempotencyKeyService idempotencyKeyService,
+            LedgerService ledgerService,
             @Qualifier("taskExecutor") Executor taskExecutor) {
         this.giftCardRepository = giftCardRepository;
         this.merchantRepository = merchantRepository;
         this.currentUserContext = currentUserContext;
+        this.idempotencyKeyService = idempotencyKeyService;
+        this.ledgerService = ledgerService;
         this.taskExecutor = taskExecutor;
     }
 
-    public CompletableFuture<RedemptionResponse> redeemGiftCardAsync(RedemptionRequest request) {
+    public CompletableFuture<RedemptionResponse> redeemGiftCardAsync(RedemptionRequest request, String idempotencyKey) {
         Long merchantId = currentUserContext.currentMerchantId();
         return CompletableFuture.supplyAsync(() -> {
-                return executeRedemptionSync(merchantId, request.giftCardCode(), request.amount());
+            String requestHash = idempotencyKeyService.hashRequest(request.giftCardCode(), request.amount().setScale(2, RoundingMode.HALF_UP).toPlainString());
+
+            Optional<RedemptionResponse> cached = idempotencyKeyService.claim(merchantId, idempotencyKey, requestHash, RedemptionResponse.class);
+            if (cached.isPresent()) {
+                log.info("Idempotency-Key {} already completed, returning cached result", idempotencyKey);
+                return cached.get();
+            }
+
+            try {
+                RedemptionResponse response = executeRedemptionSync(merchantId, request.giftCardCode(), request.amount());
+                idempotencyKeyService.complete(merchantId, idempotencyKey, response);
+                return response;
+            } catch (RuntimeException e) {
+                idempotencyKeyService.discard(merchantId, idempotencyKey);
+                throw e;
+            }
         }, taskExecutor);
     }
 
     @Transactional
-    public RedemptionResponse executeRedemptionSync(Long merchantId, String code, double amount) {
+    public RedemptionResponse executeRedemptionSync(Long merchantId, String code, BigDecimal amount) {
 
         log.info("Processing database validation for card code: {}", code);
 
@@ -59,28 +84,36 @@ public class GiftCardService {
             throw new IllegalArgumentException("Card code invalid");
         }
 
-        if (amount <= 0) {
+        if (amount == null || amount.signum() <= 0) {
             throw new IllegalArgumentException("Amount must be greater than zero");
         }
+
+        // @Digits on RedemptionRequest already rejects more than 2 decimal places, so this only
+        // pads the scale (e.g. "1" -> "1.00") - it never rounds away precision. Doing it here,
+        // before the amount touches the balance/ledger/response, keeps every downstream value at
+        // a consistent scale instead of echoing back whatever scale the client happened to send.
+        amount = amount.setScale(2, RoundingMode.HALF_UP);
 
         GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, code)
                 .orElseThrow(() -> new UnknownGiftCardException("Gift card not found"));
 
         giftCard.ensureUsable();
 
-        double deducted;
-        double remainingToPay = 0;
+        BigDecimal deducted;
+        BigDecimal remainingToPay = BigDecimal.ZERO.setScale(2);
 
-        if (giftCard.getBalance() > amount) {
+        if (giftCard.getBalance().compareTo(amount) > 0) {
             giftCard.deductBalance(amount);
             deducted = amount;
         } else {
             deducted = giftCard.getBalance();
-            remainingToPay = amount - giftCard.getBalance();
+            remainingToPay = amount.subtract(giftCard.getBalance());
             giftCard.drainCard();
         }
 
         giftCardRepository.save(giftCard);
+
+        ledgerService.record(giftCard, merchantId, LedgerEntryType.REDEMPTION, deducted, giftCard.getBalance(), null);
 
         long duration = System.currentTimeMillis() - startTime;
 
@@ -110,8 +143,12 @@ public class GiftCardService {
         // getReferenceById avoids an extra round-trip to load the full Merchant just to set the FK.
         Merchant merchant = merchantRepository.getReferenceById(merchantId);
 
-        GiftCard giftCard = new GiftCard(merchant, request.giftCardCode(), request.balance(), request.active(), request.expirationDate());
+        // See executeRedemptionSync for why this is a plain setScale, not a rounding decision.
+        BigDecimal balance = request.balance().setScale(2, RoundingMode.HALF_UP);
+        GiftCard giftCard = new GiftCard(merchant, request.giftCardCode(), balance, request.active(), request.expirationDate());
         GiftCard savedCard = giftCardRepository.save(giftCard);
+
+        ledgerService.record(savedCard, merchantId, LedgerEntryType.CREATION, savedCard.getBalance(), savedCard.getBalance(), null);
 
         log.info("Administrative Event: Gift card [{}] successfully registered into database vault.", request.giftCardCode());
 
@@ -147,5 +184,25 @@ public class GiftCardService {
                 giftCard.getExpirationDate(),
                 merchantId
         );
+    }
+
+    @Transactional(readOnly = true)
+    public List<LedgerEntryResponse> getLedger(String code) {
+        log.info("Fetching ledger for gift card with code: {}", code);
+
+        Long merchantId = currentUserContext.currentMerchantId();
+        GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, code)
+                .orElseThrow(() -> new UnknownGiftCardException("Gift card not found"));
+
+        return ledgerService.getEntriesForCard(giftCard.getId())
+                .stream()
+                .map(entry -> new LedgerEntryResponse(
+                        entry.getEntryType().name(),
+                        entry.getAmount(),
+                        entry.getBalanceAfter(),
+                        entry.getReferenceId(),
+                        entry.getCreatedAt()
+                ))
+                .toList();
     }
 }
