@@ -35,6 +35,12 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
+      - name: Create app role
+        # GitHub Actions service containers can't mount repo files at startup (unlike docker-compose's
+        # docker-entrypoint-initdb.d), so the p2p_app role that V17__restrict_app_role_privileges.sql
+        # grants to has to be created explicitly here, before Flyway runs.
+        run: PGPASSWORD=p2p psql -h localhost -U p2p -d p2p_dev -f docker/init-app-role.sql
+
       - name: Apply Flyway migrations
         run: mvn -q flyway:migrate
 
