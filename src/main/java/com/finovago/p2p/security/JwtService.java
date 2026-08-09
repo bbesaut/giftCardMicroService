@@ -28,10 +28,15 @@ public class JwtService {
     }
 
     public String generateToken(String username, List<String> roles, @Nullable Long merchantId) {
+        return generateToken(username, roles, merchantId, null);
+    }
+
+    public String generateToken(String username, List<String> roles, @Nullable Long merchantId, @Nullable Long userId) {
         return Jwts.builder()
                 .subject(username)
                 .claim("roles", roles) // roles (ex : MERCHANT, ADMIN)
                 .claim("merchantId", merchantId)
+                .claim("userId", userId)
                 .issuedAt(new Date(System.currentTimeMillis()))
                 .expiration(new Date(System.currentTimeMillis() + jwtExpirationMs))
                 .signWith(key)
@@ -49,6 +54,10 @@ public class JwtService {
 
     public Long extractMerchantId(String token) {
         return extractClaim(token, claims -> claims.get("merchantId", Long.class));
+    }
+
+    public Long extractUserId(String token) {
+        return extractClaim(token, claims -> claims.get("userId", Long.class));
     }
 
     public boolean isTokenValid(String token) {

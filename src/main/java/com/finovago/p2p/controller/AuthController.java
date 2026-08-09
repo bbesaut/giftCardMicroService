@@ -1,9 +1,11 @@
 package com.finovago.p2p.controller;
 
+import com.finovago.p2p.dto.AddMerchantUserRequest;
 import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
+import com.finovago.p2p.exception.MerchantNotFoundException;
 import com.finovago.p2p.exception.UserAlreadyExistsException;
 import com.finovago.p2p.service.AuthService;
 
@@ -91,6 +93,44 @@ public class AuthController {
             return ResponseEntity.ok(response);
         } catch (UserAlreadyExistsException e) {
             log.warn("Registration failed - email already exists: {}", sanitizeEmail(request.email()));
+            throw e;
+        }
+    }
+
+    @Operation(
+        summary = "Add a user to an existing merchant",
+        description = "Attaches an additional user account to a merchant that already exists, without creating a new Merchant. "
+                    + "Use serviceAccount=true for an automated-integration account, false (default) for a human employee account. "
+                    + "Requires authentication (JWT token) and ADMIN role."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "User added successfully",
+            content = @Content(schema = @Schema(implementation = AuthResponse.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid request body (missing or invalid fields)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"Email should be valid\"}"))),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Full authentication is required to access this resource\"}"))),
+        @ApiResponse(responseCode = "403", description = "Insufficient permissions (ADMIN role required)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Forbidden\",\"message\":\"Access is denied\"}"))),
+        @ApiResponse(responseCode = "404", description = "Merchant not found",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Not Found\",\"message\":\"Merchant not found: 42\"}"))),
+        @ApiResponse(responseCode = "409", description = "Email already registered",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Conflict\",\"message\":\"Email already registered\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
+    })
+    @PostMapping("/merchants/{merchantId}/users")
+    public ResponseEntity<AuthResponse> addMerchantUser(
+            @PathVariable Long merchantId,
+            @Valid @RequestBody AddMerchantUserRequest request) {
+        log.info("Add-user attempt for merchantId: {}, email: {}", merchantId, sanitizeEmail(request.email()));
+
+        try {
+            AuthResponse response = authService.addUserToMerchant(merchantId, request);
+            log.info("User added successfully for merchantId: {}", merchantId);
+            return ResponseEntity.ok(response);
+        } catch (UserAlreadyExistsException | MerchantNotFoundException e) {
+            log.warn("Add-user failed for merchantId {}: {}", merchantId, e.getMessage());
             throw e;
         }
     }

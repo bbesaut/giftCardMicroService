@@ -23,9 +23,13 @@ import com.finovago.p2p.dto.RedemptionRequest;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.exception.ExpiredGiftCardException;
 import com.finovago.p2p.model.GiftCard;
+import com.finovago.p2p.model.LedgerEntry;
 import com.finovago.p2p.model.Merchant;
+import com.finovago.p2p.model.Role;
+import com.finovago.p2p.model.User;
 import com.finovago.p2p.repository.GiftCardRepository;
 import com.finovago.p2p.repository.IdempotencyKeyRepository;
+import com.finovago.p2p.repository.LedgerEntryRepository;
 import com.finovago.p2p.repository.MerchantRepository;
 import com.finovago.p2p.repository.RefreshTokenRepository;
 import com.finovago.p2p.repository.UserRepository;
@@ -51,9 +55,13 @@ class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
     private UserRepository userRepository;
 
     @Autowired
+    private LedgerEntryRepository ledgerEntryRepository;
+
+    @Autowired
     private GiftCardService giftCardService;
 
     private Long merchantId;
+    private Long userId;
 
     @BeforeEach
     void setUp() {
@@ -71,8 +79,9 @@ class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
 
         Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "merchant@example.com"));
         merchantId = merchant.getId();
+        userId = userRepository.save(new User("merchant@example.com", "hashed", Role.MERCHANT, merchant)).getId();
 
-        AuthenticatedUser authenticatedUser = new AuthenticatedUser("merchant@example.com", "MERCHANT", merchantId);
+        AuthenticatedUser authenticatedUser = new AuthenticatedUser("merchant@example.com", "MERCHANT", merchantId, userId);
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(authenticatedUser, null, List.of()));
     }
@@ -98,7 +107,10 @@ class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
 
         giftCardService.createGiftCard(request);
 
-        assertTrue(giftCardRepository.findByMerchantIdAndCardCode(merchantId, giftCardCode).isPresent());
+        GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, giftCardCode).orElseThrow();
+        List<LedgerEntry> entries = ledgerEntryRepository.findByGiftCardIdOrderByCreatedAtAsc(giftCard.getId());
+        assertEquals(1, entries.size());
+        assertEquals(userId, entries.get(0).getActorUserId());
     }
 
     @Test
@@ -145,7 +157,8 @@ class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
         giftCardService.createGiftCard(new GiftCardCreateRequest(sharedCode, BigDecimal.valueOf(100.0), true, expirationDate));
 
         Merchant otherMerchant = merchantRepository.save(new Merchant("Other Merchant", "other@example.com"));
-        AuthenticatedUser otherUser = new AuthenticatedUser("other@example.com", "MERCHANT", otherMerchant.getId());
+        Long otherUserId = userRepository.save(new User("other@example.com", "hashed", Role.MERCHANT, otherMerchant)).getId();
+        AuthenticatedUser otherUser = new AuthenticatedUser("other@example.com", "MERCHANT", otherMerchant.getId(), otherUserId);
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(otherUser, null, List.of()));
 

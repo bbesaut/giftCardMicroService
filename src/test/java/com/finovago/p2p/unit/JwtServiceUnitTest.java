@@ -94,6 +94,20 @@ class JwtServiceUnitTest {
     }
 
     @Test
+    void should_extractUserId_from_tokenGeneratedWithUserId() {
+        String token = jwtService.generateToken(TEST_USERNAME, List.of("MERCHANT"), 42L, 7L);
+
+        assertEquals(7L, jwtService.extractUserId(token));
+    }
+
+    @Test
+    void should_extractNullUserId_when_notProvided() {
+        String token = jwtService.generateToken(TEST_USERNAME, List.of("MERCHANT"), 42L);
+
+        assertNull(jwtService.extractUserId(token));
+    }
+
+    @Test
     void should_validateToken_when_tokenIsValid() {
         String token = jwtService.generateToken(TEST_USERNAME, List.of("MERCHANT"), 1L);
 

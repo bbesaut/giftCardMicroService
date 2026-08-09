@@ -20,5 +20,8 @@ public record LedgerEntryResponse(
     Long referenceId,
 
     @Schema(description = "Timestamp at which this entry was recorded", example = "2026-07-23T15:30:00")
-    LocalDateTime createdAt
+    LocalDateTime createdAt,
+
+    @Schema(description = "Id of the user who triggered this operation. Null for entries recorded before this field existed.", example = "7", nullable = true)
+    Long actorUserId
 ) {}

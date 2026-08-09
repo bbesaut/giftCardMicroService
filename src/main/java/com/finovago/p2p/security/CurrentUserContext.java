@@ -18,6 +18,11 @@ public class CurrentUserContext {
         return merchantId;
     }
 
+    /** For ledger actor attribution only - not a security boundary, so null (unknown actor) is a valid outcome. */
+    public Long currentUserIdOrNull() {
+        return currentUser().userId();
+    }
+
     private AuthenticatedUser currentUser() {
         Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         if (!(principal instanceof AuthenticatedUser authenticatedUser)) {

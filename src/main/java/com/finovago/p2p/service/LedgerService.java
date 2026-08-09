@@ -24,8 +24,8 @@ public class LedgerService {
      * Appends a ledger row. Never call this outside the same transaction as the balance
      * mutation it records - the two must commit or roll back together.
      */
-    public void record(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, Long referenceId) {
-        ledgerEntryRepository.save(new LedgerEntry(giftCard, merchantId, entryType, amount, balanceAfter, referenceId));
+    public void record(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, Long referenceId, Long actorUserId) {
+        ledgerEntryRepository.save(new LedgerEntry(giftCard, merchantId, entryType, amount, balanceAfter, referenceId, actorUserId));
     }
 
     /** Gift cards whose stored balance disagrees with what their own ledger says it should be. */

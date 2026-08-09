@@ -28,7 +28,7 @@ public class OpenApiConfig {
     GroupedOpenApi adminApi() {
         return GroupedOpenApi.builder()
                 .group("admin-api")
-                .pathsToMatch("/api/v1/auth/register", "/api/v1/giftcards/list")
+                .pathsToMatch("/api/v1/auth/register", "/api/v1/auth/merchants/*/users", "/api/v1/giftcards/list")
                 .build();
     }
 }

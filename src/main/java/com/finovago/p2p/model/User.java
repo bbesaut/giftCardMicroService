@@ -36,11 +36,19 @@ public class User {
     @JoinColumn(name = "merchant_id")
     private Merchant merchant;
 
+    @Column(name = "is_service_account", nullable = false)
+    private boolean serviceAccount;
+
     public User(String email, String password, Role role, @Nullable Merchant merchant) {
+        this(email, password, role, merchant, false);
+    }
+
+    public User(String email, String password, Role role, @Nullable Merchant merchant, boolean serviceAccount) {
         this.email = email;
         this.password = password;
         this.role = role;
         this.merchant = merchant;
+        this.serviceAccount = serviceAccount;
     }
 }
 
