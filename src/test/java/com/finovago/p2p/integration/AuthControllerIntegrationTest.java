@@ -2,6 +2,7 @@ package com.finovago.p2p.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finovago.p2p.AbstractIntegrationTest;
+import com.finovago.p2p.config.PostgresTestcontainerInitializer;
 import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.model.Role;
@@ -63,6 +64,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         // gift_card has a FK to merchants; other integration test classes (e.g.
         // GiftCardServiceIntegrationTest) are non-transactional and commit rows that outlive this
         // class, so merchants must not be deleted while leftover gift cards still reference them.
+        PostgresTestcontainerInitializer.executeAsMigrator("TRUNCATE TABLE gift_card_ledger RESTART IDENTITY");
         giftCardRepository.deleteAll();
         merchantRepository.deleteAll();
         Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "merchant@example.com"));

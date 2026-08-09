@@ -1,5 +1,6 @@
 package com.finovago.p2p.model;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import jakarta.persistence.Column;
@@ -31,8 +32,8 @@ public class GiftCardHold {
     @Column(name = "merchant_id", nullable = false)
     private Long merchantId;
 
-    @Column(nullable = false)
-    private double amount;
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal amount;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -44,7 +45,7 @@ public class GiftCardHold {
     @Column(name = "expires_at", nullable = false)
     private LocalDateTime expiresAt;
 
-    public GiftCardHold(GiftCard giftCard, Long merchantId, double amount, LocalDateTime expiresAt) {
+    public GiftCardHold(GiftCard giftCard, Long merchantId, BigDecimal amount, LocalDateTime expiresAt) {
         this.giftCard = giftCard;
         this.merchantId = merchantId;
         this.amount = amount;

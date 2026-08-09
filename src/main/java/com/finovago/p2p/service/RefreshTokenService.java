@@ -5,10 +5,12 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.finovago.p2p.exception.InvalidRefreshTokenException;
 import com.finovago.p2p.model.RefreshToken;
@@ -77,6 +79,16 @@ public class RefreshTokenService {
         refreshTokenRepository.save(existing);
 
         log.debug("Refresh token revoked for user: {}", existing.getUser().getEmail());
+    }
+
+    @Transactional
+    public void deleteExpired(Instant cutoff) {
+        List<RefreshToken> expired = refreshTokenRepository.findByExpiryDateBefore(cutoff);
+        refreshTokenRepository.deleteAll(expired);
+
+        if (!expired.isEmpty()) {
+            log.info("Deleted {} expired refresh token(s)", expired.size());
+        }
     }
 
     private String hash(String rawToken) {

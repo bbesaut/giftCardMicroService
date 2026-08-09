@@ -1,5 +1,6 @@
 package com.finovago.p2p.dto;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -16,5 +17,5 @@ public record HoldResponse(
     LocalDateTime expiresAt,
 
     @Schema(description = "Gift card balance still available for new holds after this operation. Populated on reserve only; null on capture/release.", example = "50.0")
-    Double remainingAvailableBalance
+    BigDecimal remainingAvailableBalance
 ) {}
