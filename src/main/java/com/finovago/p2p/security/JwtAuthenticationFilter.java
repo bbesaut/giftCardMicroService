@@ -64,6 +64,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 if (jwtService.isTokenValid(token)) {
                     List<String> roles = jwtService.extractRoles(token);
                     Long merchantId = jwtService.extractMerchantId(token);
+                    Long userId = jwtService.extractUserId(token);
                     String role = roles.isEmpty() ? null : roles.get(0);
 
                     // Fail closed: a MERCHANT token minted before merchantId was introduced (or otherwise
@@ -78,7 +79,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         Collection<? extends GrantedAuthority> reachableRoles =
                                 roleHierarchy.getReachableGrantedAuthorities(authorities);
 
-                        AuthenticatedUser authenticatedUser = new AuthenticatedUser(username, role, merchantId);
+                        AuthenticatedUser authenticatedUser = new AuthenticatedUser(username, role, merchantId, userId);
                         UsernamePasswordAuthenticationToken authToken =
                                 new UsernamePasswordAuthenticationToken(authenticatedUser, null, reachableRoles);
 

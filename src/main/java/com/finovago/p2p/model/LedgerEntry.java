@@ -46,16 +46,24 @@ public class LedgerEntry {
     @Column(name = "reference_id")
     private Long referenceId;
 
+    @Column(name = "actor_user_id")
+    private Long actorUserId;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
     public LedgerEntry(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, @Nullable Long referenceId) {
+        this(giftCard, merchantId, entryType, amount, balanceAfter, referenceId, null);
+    }
+
+    public LedgerEntry(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, @Nullable Long referenceId, @Nullable Long actorUserId) {
         this.giftCard = giftCard;
         this.merchantId = merchantId;
         this.entryType = entryType;
         this.amount = amount;
         this.balanceAfter = balanceAfter;
         this.referenceId = referenceId;
+        this.actorUserId = actorUserId;
         this.createdAt = LocalDateTime.now();
     }
 }

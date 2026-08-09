@@ -96,7 +96,7 @@ class LedgerIntegrationTest extends AbstractIntegrationTest {
 
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(
-                        new AuthenticatedUser("merchant@example.com", "MERCHANT", merchantId), null, List.of()));
+                        new AuthenticatedUser("merchant@example.com", "MERCHANT", merchantId, null), null, List.of()));
     }
 
     @AfterEach
@@ -206,7 +206,7 @@ class LedgerIntegrationTest extends AbstractIntegrationTest {
         Merchant otherMerchant = merchantRepository.save(new Merchant("Other Merchant", "other@example.com"));
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(
-                        new AuthenticatedUser("other@example.com", "MERCHANT", otherMerchant.getId()), null, List.of()));
+                        new AuthenticatedUser("other@example.com", "MERCHANT", otherMerchant.getId(), null), null, List.of()));
         giftCardService.createGiftCard(new GiftCardCreateRequest(CARD_CODE, BigDecimal.valueOf(200.0), true, LocalDate.now().plusYears(1)));
 
         List<LedgerEntry> allEntries = ledgerEntryRepository.findAll();

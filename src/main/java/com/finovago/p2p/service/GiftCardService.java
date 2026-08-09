@@ -53,6 +53,9 @@ public class GiftCardService {
 
     public CompletableFuture<RedemptionResponse> redeemGiftCardAsync(RedemptionRequest request, String idempotencyKey) {
         Long merchantId = currentUserContext.currentMerchantId();
+        // Captured on the calling thread, same as merchantId above: supplyAsync runs on taskExecutor,
+        // where SecurityContextHolder (and therefore CurrentUserContext) is not populated.
+        Long actorUserId = currentUserContext.currentUserIdOrNull();
         return CompletableFuture.supplyAsync(() -> {
             String requestHash = idempotencyKeyService.hashRequest(request.giftCardCode(), request.amount().setScale(2, RoundingMode.HALF_UP).toPlainString());
 
@@ -63,7 +66,7 @@ public class GiftCardService {
             }
 
             try {
-                RedemptionResponse response = executeRedemptionSync(merchantId, request.giftCardCode(), request.amount());
+                RedemptionResponse response = executeRedemptionSync(merchantId, request.giftCardCode(), request.amount(), actorUserId);
                 idempotencyKeyService.complete(merchantId, idempotencyKey, response);
                 return response;
             } catch (RuntimeException e) {
@@ -75,6 +78,11 @@ public class GiftCardService {
 
     @Transactional
     public RedemptionResponse executeRedemptionSync(Long merchantId, String code, BigDecimal amount) {
+        return executeRedemptionSync(merchantId, code, amount, null);
+    }
+
+    @Transactional
+    public RedemptionResponse executeRedemptionSync(Long merchantId, String code, BigDecimal amount, Long actorUserId) {
 
         log.info("Processing database validation for card code: {}", code);
 
@@ -113,7 +121,7 @@ public class GiftCardService {
 
         giftCardRepository.save(giftCard);
 
-        ledgerService.record(giftCard, merchantId, LedgerEntryType.REDEMPTION, deducted, giftCard.getBalance(), null);
+        ledgerService.record(giftCard, merchantId, LedgerEntryType.REDEMPTION, deducted, giftCard.getBalance(), null, actorUserId);
 
         long duration = System.currentTimeMillis() - startTime;
 
@@ -148,7 +156,7 @@ public class GiftCardService {
         GiftCard giftCard = new GiftCard(merchant, request.giftCardCode(), balance, request.active(), request.expirationDate());
         GiftCard savedCard = giftCardRepository.save(giftCard);
 
-        ledgerService.record(savedCard, merchantId, LedgerEntryType.CREATION, savedCard.getBalance(), savedCard.getBalance(), null);
+        ledgerService.record(savedCard, merchantId, LedgerEntryType.CREATION, savedCard.getBalance(), savedCard.getBalance(), null, currentUserContext.currentUserIdOrNull());
 
         log.info("Administrative Event: Gift card [{}] successfully registered into database vault.", request.giftCardCode());
 
@@ -201,7 +209,8 @@ public class GiftCardService {
                         entry.getAmount(),
                         entry.getBalanceAfter(),
                         entry.getReferenceId(),
-                        entry.getCreatedAt()
+                        entry.getCreatedAt(),
+                        entry.getActorUserId()
                 ))
                 .toList();
     }

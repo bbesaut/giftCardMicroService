@@ -118,7 +118,7 @@ public class AuthService {
     private AuthResponse issueTokens(User user) {
         List<String> roles = List.of(user.getRole().name());
         Long merchantId = user.getMerchant() != null ? user.getMerchant().getId() : null;
-        String accessToken = jwtService.generateToken(user.getEmail(), roles, merchantId);
+        String accessToken = jwtService.generateToken(user.getEmail(), roles, merchantId, user.getId());
         String refreshToken = refreshTokenService.createRefreshToken(user);
         log.debug("New access and refresh tokens generated for user: {}", user.getEmail());
         return new AuthResponse(accessToken, refreshToken);

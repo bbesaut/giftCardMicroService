@@ -67,7 +67,7 @@ class AuthServiceUnitTest {
 
         when(userRepository.findByEmail("client@example.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("password123", "hashed")).thenReturn(true);
-        when(jwtService.generateToken(eq("client@example.com"), anyList(), any())).thenReturn("access-token");
+        when(jwtService.generateToken(eq("client@example.com"), anyList(), any(), any())).thenReturn("access-token");
         when(refreshTokenService.createRefreshToken(user)).thenReturn("refresh-token");
 
         AuthResponse response = authService.login(request);
@@ -101,7 +101,7 @@ class AuthServiceUnitTest {
         RefreshTokenRequest request = new RefreshTokenRequest("old-refresh-token");
 
         when(refreshTokenService.validateAndRotate("old-refresh-token")).thenReturn(user);
-        when(jwtService.generateToken(eq("client@example.com"), anyList(), any())).thenReturn("new-access-token");
+        when(jwtService.generateToken(eq("client@example.com"), anyList(), any(), any())).thenReturn("new-access-token");
         when(refreshTokenService.createRefreshToken(user)).thenReturn("new-refresh-token");
 
         AuthResponse response = authService.refresh(request);
@@ -126,7 +126,7 @@ class AuthServiceUnitTest {
         when(userRepository.findByEmail("newuser@example.com")).thenReturn(Optional.empty());
         when(merchantRepository.save(any(Merchant.class))).thenReturn(merchant());
         when(passwordEncoder.encode("password123")).thenReturn("hashed");
-        when(jwtService.generateToken(eq("newuser@example.com"), anyList(), any())).thenReturn("access-token");
+        when(jwtService.generateToken(eq("newuser@example.com"), anyList(), any(), any())).thenReturn("access-token");
         when(refreshTokenService.createRefreshToken(any(User.class))).thenReturn("refresh-token");
 
         AuthResponse response = authService.register(request);
@@ -155,7 +155,7 @@ class AuthServiceUnitTest {
         when(userRepository.findByEmail("employee@example.com")).thenReturn(Optional.empty());
         when(merchantRepository.findById(1L)).thenReturn(Optional.of(merchant));
         when(passwordEncoder.encode("password123")).thenReturn("hashed");
-        when(jwtService.generateToken(eq("employee@example.com"), anyList(), any())).thenReturn("access-token");
+        when(jwtService.generateToken(eq("employee@example.com"), anyList(), any(), any())).thenReturn("access-token");
         when(refreshTokenService.createRefreshToken(any(User.class))).thenReturn("refresh-token");
 
         AuthResponse response = authService.addUserToMerchant(1L, request);
