@@ -213,7 +213,7 @@
                                     <td></td>
                                 </tr>
                                 <tr>
-                                    <td><span id="reference_id">reference_id</span></td>
+                                    <td><span id="hold_id">hold_id</span></td>
                                     <td>int8</td>
                                     <td>19</td>
                                     <td title='nullable'>√</td>
@@ -242,6 +242,27 @@
                                     </td>
                                     <td>
                                         <table border='0' cellspacing='0' cellpadding='0'>
+                                        </table>
+                                    </td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td class='foreignKey' title='Foreign Key'><i class='icon ion-key iconkey' style='padding-left: 5px;'></i><span id="actor_user_id">actor_user_id</span></td>
+                                    <td>int8</td>
+                                    <td>19</td>
+                                    <td title='nullable'>√</td>
+                                    <td title=''></td>
+                                    <td>null</td>
+                                    <td>
+                                        <table border='0' cellspacing='0' cellpadding='0'>
+                                        </table>
+                                    </td>
+                                    <td>
+                                        <table border='0' cellspacing='0' cellpadding='0'>
+                                            <tr>
+                                                <td title="gift_card_ledger.actor_user_id references users.id via gift_card_ledger_actor_user_id_fkey"><a href='users.html'>users</a><span class='relatedKey'>.id</span></td>
+                                                <td class="constraint detail">gift_card_ledger_actor_user_id_fkey<span title='Null on delete:&#10;Foreign key to parent set to NULL when parent deleted'>N</span></td>
+                                            </tr>
                                         </table>
                                     </td>
                                     <td></td>
@@ -275,6 +296,12 @@
                                     <td>Primary key</td>
                                     <td><span title='Ascending'>Asc</span></td>
                                     <td>id</td>
+                                </tr>
+                                <tr>
+                                    <td title='Indexed'>idx_gift_card_ledger_actor_user_id</td>
+                                    <td>Performance</td>
+                                    <td><span title='Ascending'>Asc</span></td>
+                                    <td>actor_user_id</td>
                                 </tr>
                                 <tr>
                                     <td title='Indexed'>idx_gift_card_ledger_giftcard_created_at</td>
@@ -337,20 +364,22 @@
                                 <div class="tab-content no-padding">
                                     <div class="chart tab-pane active" id="oneDegreeImg-chart" style="position: relative; overflow-x:auto;">
                                         <map id="oneDegreeRelationshipsDiagram" name="oneDegreeRelationshipsDiagram">
-<area shape="rect" id="node1" href="gift_card.html" target="_top" title="gift_card" alt="" coords="228,5,417,181">
-<area shape="rect" id="node2" href="merchants.html" target="_top" title="merchants" alt="" coords="5,112,184,229">
-<area shape="rect" id="node3" href="gift_card_ledger.html" target="_top" title="gift_card_ledger" alt="" coords="461,36,796,340">
+<area shape="rect" id="node1" href="gift_card.html" target="_top" title="gift_card" alt="" coords="241,13,431,189">
+<area shape="rect" id="node2" href="merchants.html" target="_top" title="merchants" alt="" coords="5,167,184,284">
+<area shape="rect" id="node3" href="gift_card_ledger.html" target="_top" title="gift_card_ledger" alt="" coords="488,5,823,339">
+<area shape="rect" id="node4" href="users.html" target="_top" title="users" alt="" coords="228,243,444,419">
 </map>
                                         <a name='diagram'><img id="oneDegreeImg" src="../diagrams/tables/gift_card_ledger.1degree.png" usemap="#oneDegreeRelationshipsDiagram" class="diagram" border="0" align="left"></a>
                                     </div>
                                     <div class="chart tab-pane " id="twodegreesDegreeImg-chart" style="position: relative; overflow-x:auto;">
                                         <map id="twoDegreesRelationshipsDiagram" name="twoDegreesRelationshipsDiagram">
-<area shape="rect" id="node1" href="gift_card.html" target="_top" title="gift_card" alt="" coords="251,63,440,239">
-<area shape="rect" id="node2" href="merchants.html" target="_top" title="merchants" alt="" coords="5,216,184,333">
+<area shape="rect" id="node1" href="gift_card.html" target="_top" title="gift_card" alt="" coords="251,93,440,269">
+<area shape="rect" id="node2" href="merchants.html" target="_top" title="merchants" alt="" coords="5,247,184,364">
 <area shape="rect" id="node3" href="gift_card_hold.html" target="_top" title="gift_card_hold" alt="" coords="572,5,776,93">
-<area shape="rect" id="node4" href="gift_card_ledger.html" target="_top" title="gift_card_ledger" alt="" coords="507,140,841,444">
-<area shape="rect" id="node5" href="idempotency_key.html" target="_top" title="idempotency_key" alt="" coords="228,292,463,380">
-<area shape="rect" id="node6" href="users.html" target="_top" title="users" alt="" coords="271,397,419,485">
+<area shape="rect" id="node4" href="gift_card_ledger.html" target="_top" title="gift_card_ledger" alt="" coords="507,111,841,444">
+<area shape="rect" id="node5" href="users.html" target="_top" title="users" alt="" coords="237,343,453,519">
+<area shape="rect" id="node6" href="idempotency_key.html" target="_top" title="idempotency_key" alt="" coords="228,536,463,624">
+<area shape="rect" id="node7" href="refresh_tokens.html" target="_top" title="refresh_tokens" alt="" coords="567,461,781,549">
 </map>
                                         <a name='diagram'><img id="twodegreesDegreeImg" src="../diagrams/tables/gift_card_ledger.2degrees.png" usemap="#twoDegreesRelationshipsDiagram" class="diagram" border="0" align="left"></a>
                                     </div>

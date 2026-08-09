@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <database name="p2p_dev" schema="public" type="PostgreSQL - 17.10">
    <tables>
-      <table name="flyway_schema_history" numRows="16" remarks="" schema="public" type="TABLE">
+      <table name="flyway_schema_history" numRows="20" remarks="" schema="public" type="TABLE">
          <column autoUpdated="false" defaultValue="null" digits="0" id="0" name="installed_rank" nullable="false" remarks="" size="10" type="int4" typeCode="4"/>
          <column autoUpdated="false" defaultValue="null" digits="0" id="1" name="version" nullable="true" remarks="" size="50" type="varchar" typeCode="12"/>
          <column autoUpdated="false" defaultValue="null" digits="0" id="2" name="description" nullable="false" remarks="" size="200" type="varchar" typeCode="12"/>
@@ -86,11 +86,17 @@
          <column autoUpdated="false" defaultValue="null" digits="0" id="3" name="entry_type" nullable="false" remarks="" size="20" type="varchar" typeCode="12"/>
          <column autoUpdated="false" defaultValue="null" digits="2" id="4" name="amount" nullable="false" remarks="" size="19" type="numeric" typeCode="2"/>
          <column autoUpdated="false" defaultValue="null" digits="2" id="5" name="balance_after" nullable="false" remarks="" size="19" type="numeric" typeCode="2"/>
-         <column autoUpdated="false" defaultValue="null" digits="0" id="6" name="reference_id" nullable="true" remarks="" size="19" type="int8" typeCode="-5"/>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="6" name="hold_id" nullable="true" remarks="" size="19" type="int8" typeCode="-5"/>
          <column autoUpdated="false" defaultValue="now()" digits="6" id="7" name="created_at" nullable="false" remarks="" size="29" type="timestamp" typeCode="93"/>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="8" name="actor_user_id" nullable="true" remarks="" size="19" type="int8" typeCode="-5">
+            <parent column="id" foreignKey="gift_card_ledger_actor_user_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="users"/>
+         </column>
          <primaryKey column="id" sequenceNumberInPK="1"/>
          <index name="gift_card_ledger_pkey" unique="true">
             <column ascending="true" name="id"/>
+         </index>
+         <index name="idx_gift_card_ledger_actor_user_id" unique="false">
+            <column ascending="true" name="actor_user_id"/>
          </index>
          <index name="idx_gift_card_ledger_giftcard_created_at" unique="false">
             <column ascending="true" name="gift_card_id"/>
@@ -170,6 +176,7 @@
       </table>
       <table name="users" numRows="1" remarks="" schema="public" type="TABLE">
          <column autoUpdated="true" defaultValue="null" digits="0" id="0" name="id" nullable="false" remarks="" size="19" type="int8" typeCode="-5">
+            <child column="actor_user_id" foreignKey="gift_card_ledger_actor_user_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="gift_card_ledger"/>
             <child column="user_id" foreignKey="fk_refresh_tokens_user" implied="false" onDeleteCascade="false" schema="public" table="refresh_tokens"/>
          </column>
          <column autoUpdated="false" defaultValue="null" digits="0" id="1" name="email" nullable="false" remarks="" size="255" type="varchar" typeCode="12"/>
@@ -178,6 +185,7 @@
          <column autoUpdated="false" defaultValue="null" digits="0" id="4" name="merchant_id" nullable="true" remarks="" size="19" type="int8" typeCode="-5">
             <parent column="id" foreignKey="users_merchant_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="merchants"/>
          </column>
+         <column autoUpdated="false" defaultValue="false" digits="0" id="5" name="is_service_account" nullable="false" remarks="" size="1" type="bool" typeCode="-7"/>
          <primaryKey column="id" sequenceNumberInPK="1"/>
          <index name="users_pkey" unique="true">
             <column ascending="true" name="id"/>

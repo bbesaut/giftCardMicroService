@@ -112,6 +112,10 @@
                                     <td>
                                         <table border='0' cellspacing='0' cellpadding='0'>
                                             <tr>
+                                                <td title="gift_card_ledger.actor_user_id references users.id via gift_card_ledger_actor_user_id_fkey"><a href='gift_card_ledger.html'>gift_card_ledger</a><span class='relatedKey'>.actor_user_id</span></td>
+                                                <td class="constraint detail">gift_card_ledger_actor_user_id_fkey<span title='Null on delete:&#10;Foreign key to parent set to NULL when parent deleted'>N</span></td>
+                                            </tr>
+                                            <tr>
                                                 <td title="refresh_tokens.user_id references users.id via fk_refresh_tokens_user"><a href='refresh_tokens.html'>refresh_tokens</a><span class='relatedKey'>.user_id</span></td>
                                                 <td class="constraint detail">fk_refresh_tokens_user<span title='Restrict delete:&#10;Parent cannot be deleted if children exist'>R</span></td>
                                             </tr>
@@ -191,6 +195,23 @@
                                                 <td title="users.merchant_id references merchants.id via users_merchant_id_fkey"><a href='merchants.html'>merchants</a><span class='relatedKey'>.id</span></td>
                                                 <td class="constraint detail">users_merchant_id_fkey<span title='Restrict delete:&#10;Parent cannot be deleted if children exist'>R</span></td>
                                             </tr>
+                                        </table>
+                                    </td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td><span id="is_service_account">is_service_account</span></td>
+                                    <td>bool</td>
+                                    <td>1</td>
+                                    <td title=''></td>
+                                    <td title=''></td>
+                                    <td>false</td>
+                                    <td>
+                                        <table border='0' cellspacing='0' cellpadding='0'>
+                                        </table>
+                                    </td>
+                                    <td>
+                                        <table border='0' cellspacing='0' cellpadding='0'>
                                         </table>
                                     </td>
                                     <td></td>
@@ -286,21 +307,22 @@
                                 <div class="tab-content no-padding">
                                     <div class="chart tab-pane active" id="oneDegreeImg-chart" style="position: relative; overflow-x:auto;">
                                         <map id="oneDegreeRelationshipsDiagram" name="oneDegreeRelationshipsDiagram">
-<area shape="rect" id="node1" href="refresh_tokens.html" target="_top" title="refresh_tokens" alt="" coords="543,5,757,211">
-<area shape="rect" id="node2" href="users.html" target="_top" title="users" alt="" coords="228,61,499,277">
-<area shape="rect" id="node3" href="merchants.html" target="_top" title="merchants" alt="" coords="5,181,184,299">
+<area shape="rect" id="node1" href="gift_card_ledger.html" target="_top" title="gift_card_ledger" alt="" coords="599,5,820,240">
+<area shape="rect" id="node2" href="users.html" target="_top" title="users" alt="" coords="228,140,555,385">
+<area shape="rect" id="node3" href="merchants.html" target="_top" title="merchants" alt="" coords="5,163,184,280">
+<area shape="rect" id="node4" href="refresh_tokens.html" target="_top" title="refresh_tokens" alt="" coords="602,257,817,463">
 </map>
                                         <a name='diagram'><img id="oneDegreeImg" src="../diagrams/tables/users.1degree.png" usemap="#oneDegreeRelationshipsDiagram" class="diagram" border="0" align="left"></a>
                                     </div>
                                     <div class="chart tab-pane " id="twodegreesDegreeImg-chart" style="position: relative; overflow-x:auto;">
                                         <map id="twoDegreesRelationshipsDiagram" name="twoDegreesRelationshipsDiagram">
-<area shape="rect" id="node1" href="gift_card.html" target="_top" title="gift_card" alt="" coords="282,69,445,157">
-<area shape="rect" id="node2" href="merchants.html" target="_top" title="merchants" alt="" coords="5,135,184,252">
-<area shape="rect" id="node3" href="gift_card_hold.html" target="_top" title="gift_card_hold" alt="" coords="551,5,755,93">
-<area shape="rect" id="node4" href="gift_card_ledger.html" target="_top" title="gift_card_ledger" alt="" coords="543,128,764,216">
-<area shape="rect" id="node5" href="idempotency_key.html" target="_top" title="idempotency_key" alt="" coords="246,211,481,299">
-<area shape="rect" id="node6" href="refresh_tokens.html" target="_top" title="refresh_tokens" alt="" coords="546,260,761,465">
-<area shape="rect" id="node7" href="users.html" target="_top" title="users" alt="" coords="228,316,499,532">
+<area shape="rect" id="node1" href="gift_card.html" target="_top" title="gift_card" alt="" coords="310,93,473,181">
+<area shape="rect" id="node2" href="merchants.html" target="_top" title="merchants" alt="" coords="5,159,184,276">
+<area shape="rect" id="node3" href="gift_card_hold.html" target="_top" title="gift_card_hold" alt="" coords="607,5,811,93">
+<area shape="rect" id="node4" href="gift_card_ledger.html" target="_top" title="gift_card_ledger" alt="" coords="599,111,820,345">
+<area shape="rect" id="node5" href="users.html" target="_top" title="users" alt="" coords="228,235,555,480">
+<area shape="rect" id="node6" href="idempotency_key.html" target="_top" title="idempotency_key" alt="" coords="274,497,509,585">
+<area shape="rect" id="node7" href="refresh_tokens.html" target="_top" title="refresh_tokens" alt="" coords="602,363,817,568">
 </map>
                                         <a name='diagram'><img id="twodegreesDegreeImg" src="../diagrams/tables/users.2degrees.png" usemap="#twoDegreesRelationshipsDiagram" class="diagram" border="0" align="left"></a>
                                     </div>
