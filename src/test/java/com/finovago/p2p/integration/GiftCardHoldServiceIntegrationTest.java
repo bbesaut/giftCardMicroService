@@ -16,6 +16,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import com.finovago.p2p.AbstractIntegrationTest;
+import com.finovago.p2p.config.PostgresTestcontainerInitializer;
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.HoldResponse;
 import com.finovago.p2p.dto.ReserveRequest;
@@ -29,7 +30,6 @@ import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.repository.GiftCardHoldRepository;
 import com.finovago.p2p.repository.GiftCardRepository;
 import com.finovago.p2p.repository.IdempotencyKeyRepository;
-import com.finovago.p2p.repository.LedgerEntryRepository;
 import com.finovago.p2p.repository.MerchantRepository;
 import com.finovago.p2p.repository.RefreshTokenRepository;
 import com.finovago.p2p.repository.UserRepository;
@@ -48,9 +48,6 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private IdempotencyKeyRepository idempotencyKeyRepository;
-
-    @Autowired
-    private LedgerEntryRepository ledgerEntryRepository;
 
     @Autowired
     private MerchantRepository merchantRepository;
@@ -77,7 +74,7 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
     void setUp() {
         idempotencyKeyRepository.deleteAll();
         giftCardHoldRepository.deleteAll();
-        ledgerEntryRepository.deleteAll();
+        PostgresTestcontainerInitializer.executeAsMigrator("TRUNCATE TABLE gift_card_ledger RESTART IDENTITY");
         giftCardRepository.deleteAll();
         refreshTokenRepository.deleteAll();
         userRepository.deleteAll();

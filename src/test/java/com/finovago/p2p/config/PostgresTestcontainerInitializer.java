@@ -1,5 +1,9 @@
 package com.finovago.p2p.config;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.Statement;
+
 import org.springframework.boot.test.util.TestPropertyValues;
 import org.springframework.context.ApplicationContextInitializer;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -29,6 +33,11 @@ public class PostgresTestcontainerInitializer implements ApplicationContextIniti
 
     private static final PostgreSQLContainer<?> postgres;
 
+    // Least-privilege runtime role, mirroring p2p_app in dev/prod (see V17__restrict_app_role_privileges.sql).
+    // postgres.getUsername()/getPassword() (p2p_user) stays the migration/owner role, used only for Flyway.
+    private static final String APP_ROLE = "p2p_app";
+    private static final String APP_ROLE_PASSWORD = "p2p_app_password";
+
     // Match the version used on Neon in production
     // Production: PostgreSQL 18.4 (verify in: Neon console > Connection details)
     // For Docker images, use closest stable version available
@@ -44,6 +53,7 @@ public class PostgresTestcontainerInitializer implements ApplicationContextIniti
                     .withPassword("p2p_password");
 
             postgres.start();
+            createAppRole();
 
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 try {
@@ -75,12 +85,37 @@ public class PostgresTestcontainerInitializer implements ApplicationContextIniti
         }
     }
 
+    // Creates the restricted role before Flyway runs, so V17__restrict_app_role_privileges.sql
+    // (which assumes the role already exists - see that migration for why) has something to grant to.
+    private static void createAppRole() throws Exception {
+        executeAsMigrator("CREATE ROLE " + APP_ROLE + " LOGIN PASSWORD '" + APP_ROLE_PASSWORD + "'");
+    }
+
+    // Test-only escape hatch for state reset between test methods (e.g. TRUNCATE gift_card_ledger).
+    // p2p_app deliberately can't do this at runtime (see V17) - only the migration/owner role can,
+    // same as a DBA would reset a sandbox DB, never the application itself.
+    public static void executeAsMigrator(String sql) {
+        try (Connection connection = DriverManager.getConnection(
+                postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+             Statement statement = connection.createStatement()) {
+            statement.execute(sql);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to execute as migrator role: " + sql, e);
+        }
+    }
+
     @Override
     public void initialize(ConfigurableApplicationContext applicationContext) {
         TestPropertyValues.of(
+                // Migration role: owns the schema, runs Flyway.
+                "spring.flyway.url=" + postgres.getJdbcUrl(),
+                "spring.flyway.user=" + postgres.getUsername(),
+                "spring.flyway.password=" + postgres.getPassword(),
+
+                // App role: what the running application actually connects as at runtime.
                 "spring.datasource.url=" + postgres.getJdbcUrl(),
-                "spring.datasource.username=" + postgres.getUsername(),
-                "spring.datasource.password=" + postgres.getPassword(),
+                "spring.datasource.username=" + APP_ROLE,
+                "spring.datasource.password=" + APP_ROLE_PASSWORD,
                 "spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect",
                 "spring.datasource.driver-class-name=org.postgresql.Driver"
         ).applyTo(applicationContext.getEnvironment());
