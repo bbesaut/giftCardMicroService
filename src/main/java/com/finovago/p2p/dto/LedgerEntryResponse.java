@@ -16,8 +16,8 @@ public record LedgerEntryResponse(
     @Schema(description = "Gift card balance immediately after this operation", example = "100.00")
     BigDecimal balanceAfter,
 
-    @Schema(description = "Identifier of the related hold, if this entry stems from a hold capture/release", example = "42")
-    Long referenceId,
+    @Schema(description = "Identifier of the related hold, if this entry stems from a hold placement/capture/release", example = "42", nullable = true)
+    Long holdId,
 
     @Schema(description = "Timestamp at which this entry was recorded", example = "2026-07-23T15:30:00")
     LocalDateTime createdAt,

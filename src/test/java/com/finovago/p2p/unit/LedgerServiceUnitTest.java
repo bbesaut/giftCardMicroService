@@ -56,18 +56,18 @@ class LedgerServiceUnitTest {
         assertEquals(LedgerEntryType.REDEMPTION, saved.getEntryType());
         assertEquals(0, BigDecimal.valueOf(30.0).compareTo(saved.getAmount()));
         assertEquals(0, BigDecimal.valueOf(70.0).compareTo(saved.getBalanceAfter()));
-        assertEquals(42L, saved.getReferenceId());
+        assertEquals(42L, saved.getHoldId());
         assertEquals(7L, saved.getActorUserId());
     }
 
     @Test
-    void record_savesLedgerEntry_withNullReferenceId() {
+    void record_savesLedgerEntry_withNullHoldId() {
         ledgerService.record(giftCard, 1L, LedgerEntryType.CREATION, BigDecimal.valueOf(100.0), BigDecimal.valueOf(100.0), null, null);
 
         ArgumentCaptor<LedgerEntry> captor = ArgumentCaptor.forClass(LedgerEntry.class);
         verify(ledgerEntryRepository).save(captor.capture());
 
-        assertNull(captor.getValue().getReferenceId());
+        assertNull(captor.getValue().getHoldId());
         assertNull(captor.getValue().getActorUserId());
     }
 
