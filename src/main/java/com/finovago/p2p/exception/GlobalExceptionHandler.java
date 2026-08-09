@@ -194,6 +194,18 @@ public class GlobalExceptionHandler {
             ));
 }
 
+    @ExceptionHandler(MerchantNotFoundException.class)
+    public ResponseEntity<Object> handleMerchantNotFoundException(MerchantNotFoundException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(Map.of(
+                    "error", "Not Found",
+                    "message", ex.getMessage()
+                ));
+    }
+
     @ExceptionHandler(UserAlreadyExistsException.class)
     public ResponseEntity<Object> handleUserAlreadyExistsException(UserAlreadyExistsException ex) {
         log.warn(ex.getMessage());

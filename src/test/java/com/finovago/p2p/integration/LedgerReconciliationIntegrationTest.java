@@ -73,7 +73,7 @@ class LedgerReconciliationIntegrationTest extends AbstractIntegrationTest {
 
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(
-                        new AuthenticatedUser("merchant@example.com", "MERCHANT", merchantId), null, List.of()));
+                        new AuthenticatedUser("merchant@example.com", "MERCHANT", merchantId, null), null, List.of()));
     }
 
     @AfterEach

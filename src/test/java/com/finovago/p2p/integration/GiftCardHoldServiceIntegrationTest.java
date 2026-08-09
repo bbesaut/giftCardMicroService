@@ -26,10 +26,14 @@ import com.finovago.p2p.exception.InsufficientAvailableBalanceException;
 import com.finovago.p2p.model.GiftCard;
 import com.finovago.p2p.model.GiftCardHold;
 import com.finovago.p2p.model.HoldStatus;
+import com.finovago.p2p.model.LedgerEntry;
 import com.finovago.p2p.model.Merchant;
+import com.finovago.p2p.model.Role;
+import com.finovago.p2p.model.User;
 import com.finovago.p2p.repository.GiftCardHoldRepository;
 import com.finovago.p2p.repository.GiftCardRepository;
 import com.finovago.p2p.repository.IdempotencyKeyRepository;
+import com.finovago.p2p.repository.LedgerEntryRepository;
 import com.finovago.p2p.repository.MerchantRepository;
 import com.finovago.p2p.repository.RefreshTokenRepository;
 import com.finovago.p2p.repository.UserRepository;
@@ -67,7 +71,11 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
     @Autowired
     private HoldExpirationScheduler holdExpirationScheduler;
 
+    @Autowired
+    private LedgerEntryRepository ledgerEntryRepository;
+
     private Long merchantId;
+    private Long userId;
     private static final String CARD_CODE = "HOLD-CARD";
 
     @BeforeEach
@@ -82,10 +90,11 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
 
         Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "merchant@example.com"));
         merchantId = merchant.getId();
+        userId = userRepository.save(new User("merchant@example.com", "hashed", Role.MERCHANT, merchant)).getId();
 
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(
-                        new AuthenticatedUser("merchant@example.com", "MERCHANT", merchantId), null, List.of()));
+                        new AuthenticatedUser("merchant@example.com", "MERCHANT", merchantId, userId), null, List.of()));
 
         giftCardService.createGiftCard(new GiftCardCreateRequest(CARD_CODE, BigDecimal.valueOf(100.0), true, LocalDate.now().plusYears(1)));
     }
@@ -110,6 +119,10 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
         assertEquals("PENDING", response.status());
         assertMoneyEquals(BigDecimal.valueOf(60.0), response.remainingAvailableBalance());
         assertMoneyEquals(BigDecimal.valueOf(100.0), reloadCard().getBalance());
+
+        List<LedgerEntry> entries = ledgerEntryRepository.findByGiftCardIdOrderByCreatedAtAsc(reloadCard().getId());
+        LedgerEntry holdPlacedEntry = entries.get(entries.size() - 1);
+        assertEquals(userId, holdPlacedEntry.getActorUserId());
     }
 
     @Test
@@ -192,7 +205,7 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
         Merchant otherMerchant = merchantRepository.save(new Merchant("Other Merchant", "other@example.com"));
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(
-                        new AuthenticatedUser("other@example.com", "MERCHANT", otherMerchant.getId()), null, List.of()));
+                        new AuthenticatedUser("other@example.com", "MERCHANT", otherMerchant.getId(), null), null, List.of()));
 
         assertThrows(HoldNotFoundException.class, () -> giftCardHoldService.capture(reserved.holdId()));
         assertThrows(HoldNotFoundException.class, () -> giftCardHoldService.release(reserved.holdId()));
