@@ -208,7 +208,7 @@ public class GiftCardService {
                         entry.getEntryType().name(),
                         entry.getAmount(),
                         entry.getBalanceAfter(),
-                        entry.getReferenceId(),
+                        entry.getHoldId(),
                         entry.getCreatedAt(),
                         entry.getActorUserId()
                 ))
