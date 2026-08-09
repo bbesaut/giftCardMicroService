@@ -12,10 +12,15 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 import com.finovago.p2p.AbstractIntegrationTest;
+import com.finovago.p2p.config.PostgresTestcontainerInitializer;
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.HoldResponse;
 import com.finovago.p2p.dto.RedemptionRequest;
@@ -66,6 +71,9 @@ class LedgerIntegrationTest extends AbstractIntegrationTest {
     @Autowired
     private GiftCardHoldService giftCardHoldService;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     private Long merchantId;
     private static final String CARD_CODE = "LEDGER-CARD";
 
@@ -75,7 +83,9 @@ class LedgerIntegrationTest extends AbstractIntegrationTest {
         // @Transactional - a test-managed transaction wouldn't be visible to that thread.
         idempotencyKeyRepository.deleteAll();
         giftCardHoldRepository.deleteAll();
-        ledgerEntryRepository.deleteAll();
+        // p2p_app (the app role) can't DELETE from gift_card_ledger by design (see
+        // V17__restrict_app_role_privileges.sql) - only the migration/owner role can reset it for tests.
+        PostgresTestcontainerInitializer.executeAsMigrator("TRUNCATE TABLE gift_card_ledger RESTART IDENTITY");
         giftCardRepository.deleteAll();
         refreshTokenRepository.deleteAll();
         userRepository.deleteAll();
@@ -204,5 +214,27 @@ class LedgerIntegrationTest extends AbstractIntegrationTest {
 
         long merchantIdsRepresented = allEntries.stream().map(LedgerEntry::getMerchantId).distinct().count();
         assertEquals(2, merchantIdsRepresented);
+    }
+
+    @Test
+    void gift_card_ledger_isAppendOnly_updateIsRejectedByDatabase() {
+        giftCardService.createGiftCard(new GiftCardCreateRequest(CARD_CODE, BigDecimal.valueOf(100.0), true, LocalDate.now().plusYears(1)));
+        LedgerEntry entry = ledgerEntryRepository.save(
+                new LedgerEntry(reloadCard(), merchantId, LedgerEntryType.CREATION,
+                        BigDecimal.valueOf(100.0), BigDecimal.valueOf(100.0), null));
+
+        assertThrows(DataAccessException.class, () -> jdbcTemplate.update(
+                "UPDATE gift_card_ledger SET amount = 999 WHERE id = ?", entry.getId()));
+    }
+
+    @Test
+    void gift_card_ledger_isAppendOnly_deleteIsRejectedByDatabase() {
+        giftCardService.createGiftCard(new GiftCardCreateRequest(CARD_CODE, BigDecimal.valueOf(100.0), true, LocalDate.now().plusYears(1)));
+        LedgerEntry entry = ledgerEntryRepository.save(
+                new LedgerEntry(reloadCard(), merchantId, LedgerEntryType.CREATION,
+                        BigDecimal.valueOf(100.0), BigDecimal.valueOf(100.0), null));
+
+        assertThrows(DataAccessException.class, () -> jdbcTemplate.update(
+                "DELETE FROM gift_card_ledger WHERE id = ?", entry.getId()));
     }
 }
