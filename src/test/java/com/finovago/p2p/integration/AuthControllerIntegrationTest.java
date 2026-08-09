@@ -36,6 +36,8 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
     private static final String PASSWORD = "securePassword123";
     private static final String VALID_EMAIL = "valid@example.com";
 
+    private Long merchantId;
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -68,6 +70,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         giftCardRepository.deleteAll();
         merchantRepository.deleteAll();
         Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "merchant@example.com"));
+        merchantId = merchant.getId();
         userRepository.save(new User(EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant));
         userRepository.save(new User(VALID_EMAIL, passwordEncoder.encode(PASSWORD), Role.ADMIN, null));
     }
@@ -405,5 +408,70 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         assertEquals(Role.MERCHANT, createdUser.getRole());
         assertNotNull(createdUser.getMerchant());
         assertEquals("New Merchant", createdUser.getMerchant().getName());
+    }
+
+    @Test
+    void should_addUserToExistingMerchant_and_returnAccessAndRefreshTokens() throws Exception {
+        String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
+        String newEmail = "employee@example.com";
+
+        mockMvc.perform(post("/api/v1/auth/merchants/" + merchantId + "/users")
+                        .header(AUTHORIZATION, "Bearer " + adminAccessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\",\"serviceAccount\":false}"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.accessToken", notNullValue()))
+                .andExpect(jsonPath("$.refreshToken", notNullValue()));
+
+        User createdUser = userRepository.findByEmail(newEmail).orElseThrow();
+        assertEquals(Role.MERCHANT, createdUser.getRole());
+        assertEquals(merchantId, createdUser.getMerchant().getId());
+        assertEquals(false, createdUser.isServiceAccount());
+
+        // The existing user for this merchant is still there too - now two users share the same merchant.
+        User existingUser = userRepository.findByEmail(EMAIL).orElseThrow();
+        assertEquals(merchantId, existingUser.getMerchant().getId());
+    }
+
+    @Test
+    void should_returnForbidden_when_addingMerchantUserAsMerchantRole() throws Exception {
+        String clientAccessToken = loginAndGetAccessToken(EMAIL, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/merchants/" + merchantId + "/users")
+                        .header(AUTHORIZATION, "Bearer " + clientAccessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"blocked@example.com\",\"password\":\"" + PASSWORD + "\",\"serviceAccount\":false}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void should_returnUnauthorized_when_addingMerchantUserWithoutToken() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/merchants/" + merchantId + "/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"anonymous@example.com\",\"password\":\"" + PASSWORD + "\",\"serviceAccount\":false}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_returnNotFound_when_addingUserToNonExistentMerchant() throws Exception {
+        String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/merchants/999999/users")
+                        .header(AUTHORIZATION, "Bearer " + adminAccessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"noone@example.com\",\"password\":\"" + PASSWORD + "\",\"serviceAccount\":false}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void should_returnConflict_when_addingMerchantUserWithExistingEmail() throws Exception {
+        String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/merchants/" + merchantId + "/users")
+                        .header(AUTHORIZATION, "Bearer " + adminAccessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\",\"serviceAccount\":false}"))
+                .andExpect(status().isConflict());
     }
 }
