@@ -1,4 +1,10 @@
 flyway_schema_history
+gift_card_ledger_historical
+gift_card_ledger_default
+gift_card_ledger_2029
+gift_card_ledger_2028
+gift_card_ledger_2027
+gift_card_ledger_2026
 gift_card_ledger
 gift_card_hold
 refresh_tokens
