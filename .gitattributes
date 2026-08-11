@@ -1,2 +1,7 @@
 /mvnw text eol=lf
 *.cmd text eol=crlf
+
+# Flyway checksums the raw file bytes, so a CRLF/LF mismatch between when a migration was first
+# applied and a later checkout breaks validation ("Migrations have failed validation" at startup).
+# Pin migrations to LF regardless of the checking-out OS.
+src/main/resources/db/migration/*.sql text eol=lf
