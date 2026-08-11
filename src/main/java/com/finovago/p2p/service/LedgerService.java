@@ -1,7 +1,9 @@
 package com.finovago.p2p.service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
@@ -36,5 +38,15 @@ public class LedgerService {
     /** Full history for a single card, oldest first. Caller is responsible for tenant scoping. */
     public List<LedgerEntry> getEntriesForCard(Long giftCardId) {
         return ledgerEntryRepository.findByGiftCardIdOrderByCreatedAtAsc(giftCardId);
+    }
+
+    /** January 1st of the furthest-out dated partition already created for gift_card_ledger. */
+    public Optional<LocalDate> findLatestLedgerPartitionYear() {
+        return ledgerEntryRepository.findLatestLedgerPartitionYear();
+    }
+
+    /** Whether any row has ever landed in the DEFAULT catch-all partition (dated partitions ran out). */
+    public boolean existsAnyRowInDefaultLedgerPartition() {
+        return ledgerEntryRepository.existsAnyRowInDefaultLedgerPartition();
     }
 }
