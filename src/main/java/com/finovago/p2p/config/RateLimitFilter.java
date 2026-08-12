@@ -16,6 +16,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finovago.p2p.model.Merchant;
+import com.finovago.p2p.repository.MerchantRepository;
+import com.finovago.p2p.security.CurrentUserContext;
 
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
@@ -28,38 +31,53 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 /**
- * Caps requests per client IP on endpoints exposed to enumeration/brute-force abuse
- * (login credential stuffing, gift card code guessing on lookup/redeem). Limits are
- * per-instance only (in-memory buckets) - if this service is ever scaled horizontally,
- * this must move to a shared store (e.g. Redis) or each instance will allow the full
- * quota independently.
+ * Caps requests on endpoints exposed to enumeration/brute-force abuse. Login (not yet
+ * authenticated) is capped per client IP - the only identity available pre-auth, which is what
+ * credential stuffing needs limiting on. Lookup/redeem/reserve are capped per merchant (from the
+ * JWT) instead of per IP: these are B2B endpoints called from a merchant's own backend, so every
+ * one of a merchant's end users shares that backend's IP - an IP-based limit would throttle
+ * legitimate concurrent traffic rather than abuse. Limits are per-instance only (in-memory
+ * buckets) - if this service is ever scaled horizontally, this must move to a shared store (e.g.
+ * Redis) or each instance will allow the full quota independently.
  */
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(RateLimitFilter.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final String LOGIN_PREFIX = "/api/v1/auth/login";
 
     private static final List<String> PROTECTED_PATH_PREFIXES = List.of(
-        "/api/v1/auth/login",
+        LOGIN_PREFIX,
         "/api/v1/giftcards/lookup/",
         "/api/v1/giftcards/redeem",
         "/api/v1/giftcards/reserve"
     );
 
     private final boolean enabled;
-    private final int capacity;
+    private final int loginCapacity;
+    private final int defaultMerchantCapacity;
     private final Duration refillPeriod;
-    private final Map<String, Bucket> bucketsByKey = new ConcurrentHashMap<>();
+    private final CurrentUserContext currentUserContext;
+    private final MerchantRepository merchantRepository;
+    private final Map<String, BucketEntry> bucketsByKey = new ConcurrentHashMap<>();
     private final ScheduledExecutorService cleanupExecutor = Executors.newSingleThreadScheduledExecutor();
+
+    private record BucketEntry(Bucket bucket, int capacity) {}
 
     public RateLimitFilter(
             @Value("${app.rate-limit.enabled:true}") boolean enabled,
-            @Value("${app.rate-limit.capacity:10}") int capacity,
-            @Value("${app.rate-limit.refill-period-seconds:60}") long refillPeriodSeconds) {
+            @Value("${app.rate-limit.login-capacity:10}") int loginCapacity,
+            @Value("${app.rate-limit.merchant-capacity:300}") int defaultMerchantCapacity,
+            @Value("${app.rate-limit.refill-period-seconds:60}") long refillPeriodSeconds,
+            CurrentUserContext currentUserContext,
+            MerchantRepository merchantRepository) {
         this.enabled = enabled;
-        this.capacity = capacity;
+        this.loginCapacity = loginCapacity;
+        this.defaultMerchantCapacity = defaultMerchantCapacity;
         this.refillPeriod = Duration.ofSeconds(refillPeriodSeconds);
+        this.currentUserContext = currentUserContext;
+        this.merchantRepository = merchantRepository;
         cleanupExecutor.scheduleAtFixedRate(this::evictIdleBuckets, 10, 10, TimeUnit.MINUTES);
     }
 
@@ -73,15 +91,30 @@ public class RateLimitFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
 
         String matchedPrefix = matchedPrefix(request.getRequestURI());
-        String clientIp = resolveClientIp(request);
-        String bucketKey = matchedPrefix + "|" + clientIp;
+        boolean isLogin = LOGIN_PREFIX.equals(matchedPrefix);
 
-        Bucket bucket = bucketsByKey.computeIfAbsent(bucketKey, key -> newBucket());
-        ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
+        String bucketKey;
+        int capacityForKey;
+        String identityForLog;
+
+        if (isLogin) {
+            String clientIp = resolveClientIp(request);
+            bucketKey = matchedPrefix + "|ip:" + clientIp;
+            capacityForKey = loginCapacity;
+            identityForLog = "IP " + clientIp;
+        } else {
+            Long merchantId = currentUserContext.currentMerchantId();
+            bucketKey = matchedPrefix + "|merchant:" + merchantId;
+            capacityForKey = capacityForMerchant(merchantId);
+            identityForLog = "merchant " + merchantId;
+        }
+
+        BucketEntry entry = bucketsByKey.computeIfAbsent(bucketKey, key -> newBucketEntry(capacityForKey));
+        ConsumptionProbe probe = entry.bucket().tryConsumeAndReturnRemaining(1);
 
         if (!probe.isConsumed()) {
             long retryAfterSeconds = Math.max(1, probe.getNanosToWaitForRefill() / 1_000_000_000);
-            log.warn("Rate limit exceeded on {} for IP: {}", matchedPrefix, clientIp);
+            log.warn("Rate limit exceeded on {} for {}", matchedPrefix, identityForLog);
 
             response.setStatus(429);
             response.setContentType("application/json");
@@ -105,13 +138,19 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 .orElse(null);
     }
 
-    private Bucket newBucket() {
+    private int capacityForMerchant(Long merchantId) {
+        return merchantRepository.findById(merchantId)
+                .map(Merchant::getRateLimitCapacity)
+                .orElse(defaultMerchantCapacity);
+    }
+
+    private BucketEntry newBucketEntry(int capacity) {
         Bandwidth limit = Bandwidth.builder().capacity(capacity).refillGreedy(capacity, refillPeriod).build();
-        return Bucket.builder().addLimit(limit).build();
+        return new BucketEntry(Bucket.builder().addLimit(limit).build(), capacity);
     }
 
     private void evictIdleBuckets() {
-        bucketsByKey.entrySet().removeIf(entry -> entry.getValue().getAvailableTokens() >= capacity);
+        bucketsByKey.entrySet().removeIf(entry -> entry.getValue().bucket().getAvailableTokens() >= entry.getValue().capacity());
     }
 
     private String resolveClientIp(HttpServletRequest request) {
