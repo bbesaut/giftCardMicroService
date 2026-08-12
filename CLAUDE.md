@@ -46,7 +46,7 @@ An up-to-date ER diagram is generated automatically by `.github/workflows/schema
 - **Async**: Custom TaskExecutor with MdcTaskDecorator for MDC propagation
 - **Exception handling**: GlobalExceptionHandler with custom exceptions
 - **Response timing**: ResponseTimeFilter adds `X-Response-Time` header to all responses (in milliseconds)
-- **Rate limiting**: RateLimitFilter caps `login`/`lookup`/`redeem` at 10 requests/minute per IP (in-memory, per-instance only — see `app.rate-limit.*` properties). Disabled under the `test` profile.
+- **Rate limiting**: `RateLimitFilter` caps `login` at 10 requests/minute per client IP (the only identity available pre-auth — protects against credential stuffing). `lookup`/`redeem`/`reserve` are capped at 300 requests/minute **per merchant** (from the JWT), not per IP — these are B2B endpoints called from a merchant's own backend, so all of a merchant's end users would otherwise share one IP and throttle each other. A merchant can get a custom quota via `merchants.rate_limit_capacity` (nullable override; `NULL` falls back to the `app.rate-limit.merchant-capacity` default). In-memory buckets, per-instance only (see `app.rate-limit.*` properties). Disabled under the `test` profile.
 - **Idempotency**: `POST /giftcards/redeem` and `POST /giftcards/reserve` require an `Idempotency-Key` header — any mutating endpoint without a natural uniqueness guard is a candidate (`create`/`register` are already covered by their own unique constraints; `capture`/`release` are idempotent by target state — a retry that already reached the requested terminal state (e.g. re-capturing an already-CAPTURED hold) replays the same 200 response; a retry hitting a *different* terminal state (e.g. capturing an already-RELEASED hold) is a genuine conflict and returns 409). `IdempotencyKeyService` is endpoint-agnostic: it claims the key in its own transaction (REQUIRES_NEW) before the business logic runs, so concurrent duplicates are caught by a DB unique constraint (`merchant_id`, `idempotency_key`); a completed claim replays its cached response (serialized as JSON, endpoint-specific DTO type), a failed one is discarded so retries can proceed cleanly. `IdempotencyKeyCleanupScheduler` sweeps expired entries (see `app.idempotency.*` properties).
 - **Ledger partitioning**: `gift_card_ledger` is RANGE-partitioned by year on `created_at` (see `V21__partition_gift_card_ledger_by_date.sql`) — it's an append-only audit trail that grows forever, so partitioning keeps per-partition indexes/vacuum small and makes future retention (`DETACH PARTITION` + export + drop) a metadata-only operation instead of a slow `DELETE`. Yearly (not monthly) because the retention policy this supports is expressed in years and current queries don't filter by date range, so finer granularity would only add catalog/index overhead. Partitions are pre-created through 2029, plus a `gift_card_ledger_default` catch-all so an insert past that window degrades (lands in the catch-all) instead of failing. `p2p_app` has no DDL rights (see Idempotency/least-privilege note above and V17), so topping up future partitions or detaching old ones is **not automated** — it requires a new Flyway migration, roughly yearly (a `pg_partman`-based automation would need a separate, non-application DB role plus `pg_cron`; not pursued yet — unclear if Neon supports the combination). `LedgerPartitionMonitorScheduler` runs weekly and only reads: it warns once less than a year of partitions remain, and errors if the catch-all partition ever receives a row (see `app.ledger.partition-monitor-interval-ms`). Actual archival/detachment of old partitions isn't implemented yet — this only lays the groundwork.
 
@@ -212,15 +212,17 @@ All gift card endpoints below are scoped to the calling MERCHANT's own tenant �
     "entryType": "CREATION",
     "amount": 100.00,
     "balanceAfter": 100.00,
-    "referenceId": null,
-    "createdAt": "2026-07-23T15:30:00"
+    "holdId": null,
+    "createdAt": "2026-07-23T15:30:00",
+    "actor": "merchant@example.com"
   },
   {
     "entryType": "REDEMPTION",
     "amount": 30.00,
     "balanceAfter": 70.00,
-    "referenceId": null,
-    "createdAt": "2026-07-24T09:12:00"
+    "holdId": null,
+    "createdAt": "2026-07-24T09:12:00",
+    "actor": "SYSTEM / integration@example.com"
   }
 ]
 ```
@@ -373,8 +375,9 @@ Response for a single gift card ledger entry (GET /api/v1/giftcards/{code}/ledge
 - `entryType` (String): Kind of operation (CREATION, REDEMPTION, HOLD_PLACED, HOLD_CAPTURED, HOLD_RELEASED)
 - `amount` (BigDecimal): Amount involved in this operation
 - `balanceAfter` (BigDecimal): Gift card balance immediately after this operation
-- `referenceId` (Long, nullable): Identifier of the related hold, if any
+- `holdId` (Long, nullable): Identifier of the related hold, if any
 - `createdAt` (LocalDateTime): Timestamp at which this entry was recorded
+- `actor` (String, nullable): Who triggered this operation — the user's email (`"SYSTEM / email"` for a service account), `"Deleted user"` if the account no longer exists, or `"Unknown"` for entries recorded before this field existed
 
 ## ⚠️ Error Responses
 

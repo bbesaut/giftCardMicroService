@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @NoArgsConstructor
@@ -30,6 +31,11 @@ public class Merchant {
 
     @Column(nullable = false)
     private Instant createdAt;
+
+    /** Requests/minute override for the redeem/lookup/reserve rate limit. Null = use the app-wide default. */
+    @Setter
+    @Column(name = "rate_limit_capacity")
+    private Integer rateLimitCapacity;
 
     public Merchant(String name, String contactEmail) {
         this.name = name;
