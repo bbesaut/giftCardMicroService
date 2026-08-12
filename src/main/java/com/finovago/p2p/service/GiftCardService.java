@@ -2,6 +2,7 @@ package com.finovago.p2p.service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -20,6 +21,7 @@ import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.dto.RedemptionRequest;
 import com.finovago.p2p.exception.UnknownGiftCardException;
 import com.finovago.p2p.model.GiftCard;
+import com.finovago.p2p.model.LedgerEntry;
 import com.finovago.p2p.model.LedgerEntryType;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.repository.GiftCardRepository;
@@ -202,16 +204,25 @@ public class GiftCardService {
         GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, code)
                 .orElseThrow(() -> new UnknownGiftCardException("Gift card not found"));
 
-        return ledgerService.getEntriesForCard(giftCard.getId())
-                .stream()
+        List<LedgerEntry> entries = ledgerService.getEntriesForCard(giftCard.getId());
+        Map<Long, String> actorsByUserId = ledgerService.resolveActors(entries);
+
+        return entries.stream()
                 .map(entry -> new LedgerEntryResponse(
                         entry.getEntryType().name(),
                         entry.getAmount(),
                         entry.getBalanceAfter(),
                         entry.getHoldId(),
                         entry.getCreatedAt(),
-                        entry.getActorUserId()
+                        resolveActorDisplay(entry.getActorUserId(), actorsByUserId)
                 ))
                 .toList();
+    }
+
+    private static String resolveActorDisplay(Long actorUserId, Map<Long, String> actorsByUserId) {
+        if (actorUserId == null) {
+            return "Unknown";
+        }
+        return actorsByUserId.getOrDefault(actorUserId, "Deleted user");
     }
 }

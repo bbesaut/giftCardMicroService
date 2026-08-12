@@ -22,6 +22,6 @@ public record LedgerEntryResponse(
     @Schema(description = "Timestamp at which this entry was recorded", example = "2026-07-23T15:30:00")
     LocalDateTime createdAt,
 
-    @Schema(description = "Id of the user who triggered this operation. Null for entries recorded before this field existed.", example = "7", nullable = true)
-    Long actorUserId
+    @Schema(description = "Who triggered this operation: the user's email (\"SYSTEM / email\" for a service account), \"Deleted user\" if the account no longer exists, or \"Unknown\" for entries recorded before this field existed.", example = "user@example.com", nullable = true)
+    String actor
 ) {}

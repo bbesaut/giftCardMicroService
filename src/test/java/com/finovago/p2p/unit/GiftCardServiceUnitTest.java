@@ -273,20 +273,24 @@ class GiftCardServiceUnitTest
     {
         String cardCode = "LEDGER123";
         GiftCard giftCard = new GiftCard(merchant, cardCode, BigDecimal.valueOf(70.0), true, LocalDate.now().plusDays(30));
-        LedgerEntry creation = new LedgerEntry(giftCard, MERCHANT_ID, LedgerEntryType.CREATION, new BigDecimal("100.00"), new BigDecimal("100.00"), null);
-        LedgerEntry redemption = new LedgerEntry(giftCard, MERCHANT_ID, LedgerEntryType.REDEMPTION, new BigDecimal("30.00"), new BigDecimal("70.00"), null);
+        LedgerEntry creation = new LedgerEntry(giftCard, MERCHANT_ID, LedgerEntryType.CREATION, new BigDecimal("100.00"), new BigDecimal("100.00"), null, 7L);
+        LedgerEntry redemption = new LedgerEntry(giftCard, MERCHANT_ID, LedgerEntryType.REDEMPTION, new BigDecimal("30.00"), new BigDecimal("70.00"), null, null);
 
         when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.of(giftCard));
-        when(ledgerService.getEntriesForCard(giftCard.getId())).thenReturn(List.of(creation, redemption));
+        List<LedgerEntry> entries = List.of(creation, redemption);
+        when(ledgerService.getEntriesForCard(giftCard.getId())).thenReturn(entries);
+        when(ledgerService.resolveActors(entries)).thenReturn(java.util.Map.of(7L, "merchant@example.com"));
 
         List<LedgerEntryResponse> response = giftCardService.getLedger(cardCode);
 
         assertEquals(2, response.size());
         assertEquals("CREATION", response.get(0).entryType());
         assertMoneyEquals(new BigDecimal("100.00"), response.get(0).amount());
+        assertEquals("merchant@example.com", response.get(0).actor());
         assertEquals("REDEMPTION", response.get(1).entryType());
         assertMoneyEquals(new BigDecimal("30.00"), response.get(1).amount());
         assertMoneyEquals(new BigDecimal("70.00"), response.get(1).balanceAfter());
+        assertEquals("Unknown", response.get(1).actor());
     }
 
     @Test
