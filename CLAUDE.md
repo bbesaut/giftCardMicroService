@@ -212,15 +212,17 @@ All gift card endpoints below are scoped to the calling MERCHANT's own tenant �
     "entryType": "CREATION",
     "amount": 100.00,
     "balanceAfter": 100.00,
-    "referenceId": null,
-    "createdAt": "2026-07-23T15:30:00"
+    "holdId": null,
+    "createdAt": "2026-07-23T15:30:00",
+    "actor": "merchant@example.com"
   },
   {
     "entryType": "REDEMPTION",
     "amount": 30.00,
     "balanceAfter": 70.00,
-    "referenceId": null,
-    "createdAt": "2026-07-24T09:12:00"
+    "holdId": null,
+    "createdAt": "2026-07-24T09:12:00",
+    "actor": "SYSTEM / integration@example.com"
   }
 ]
 ```
@@ -373,8 +375,9 @@ Response for a single gift card ledger entry (GET /api/v1/giftcards/{code}/ledge
 - `entryType` (String): Kind of operation (CREATION, REDEMPTION, HOLD_PLACED, HOLD_CAPTURED, HOLD_RELEASED)
 - `amount` (BigDecimal): Amount involved in this operation
 - `balanceAfter` (BigDecimal): Gift card balance immediately after this operation
-- `referenceId` (Long, nullable): Identifier of the related hold, if any
+- `holdId` (Long, nullable): Identifier of the related hold, if any
 - `createdAt` (LocalDateTime): Timestamp at which this entry was recorded
+- `actor` (String, nullable): Who triggered this operation — the user's email (`"SYSTEM / email"` for a service account), `"Deleted user"` if the account no longer exists, or `"Unknown"` for entries recorded before this field existed
 
 ## ⚠️ Error Responses
 
