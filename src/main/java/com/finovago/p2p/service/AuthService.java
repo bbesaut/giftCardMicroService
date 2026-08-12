@@ -53,7 +53,11 @@ public class AuthService {
                     return new BadCredentialsException("Invalid credentials");
                 });
 
-        if (!passwordEncoder.matches(request.password(), user.getPassword())) {
+        long start = System.nanoTime();
+        boolean matches = passwordEncoder.matches(request.password(), user.getPassword());
+        log.debug("BCrypt matches took {} ms", (System.nanoTime() - start) / 1_000_000);
+
+        if (!matches) {
             log.warn("Login failed - invalid password for user: {}", user.getEmail());
             throw new BadCredentialsException("Invalid credentials");
         }
