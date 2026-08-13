@@ -38,6 +38,13 @@ An up-to-date ER diagram is generated automatically by `.github/workflows/schema
 
 **One-time setup required**: enable GitHub Pages for this repo (Settings → Pages → source: `gh-pages` branch) — the workflow creates/updates that branch but Pages must be turned on manually once.
 
+## 📊 Code Coverage
+`mvn test -P integration-tests` generates a JaCoCo line/branch coverage report at `target/site/jacoco/index.html` (requires Docker). `jacoco:check` fails the build if `com.finovago.p2p.service` (the business logic) drops below 80% line/branch coverage — scoped to the `integration-tests` profile only, so the fast unit-only feedback loop isn't penalized for logic that's only exercised by integration tests.
+
+Two ways to see it without running Maven yourself:
+- **Every PR**: `.github/workflows/ci.yml` posts a per-package coverage table to the job summary and uploads the full HTML report as a downloadable artifact.
+- **Always current for `develop`/`main`**: `.github/workflows/coverage-report.yml` runs on every push to those branches and publishes the HTML report to GitHub Pages: https://bbesaut.github.io/giftCardMicroService/coverage/ (same one-time Pages setup as the schema diagram above; `keep_files: true` so the two publishers don't clobber each other's `gh-pages` content).
+
 ## 🏗️ Architecture Summary
 - **Multi-tenancy**: every gift card belongs to exactly one `Merchant`. `ADMIN` is the platform owner (manages merchants, sees all cards via `/list`); `MERCHANT` is a merchant account, scoped to its own cards only. Tenant scoping is derived server-side from the JWT (`merchantId` claim), never from client input.
 - **JWT auth**: JJWT-based, stateless, roles (ADMIN/MERCHANT), JWT carries a `merchantId` claim (null for ADMIN)
