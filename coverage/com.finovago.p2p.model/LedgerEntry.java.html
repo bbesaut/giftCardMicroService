@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LedgerEntry.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.model</a> &gt; <span class="el_source">LedgerEntry.java</span></div><h1>LedgerEntry.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.model;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
+import jakarta.annotation.Nullable;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+@Entity
+@NoArgsConstructor
+@Getter
+@Table(name = &quot;gift_card_ledger&quot;)
+public class LedgerEntry {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(optional = false)
+    @JoinColumn(name = &quot;gift_card_id&quot;, nullable = false)
+    private GiftCard giftCard;
+
+    @Column(name = &quot;merchant_id&quot;, nullable = false)
+    private Long merchantId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = &quot;entry_type&quot;, nullable = false, length = 20)
+    private LedgerEntryType entryType;
+
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal amount;
+
+    @Column(name = &quot;balance_after&quot;, nullable = false, precision = 19, scale = 2)
+    private BigDecimal balanceAfter;
+
+    @Column(name = &quot;hold_id&quot;)
+    private Long holdId;
+
+    @Column(name = &quot;actor_user_id&quot;)
+    private Long actorUserId;
+
+    @Column(name = &quot;created_at&quot;, nullable = false)
+    private LocalDateTime createdAt;
+
+    public LedgerEntry(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, @Nullable Long holdId) {
+<span class="fc" id="L56">        this(giftCard, merchantId, entryType, amount, balanceAfter, holdId, null);</span>
+<span class="fc" id="L57">    }</span>
+
+<span class="fc" id="L59">    public LedgerEntry(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, @Nullable Long holdId, @Nullable Long actorUserId) {</span>
+<span class="fc" id="L60">        this.giftCard = giftCard;</span>
+<span class="fc" id="L61">        this.merchantId = merchantId;</span>
+<span class="fc" id="L62">        this.entryType = entryType;</span>
+<span class="fc" id="L63">        this.amount = amount;</span>
+<span class="fc" id="L64">        this.balanceAfter = balanceAfter;</span>
+<span class="fc" id="L65">        this.holdId = holdId;</span>
+<span class="fc" id="L66">        this.actorUserId = actorUserId;</span>
+<span class="fc" id="L67">        this.createdAt = LocalDateTime.now();</span>
+<span class="fc" id="L68">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GiftCardHold.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.model</a> &gt; <span class="el_source">GiftCardHold.java</span></div><h1>GiftCardHold.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.model;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+@Entity
+@NoArgsConstructor
+@Getter
+@Table(name = &quot;gift_card_hold&quot;)
+public class GiftCardHold {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(optional = false)
+    @JoinColumn(name = &quot;gift_card_id&quot;, nullable = false)
+    private GiftCard giftCard;
+
+    @Column(name = &quot;merchant_id&quot;, nullable = false)
+    private Long merchantId;
+
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal amount;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private HoldStatus status;
+
+    @Column(name = &quot;created_at&quot;, nullable = false)
+    private LocalDateTime createdAt;
+
+    @Column(name = &quot;expires_at&quot;, nullable = false)
+    private LocalDateTime expiresAt;
+
+<span class="fc" id="L48">    public GiftCardHold(GiftCard giftCard, Long merchantId, BigDecimal amount, LocalDateTime expiresAt) {</span>
+<span class="fc" id="L49">        this.giftCard = giftCard;</span>
+<span class="fc" id="L50">        this.merchantId = merchantId;</span>
+<span class="fc" id="L51">        this.amount = amount;</span>
+<span class="fc" id="L52">        this.status = HoldStatus.PENDING;</span>
+<span class="fc" id="L53">        this.createdAt = LocalDateTime.now();</span>
+<span class="fc" id="L54">        this.expiresAt = expiresAt;</span>
+<span class="fc" id="L55">    }</span>
+
+    public void capture() {
+<span class="fc" id="L58">        this.status = HoldStatus.CAPTURED;</span>
+<span class="fc" id="L59">    }</span>
+
+    public void release() {
+<span class="fc" id="L62">        this.status = HoldStatus.RELEASED;</span>
+<span class="fc" id="L63">    }</span>
+
+    public void expire() {
+<span class="fc" id="L66">        this.status = HoldStatus.EXPIRED;</span>
+<span class="fc" id="L67">    }</span>
+
+    public boolean isPending() {
+<span class="fc bfc" id="L70" title="All 2 branches covered.">        return this.status == HoldStatus.PENDING;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

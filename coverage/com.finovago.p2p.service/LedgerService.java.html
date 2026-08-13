@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LedgerService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.service</a> &gt; <span class="el_source">LedgerService.java</span></div><h1>LedgerService.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.service;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Service;
+
+import com.finovago.p2p.model.GiftCard;
+import com.finovago.p2p.model.LedgerEntry;
+import com.finovago.p2p.model.LedgerEntryType;
+import com.finovago.p2p.model.User;
+import com.finovago.p2p.repository.LedgerDiscrepancy;
+import com.finovago.p2p.repository.LedgerEntryRepository;
+import com.finovago.p2p.repository.UserRepository;
+
+@Service
+public class LedgerService {
+
+    private final LedgerEntryRepository ledgerEntryRepository;
+    private final UserRepository userRepository;
+
+<span class="fc" id="L28">    public LedgerService(LedgerEntryRepository ledgerEntryRepository, UserRepository userRepository) {</span>
+<span class="fc" id="L29">        this.ledgerEntryRepository = ledgerEntryRepository;</span>
+<span class="fc" id="L30">        this.userRepository = userRepository;</span>
+<span class="fc" id="L31">    }</span>
+
+    /**
+     * Appends a ledger row. Never call this outside the same transaction as the balance
+     * mutation it records - the two must commit or roll back together.
+     */
+    public void record(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, Long holdId, Long actorUserId) {
+<span class="fc" id="L38">        ledgerEntryRepository.save(new LedgerEntry(giftCard, merchantId, entryType, amount, balanceAfter, holdId, actorUserId));</span>
+<span class="fc" id="L39">    }</span>
+
+    /** Gift cards whose stored balance disagrees with what their own ledger says it should be. */
+    public List&lt;LedgerDiscrepancy&gt; findBalanceDiscrepancies() {
+<span class="fc" id="L43">        return ledgerEntryRepository.findBalanceDiscrepancies();</span>
+    }
+
+    /** Full history for a single card, oldest first. Caller is responsible for tenant scoping. */
+    public List&lt;LedgerEntry&gt; getEntriesForCard(Long giftCardId) {
+<span class="fc" id="L48">        return ledgerEntryRepository.findByGiftCardIdOrderByCreatedAtAsc(giftCardId);</span>
+    }
+
+    /**
+     * Batch-resolves entries' actorUserId to a display string (&quot;SYSTEM / email&quot; for service
+     * accounts, plain email otherwise), one query for the whole list instead of N+1.
+     * Entries whose actorUserId is missing from the result have no row in the map - callers
+     * distinguish &quot;no actor recorded&quot; (null actorUserId) from &quot;actor since deleted&quot; that way.
+     */
+    public Map&lt;Long, String&gt; resolveActors(List&lt;LedgerEntry&gt; entries) {
+<span class="fc" id="L58">        Set&lt;Long&gt; actorUserIds = entries.stream()</span>
+<span class="fc" id="L59">                .map(LedgerEntry::getActorUserId)</span>
+<span class="fc" id="L60">                .filter(Objects::nonNull)</span>
+<span class="fc" id="L61">                .collect(Collectors.toSet());</span>
+<span class="fc bfc" id="L62" title="All 2 branches covered.">        if (actorUserIds.isEmpty()) {</span>
+<span class="fc" id="L63">            return Map.of();</span>
+        }
+<span class="fc" id="L65">        return userRepository.findAllById(actorUserIds).stream()</span>
+<span class="fc" id="L66">                .collect(Collectors.toMap(User::getId, LedgerService::formatActor));</span>
+    }
+
+    private static String formatActor(User user) {
+<span class="fc bfc" id="L70" title="All 2 branches covered.">        return user.isServiceAccount() ? &quot;SYSTEM / &quot; + user.getEmail() : user.getEmail();</span>
+    }
+
+    /** January 1st of the furthest-out dated partition already created for gift_card_ledger. */
+    public Optional&lt;LocalDate&gt; findLatestLedgerPartitionYear() {
+<span class="fc" id="L75">        return ledgerEntryRepository.findLatestLedgerPartitionYear();</span>
+    }
+
+    /** Whether any row has ever landed in the DEFAULT catch-all partition (dated partitions ran out). */
+    public boolean existsAnyRowInDefaultLedgerPartition() {
+<span class="fc" id="L80">        return ledgerEntryRepository.existsAnyRowInDefaultLedgerPartition();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

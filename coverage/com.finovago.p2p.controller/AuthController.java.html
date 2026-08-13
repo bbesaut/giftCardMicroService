@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AuthController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.controller</a> &gt; <span class="el_source">AuthController.java</span></div><h1>AuthController.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.controller;
+
+import com.finovago.p2p.dto.AddMerchantUserRequest;
+import com.finovago.p2p.dto.AuthResponse;
+import com.finovago.p2p.dto.LoginRequest;
+import com.finovago.p2p.dto.RefreshTokenRequest;
+import com.finovago.p2p.dto.RegisterRequest;
+import com.finovago.p2p.exception.MerchantNotFoundException;
+import com.finovago.p2p.exception.UserAlreadyExistsException;
+import com.finovago.p2p.service.AuthService;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.web.bind.annotation.*;
+
+<span class="fc" id="L25">@Slf4j</span>
+@RestController
+@RequestMapping(&quot;/api/v1/auth&quot;)
+@Tag(name = &quot;Authentication&quot;, description = &quot;Authentication endpoints.&quot;)
+public class AuthController {
+
+    private final AuthService authService;
+
+<span class="fc" id="L33">    public AuthController(AuthService authService) {</span>
+<span class="fc" id="L34">        this.authService = authService;</span>
+<span class="fc" id="L35">    }</span>
+
+    @Operation(
+        summary = &quot;User login&quot;,
+        description = &quot;Authenticates a user with email and password, returning access and refresh tokens.&quot;
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = &quot;200&quot;, description = &quot;Login successful&quot;,
+            content = @Content(schema = @Schema(implementation = AuthResponse.class))),
+        @ApiResponse(responseCode = &quot;400&quot;, description = &quot;Invalid request body (missing or invalid fields)&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Bad Request\&quot;,\&quot;message\&quot;:\&quot;Email cannot be blank\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;401&quot;, description = &quot;Invalid email or password&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Unauthorized\&quot;,\&quot;message\&quot;:\&quot;Invalid email or password\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;429&quot;, description = &quot;Too Many Requests - Rate limit exceeded for this IP (max 10 attempts/minute)&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Too Many Requests\&quot;,\&quot;message\&quot;:\&quot;Too many requests. Please try again later.\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;500&quot;, description = &quot;Internal server error&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Internal Server Error\&quot;,\&quot;message\&quot;:\&quot;Database error occurred\&quot;}&quot;)))
+    })
+    @PostMapping(&quot;/login&quot;)
+    public ResponseEntity&lt;AuthResponse&gt; login(@Valid @RequestBody LoginRequest request) {
+<span class="fc" id="L55">        log.info(&quot;Login attempt for email: {}&quot;, sanitizeEmail(request.email()));</span>
+
+        try {
+<span class="fc" id="L58">            AuthResponse response = authService.login(request);</span>
+<span class="fc" id="L59">            log.info(&quot;Login successful for email: {}&quot;, sanitizeEmail(request.email()));</span>
+<span class="fc" id="L60">            return ResponseEntity.ok(response);</span>
+<span class="fc" id="L61">        } catch (BadCredentialsException e) {</span>
+<span class="fc" id="L62">            log.warn(&quot;Login failed - invalid credentials for email: {}&quot;, sanitizeEmail(request.email()));</span>
+<span class="fc" id="L63">            throw e;</span>
+        }
+    }
+
+    @Operation(
+        summary = &quot;User registration&quot;,
+        description = &quot;Creates a new user account with email and password. New users are automatically assigned the CLIENT role. &quot;
+                    + &quot;Requires authentication (JWT token) and ADMIN role.&quot;
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = &quot;200&quot;, description = &quot;Registration successful&quot;,
+            content = @Content(schema = @Schema(implementation = AuthResponse.class))),
+        @ApiResponse(responseCode = &quot;400&quot;, description = &quot;Invalid request body (missing or invalid fields)&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Bad Request\&quot;,\&quot;message\&quot;:\&quot;Email should be valid\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;401&quot;, description = &quot;Missing or invalid JWT token&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Unauthorized\&quot;,\&quot;message\&quot;:\&quot;Full authentication is required to access this resource\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;403&quot;, description = &quot;Insufficient permissions (ADMIN role required)&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Forbidden\&quot;,\&quot;message\&quot;:\&quot;Access is denied\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;409&quot;, description = &quot;Email already registered&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Conflict\&quot;,\&quot;message\&quot;:\&quot;Email already registered\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;500&quot;, description = &quot;Internal server error&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Internal Server Error\&quot;,\&quot;message\&quot;:\&quot;Database error occurred\&quot;}&quot;)))
+    })
+    @PostMapping(&quot;/register&quot;)
+    public ResponseEntity&lt;AuthResponse&gt; register(@Valid @RequestBody RegisterRequest request) {
+<span class="fc" id="L88">        log.info(&quot;Registration attempt for email: {}&quot;, sanitizeEmail(request.email()));</span>
+
+        try {
+<span class="fc" id="L91">            AuthResponse response = authService.register(request);</span>
+<span class="fc" id="L92">            log.info(&quot;Registration successful for email: {}&quot;, sanitizeEmail(request.email()));</span>
+<span class="fc" id="L93">            return ResponseEntity.ok(response);</span>
+<span class="fc" id="L94">        } catch (UserAlreadyExistsException e) {</span>
+<span class="fc" id="L95">            log.warn(&quot;Registration failed - email already exists: {}&quot;, sanitizeEmail(request.email()));</span>
+<span class="fc" id="L96">            throw e;</span>
+        }
+    }
+
+    @Operation(
+        summary = &quot;Add a user to an existing merchant&quot;,
+        description = &quot;Attaches an additional user account to a merchant that already exists, without creating a new Merchant. &quot;
+                    + &quot;Use serviceAccount=true for an automated-integration account, false (default) for a human employee account. &quot;
+                    + &quot;Requires authentication (JWT token) and ADMIN role.&quot;
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = &quot;200&quot;, description = &quot;User added successfully&quot;,
+            content = @Content(schema = @Schema(implementation = AuthResponse.class))),
+        @ApiResponse(responseCode = &quot;400&quot;, description = &quot;Invalid request body (missing or invalid fields)&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Bad Request\&quot;,\&quot;message\&quot;:\&quot;Email should be valid\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;401&quot;, description = &quot;Missing or invalid JWT token&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Unauthorized\&quot;,\&quot;message\&quot;:\&quot;Full authentication is required to access this resource\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;403&quot;, description = &quot;Insufficient permissions (ADMIN role required)&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Forbidden\&quot;,\&quot;message\&quot;:\&quot;Access is denied\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;404&quot;, description = &quot;Merchant not found&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Not Found\&quot;,\&quot;message\&quot;:\&quot;Merchant not found: 42\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;409&quot;, description = &quot;Email already registered&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Conflict\&quot;,\&quot;message\&quot;:\&quot;Email already registered\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;500&quot;, description = &quot;Internal server error&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Internal Server Error\&quot;,\&quot;message\&quot;:\&quot;Database error occurred\&quot;}&quot;)))
+    })
+    @PostMapping(&quot;/merchants/{merchantId}/users&quot;)
+    public ResponseEntity&lt;AuthResponse&gt; addMerchantUser(
+            @PathVariable Long merchantId,
+            @Valid @RequestBody AddMerchantUserRequest request) {
+<span class="fc" id="L126">        log.info(&quot;Add-user attempt for merchantId: {}, email: {}&quot;, merchantId, sanitizeEmail(request.email()));</span>
+
+        try {
+<span class="fc" id="L129">            AuthResponse response = authService.addUserToMerchant(merchantId, request);</span>
+<span class="fc" id="L130">            log.info(&quot;User added successfully for merchantId: {}&quot;, merchantId);</span>
+<span class="fc" id="L131">            return ResponseEntity.ok(response);</span>
+<span class="fc" id="L132">        } catch (UserAlreadyExistsException | MerchantNotFoundException e) {</span>
+<span class="fc" id="L133">            log.warn(&quot;Add-user failed for merchantId {}: {}&quot;, merchantId, e.getMessage());</span>
+<span class="fc" id="L134">            throw e;</span>
+        }
+    }
+
+    @Operation(
+        summary = &quot;Refresh access token&quot;,
+        description = &quot;Uses a valid refresh token to obtain a new access token and a rotated refresh token. &quot;
+                    + &quot;The old refresh token is automatically revoked after successful rotation.&quot;
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = &quot;200&quot;, description = &quot;Token refreshed successfully&quot;,
+            content = @Content(schema = @Schema(implementation = AuthResponse.class))),
+        @ApiResponse(responseCode = &quot;400&quot;, description = &quot;Invalid request body (missing refresh token)&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Bad Request\&quot;,\&quot;message\&quot;:\&quot;Refresh token cannot be blank\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;401&quot;, description = &quot;Refresh token expired, revoked, or invalid&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Unauthorized\&quot;,\&quot;message\&quot;:\&quot;Refresh token has expired\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;500&quot;, description = &quot;Internal server error&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Internal Server Error\&quot;,\&quot;message\&quot;:\&quot;Database error occurred\&quot;}&quot;)))
+    })
+    @PostMapping(&quot;/refresh&quot;)
+    public ResponseEntity&lt;AuthResponse&gt; refresh(@Valid @RequestBody RefreshTokenRequest request) {
+<span class="fc" id="L155">        log.debug(&quot;Refresh token attempt&quot;);</span>
+
+        try {
+<span class="fc" id="L158">            AuthResponse response = authService.refresh(request);</span>
+<span class="fc" id="L159">            log.info(&quot;Token refreshed successfully&quot;);</span>
+<span class="fc" id="L160">            return ResponseEntity.ok(response);</span>
+<span class="fc" id="L161">        } catch (Exception e) {</span>
+<span class="fc" id="L162">            log.warn(&quot;Refresh failed: {}&quot;, e.getMessage());</span>
+<span class="fc" id="L163">            throw e;</span>
+        }
+    }
+
+    @Operation(
+        summary = &quot;User logout&quot;,
+        description = &quot;Revokes the refresh token, invalidating any future token refresh attempts for this token. &quot;
+                    + &quot;Returns 204 No Content on success.&quot;
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = &quot;204&quot;, description = &quot;Logout successful - refresh token revoked&quot;),
+        @ApiResponse(responseCode = &quot;400&quot;, description = &quot;Invalid request body (missing refresh token)&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Bad Request\&quot;,\&quot;message\&quot;:\&quot;Refresh token cannot be blank\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;401&quot;, description = &quot;Refresh token not found or already revoked&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Unauthorized\&quot;,\&quot;message\&quot;:\&quot;Refresh token not found\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;500&quot;, description = &quot;Internal server error&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Internal Server Error\&quot;,\&quot;message\&quot;:\&quot;Database error occurred\&quot;}&quot;)))
+    })
+    @PostMapping(&quot;/logout&quot;)
+    public ResponseEntity&lt;Void&gt; logout(@Valid @RequestBody RefreshTokenRequest request) {
+        try {
+<span class="fc" id="L184">            authService.logout(request);</span>
+<span class="fc" id="L185">            log.info(&quot;User logged out successfully&quot;);</span>
+<span class="fc" id="L186">            return ResponseEntity.noContent().build();</span>
+<span class="fc" id="L187">        } catch (Exception e) {</span>
+<span class="fc" id="L188">            log.warn(&quot;Logout failed: {}&quot;, e.getMessage());</span>
+<span class="fc" id="L189">            throw e;</span>
+        }
+    }
+
+    private String sanitizeEmail(String email) {
+<span class="pc bpc" id="L194" title="2 of 4 branches missed.">        if (email == null || email.length() &lt; 3) {</span>
+<span class="nc" id="L195">            return &quot;***&quot;;</span>
+        }
+<span class="fc" id="L197">        int atIndex = email.indexOf('@');</span>
+<span class="pc bpc" id="L198" title="1 of 2 branches missed.">        if (atIndex &lt;= 1) {</span>
+<span class="nc" id="L199">            return email.substring(0, 1) + &quot;***&quot;;</span>
+        }
+<span class="fc" id="L201">        return email.substring(0, 1) + &quot;***&quot; + email.substring(atIndex);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

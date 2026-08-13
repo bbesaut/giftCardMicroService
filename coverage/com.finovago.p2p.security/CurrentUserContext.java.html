@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CurrentUserContext.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.security</a> &gt; <span class="el_source">CurrentUserContext.java</span></div><h1>CurrentUserContext.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.security;
+
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Component;
+
+@Component
+<span class="fc" id="L7">public class CurrentUserContext {</span>
+
+    public boolean isAdmin() {
+<span class="fc" id="L10">        return &quot;ADMIN&quot;.equals(currentUser().role());</span>
+    }
+
+    public Long currentMerchantId() {
+<span class="fc" id="L14">        Long merchantId = currentUser().merchantId();</span>
+<span class="fc bfc" id="L15" title="All 2 branches covered.">        if (merchantId == null) {</span>
+<span class="fc" id="L16">            throw new IllegalStateException(&quot;No merchant associated with the current authenticated user&quot;);</span>
+        }
+<span class="fc" id="L18">        return merchantId;</span>
+    }
+
+    /** For ledger actor attribution only - not a security boundary, so null (unknown actor) is a valid outcome. */
+    public Long currentUserIdOrNull() {
+<span class="fc" id="L23">        return currentUser().userId();</span>
+    }
+
+    private AuthenticatedUser currentUser() {
+<span class="fc" id="L27">        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();</span>
+<span class="pc bpc" id="L28" title="1 of 2 branches missed.">        if (!(principal instanceof AuthenticatedUser authenticatedUser)) {</span>
+<span class="nc" id="L29">            throw new IllegalStateException(&quot;No authenticated user in security context&quot;);</span>
+        }
+<span class="fc" id="L31">        return authenticatedUser;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SecurityConfig.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.config</a> &gt; <span class="el_source">SecurityConfig.java</span></div><h1>SecurityConfig.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.config;
+
+import com.finovago.p2p.security.JwtAccessDeniedHandler;
+import com.finovago.p2p.security.JwtAuthenticationEntryPoint;
+import com.finovago.p2p.security.JwtAuthenticationFilter;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity
+public class SecurityConfig {
+
+<span class="fc" id="L25">    private static final String[] PUBLIC_ROUTES = {</span>
+            &quot;/api/v1/auth/login&quot;,
+            &quot;/api/v1/auth/refresh&quot;,
+            &quot;/api/v1/auth/logout&quot;,
+            &quot;/&quot;,
+            &quot;/swagger-ui.html&quot;,
+            &quot;/swagger-ui/**&quot;,
+            &quot;/api-docs/**&quot;,
+            // Spring Boot forwards unmapped requests to /error internally (DispatcherType.ERROR).
+            // JwtAuthenticationFilter does not re-run on that dispatch (OncePerRequestFilter skips
+            // ERROR by default), so the SecurityContext is empty there - without this being public,
+            // anyRequest().authenticated() rejects it and every unmapped URL becomes a 401 instead
+            // of the real 404, for authenticated and unauthenticated callers alike.
+            &quot;/error&quot;
+    };
+
+<span class="fc" id="L41">    private static final String[] ADMIN_ROUTES = {</span>
+            &quot;/api/v1/auth/register&quot;,
+            &quot;/api/v1/auth/merchants/*/users&quot;,
+            &quot;/api/v1/giftcards/list&quot;,
+            &quot;/api/v1/giftcards/list/**&quot;
+    };
+
+<span class="fc" id="L48">    private static final String[] MERCHANT_ROUTES = {</span>
+            &quot;/api/v1/giftcards/redeem/**&quot;,
+            &quot;/api/v1/giftcards/lookup/**&quot;,
+            &quot;/api/v1/giftcards/create/**&quot;,
+            &quot;/api/v1/giftcards/reserve/**&quot;,
+            &quot;/api/v1/giftcards/holds/**&quot;,
+            &quot;/api/v1/giftcards/*/ledger&quot;
+    };
+
+    private final JwtAuthenticationFilter jwtAuthFilter;
+    private final JwtAuthenticationEntryPoint authenticationEntryPoint;
+    private final JwtAccessDeniedHandler accessDeniedHandler;
+
+<span class="fc" id="L61">    public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter, JwtAuthenticationEntryPoint authenticationEntryPoint, JwtAccessDeniedHandler accessDeniedHandler) {</span>
+<span class="fc" id="L62">        this.jwtAuthFilter = jwtAuthFilter;</span>
+<span class="fc" id="L63">        this.authenticationEntryPoint = authenticationEntryPoint;</span>
+<span class="fc" id="L64">        this.accessDeniedHandler = accessDeniedHandler;</span>
+<span class="fc" id="L65">    }</span>
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+<span class="fc" id="L69">        return new BCryptPasswordEncoder();</span>
+    }
+
+    @Bean
+    public RoleHierarchy roleHierarchy() {
+        // No implied roles: ADMIN manages the platform (merchants, global gift card listing)
+        // but does not act on behalf of a specific merchant's own gift cards.
+<span class="fc" id="L76">        return RoleHierarchyImpl.withDefaultRolePrefix().build();</span>
+    }
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+<span class="fc" id="L81">        http</span>
+<span class="fc" id="L82">                .csrf(csrf -&gt; csrf.disable())</span>
+<span class="fc" id="L83">                .headers(headers -&gt; headers.frameOptions(frame -&gt; frame.disable()))</span>
+<span class="fc" id="L84">                .sessionManagement(session -&gt; session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))</span>
+
+<span class="fc" id="L86">                .authorizeHttpRequests(auth -&gt; auth</span>
+<span class="fc" id="L87">                        .requestMatchers(&quot;/h2-console/**&quot;).permitAll()</span>
+<span class="fc" id="L88">                        .requestMatchers(PUBLIC_ROUTES).permitAll()</span>
+<span class="fc" id="L89">                        .requestMatchers(ADMIN_ROUTES).hasRole(&quot;ADMIN&quot;)</span>
+<span class="fc" id="L90">                        .requestMatchers(MERCHANT_ROUTES).hasRole(&quot;MERCHANT&quot;)</span>
+<span class="fc" id="L91">                        .anyRequest().authenticated())</span>
+
+<span class="fc" id="L93">                .exceptionHandling(exception -&gt; exception</span>
+<span class="fc" id="L94">                        .authenticationEntryPoint(authenticationEntryPoint)</span>
+<span class="fc" id="L95">                        .accessDeniedHandler(accessDeniedHandler))</span>
+<span class="fc" id="L96">                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);</span>
+
+<span class="fc" id="L98">        return http.build();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

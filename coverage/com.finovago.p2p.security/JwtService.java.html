@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JwtService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.security</a> &gt; <span class="el_source">JwtService.java</span></div><h1>JwtService.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.security;
+
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.Nullable;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
+import java.util.Date;
+import java.util.List;
+import java.util.function.Function;
+
+@Component
+public class JwtService {
+
+    private final SecretKey key;
+    private final long jwtExpirationMs;
+
+    public JwtService(
+            @Value(&quot;${application.security.jwt.secret-key}&quot;) String secretKey,
+<span class="fc" id="L24">            @Value(&quot;${application.security.jwt.access-token-expiration}&quot;) long jwtExpirationMs) {</span>
+        
+<span class="fc" id="L26">        this.key = Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));</span>
+<span class="fc" id="L27">        this.jwtExpirationMs = jwtExpirationMs;</span>
+<span class="fc" id="L28">    }</span>
+
+    public String generateToken(String username, List&lt;String&gt; roles, @Nullable Long merchantId) {
+<span class="fc" id="L31">        return generateToken(username, roles, merchantId, null);</span>
+    }
+
+    public String generateToken(String username, List&lt;String&gt; roles, @Nullable Long merchantId, @Nullable Long userId) {
+<span class="fc" id="L35">        return Jwts.builder()</span>
+<span class="fc" id="L36">                .subject(username)</span>
+<span class="fc" id="L37">                .claim(&quot;roles&quot;, roles) // roles (ex : MERCHANT, ADMIN)</span>
+<span class="fc" id="L38">                .claim(&quot;merchantId&quot;, merchantId)</span>
+<span class="fc" id="L39">                .claim(&quot;userId&quot;, userId)</span>
+<span class="fc" id="L40">                .issuedAt(new Date(System.currentTimeMillis()))</span>
+<span class="fc" id="L41">                .expiration(new Date(System.currentTimeMillis() + jwtExpirationMs))</span>
+<span class="fc" id="L42">                .signWith(key)</span>
+<span class="fc" id="L43">                .compact();</span>
+    }
+
+    public String extractUsername(String token) {
+<span class="fc" id="L47">        return extractClaim(token, Claims::getSubject);</span>
+    }
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    public List&lt;String&gt; extractRoles(String token) {
+<span class="fc" id="L52">        return extractClaim(token, claims -&gt; claims.get(&quot;roles&quot;, List.class));</span>
+    }
+
+    public Long extractMerchantId(String token) {
+<span class="fc" id="L56">        return extractClaim(token, claims -&gt; claims.get(&quot;merchantId&quot;, Long.class));</span>
+    }
+
+    public Long extractUserId(String token) {
+<span class="fc" id="L60">        return extractClaim(token, claims -&gt; claims.get(&quot;userId&quot;, Long.class));</span>
+    }
+
+    public boolean isTokenValid(String token) {
+        try {
+<span class="fc" id="L65">            final Date expiration = extractClaim(token, Claims::getExpiration);</span>
+<span class="fc" id="L66">            return expiration.after(new Date());</span>
+<span class="fc" id="L67">        } catch (Exception e) {</span>
+<span class="fc" id="L68">            return false;</span>
+        }
+    }
+
+    private &lt;T&gt; T extractClaim(String token, Function&lt;Claims, T&gt; claimsResolver) {
+<span class="fc" id="L73">        final Claims claims = extractAllClaims(token);</span>
+<span class="fc" id="L74">        return claimsResolver.apply(claims);</span>
+    }
+
+    private Claims extractAllClaims(String token) { // if the token is invalid, this method will throw an exception
+<span class="fc" id="L78">        return Jwts.parser()</span>
+<span class="fc" id="L79">                .verifyWith(key)</span>
+<span class="fc" id="L80">                .build()</span>
+<span class="fc" id="L81">                .parseSignedClaims(token)</span>
+<span class="fc" id="L82">                .getPayload();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RegisterRequest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.dto</a> &gt; <span class="el_source">RegisterRequest.java</span></div><h1>RegisterRequest.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.dto;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+
+@Schema(
+    name = &quot;RegisterRequest&quot;,
+    description = &quot;Request object for merchant registration. Creates a new Merchant and its MERCHANT-role user account together.&quot;,
+    example = &quot;{\&quot;email\&quot;: \&quot;newuser@example.com\&quot;, \&quot;password\&quot;: \&quot;securePassword123\&quot;, \&quot;merchantName\&quot;: \&quot;Acme Corp\&quot;}&quot;
+)
+<span class="fc" id="L12">public record RegisterRequest(</span>
+    @Schema(
+        description = &quot;User's email address (must be unique)&quot;,
+        example = &quot;newuser@example.com&quot;,
+        requiredMode = Schema.RequiredMode.REQUIRED
+    )
+    @NotBlank(message = &quot;Email cannot be blank&quot;)
+    @Email(message = &quot;Email should be valid&quot;)
+    String email,
+
+    @Schema(
+        description = &quot;User's password in plain text (should be transmitted over HTTPS only)&quot;,
+        example = &quot;securePassword123&quot;,
+        requiredMode = Schema.RequiredMode.REQUIRED
+    )
+    @NotBlank(message = &quot;Password cannot be blank&quot;)
+    String password,
+
+    @Schema(
+        description = &quot;Business name of the merchant to create for this user&quot;,
+        example = &quot;Acme Corp&quot;,
+        requiredMode = Schema.RequiredMode.REQUIRED
+    )
+    @NotBlank(message = &quot;merchantName cannot be blank&quot;)
+    String merchantName
+) {}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

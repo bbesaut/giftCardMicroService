@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RateLimitFilter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.config</a> &gt; <span class="el_source">RateLimitFilter.java</span></div><h1>RateLimitFilter.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.config;
+
+import java.io.IOException;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finovago.p2p.model.Merchant;
+import com.finovago.p2p.repository.MerchantRepository;
+import com.finovago.p2p.security.CurrentUserContext;
+
+import io.github.bucket4j.Bandwidth;
+import io.github.bucket4j.Bucket;
+import io.github.bucket4j.ConsumptionProbe;
+
+import jakarta.annotation.PreDestroy;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+
+/**
+ * Caps requests on endpoints exposed to enumeration/brute-force abuse. Login (not yet
+ * authenticated) is capped per client IP - the only identity available pre-auth, which is what
+ * credential stuffing needs limiting on. Lookup/redeem/reserve are capped per merchant (from the
+ * JWT) instead of per IP: these are B2B endpoints called from a merchant's own backend, so every
+ * one of a merchant's end users shares that backend's IP - an IP-based limit would throttle
+ * legitimate concurrent traffic rather than abuse. Limits are per-instance only (in-memory
+ * buckets) - if this service is ever scaled horizontally, this must move to a shared store (e.g.
+ * Redis) or each instance will allow the full quota independently.
+ */
+@Component
+public class RateLimitFilter extends OncePerRequestFilter {
+
+<span class="fc" id="L46">    private static final Logger log = LoggerFactory.getLogger(RateLimitFilter.class);</span>
+<span class="fc" id="L47">    private static final ObjectMapper MAPPER = new ObjectMapper();</span>
+    private static final String LOGIN_PREFIX = &quot;/api/v1/auth/login&quot;;
+
+<span class="fc" id="L50">    private static final List&lt;String&gt; PROTECTED_PATH_PREFIXES = List.of(</span>
+        LOGIN_PREFIX,
+        &quot;/api/v1/giftcards/lookup/&quot;,
+        &quot;/api/v1/giftcards/redeem&quot;,
+        &quot;/api/v1/giftcards/reserve&quot;
+    );
+
+    private final boolean enabled;
+    private final int loginCapacity;
+    private final int defaultMerchantCapacity;
+    private final Duration refillPeriod;
+    private final CurrentUserContext currentUserContext;
+    private final MerchantRepository merchantRepository;
+<span class="fc" id="L63">    private final Map&lt;String, BucketEntry&gt; bucketsByKey = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L64">    private final ScheduledExecutorService cleanupExecutor = Executors.newSingleThreadScheduledExecutor();</span>
+
+<span class="fc" id="L66">    private record BucketEntry(Bucket bucket, int capacity) {}</span>
+
+    public RateLimitFilter(
+            @Value(&quot;${app.rate-limit.enabled:true}&quot;) boolean enabled,
+            @Value(&quot;${app.rate-limit.login-capacity:10}&quot;) int loginCapacity,
+            @Value(&quot;${app.rate-limit.merchant-capacity:300}&quot;) int defaultMerchantCapacity,
+            @Value(&quot;${app.rate-limit.refill-period-seconds:60}&quot;) long refillPeriodSeconds,
+            CurrentUserContext currentUserContext,
+<span class="fc" id="L74">            MerchantRepository merchantRepository) {</span>
+<span class="fc" id="L75">        this.enabled = enabled;</span>
+<span class="fc" id="L76">        this.loginCapacity = loginCapacity;</span>
+<span class="fc" id="L77">        this.defaultMerchantCapacity = defaultMerchantCapacity;</span>
+<span class="fc" id="L78">        this.refillPeriod = Duration.ofSeconds(refillPeriodSeconds);</span>
+<span class="fc" id="L79">        this.currentUserContext = currentUserContext;</span>
+<span class="fc" id="L80">        this.merchantRepository = merchantRepository;</span>
+<span class="fc" id="L81">        cleanupExecutor.scheduleAtFixedRate(this::evictIdleBuckets, 10, 10, TimeUnit.MINUTES);</span>
+<span class="fc" id="L82">    }</span>
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+<span class="fc bfc" id="L86" title="All 4 branches covered.">        return !enabled || matchedPrefix(request.getRequestURI()) == null;</span>
+    }
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
+
+<span class="fc" id="L93">        String matchedPrefix = matchedPrefix(request.getRequestURI());</span>
+<span class="fc" id="L94">        boolean isLogin = LOGIN_PREFIX.equals(matchedPrefix);</span>
+
+        String bucketKey;
+        int capacityForKey;
+        String identityForLog;
+
+<span class="fc bfc" id="L100" title="All 2 branches covered.">        if (isLogin) {</span>
+<span class="fc" id="L101">            String clientIp = resolveClientIp(request);</span>
+<span class="fc" id="L102">            bucketKey = matchedPrefix + &quot;|ip:&quot; + clientIp;</span>
+<span class="fc" id="L103">            capacityForKey = loginCapacity;</span>
+<span class="fc" id="L104">            identityForLog = &quot;IP &quot; + clientIp;</span>
+<span class="fc" id="L105">        } else {</span>
+<span class="fc" id="L106">            Long merchantId = currentUserContext.currentMerchantId();</span>
+<span class="fc" id="L107">            bucketKey = matchedPrefix + &quot;|merchant:&quot; + merchantId;</span>
+<span class="fc" id="L108">            capacityForKey = capacityForMerchant(merchantId);</span>
+<span class="fc" id="L109">            identityForLog = &quot;merchant &quot; + merchantId;</span>
+        }
+
+<span class="fc" id="L112">        BucketEntry entry = bucketsByKey.computeIfAbsent(bucketKey, key -&gt; newBucketEntry(capacityForKey));</span>
+<span class="fc" id="L113">        ConsumptionProbe probe = entry.bucket().tryConsumeAndReturnRemaining(1);</span>
+
+<span class="fc bfc" id="L115" title="All 2 branches covered.">        if (!probe.isConsumed()) {</span>
+<span class="fc" id="L116">            long retryAfterSeconds = Math.max(1, probe.getNanosToWaitForRefill() / 1_000_000_000);</span>
+<span class="fc" id="L117">            log.warn(&quot;Rate limit exceeded on {} for {}&quot;, matchedPrefix, identityForLog);</span>
+
+<span class="fc" id="L119">            response.setStatus(429);</span>
+<span class="fc" id="L120">            response.setContentType(&quot;application/json&quot;);</span>
+<span class="fc" id="L121">            response.setHeader(&quot;Retry-After&quot;, String.valueOf(retryAfterSeconds));</span>
+
+<span class="fc" id="L123">            Map&lt;String, Object&gt; errorResponse = Map.of(</span>
+                &quot;error&quot;, &quot;Too Many Requests&quot;,
+                &quot;message&quot;, &quot;Too many requests. Please try again later.&quot;
+            );
+<span class="fc" id="L127">            response.getWriter().write(MAPPER.writeValueAsString(errorResponse));</span>
+<span class="fc" id="L128">            return;</span>
+        }
+
+<span class="fc" id="L131">        filterChain.doFilter(request, response);</span>
+<span class="fc" id="L132">    }</span>
+
+    private String matchedPrefix(String uri) {
+<span class="fc" id="L135">        return PROTECTED_PATH_PREFIXES.stream()</span>
+<span class="fc" id="L136">                .filter(uri::startsWith)</span>
+<span class="fc" id="L137">                .findFirst()</span>
+<span class="fc" id="L138">                .orElse(null);</span>
+    }
+
+    private int capacityForMerchant(Long merchantId) {
+<span class="fc" id="L142">        return merchantRepository.findById(merchantId)</span>
+<span class="fc" id="L143">                .map(Merchant::getRateLimitCapacity)</span>
+<span class="fc" id="L144">                .orElse(defaultMerchantCapacity);</span>
+    }
+
+    private BucketEntry newBucketEntry(int capacity) {
+<span class="fc" id="L148">        Bandwidth limit = Bandwidth.builder().capacity(capacity).refillGreedy(capacity, refillPeriod).build();</span>
+<span class="fc" id="L149">        return new BucketEntry(Bucket.builder().addLimit(limit).build(), capacity);</span>
+    }
+
+    private void evictIdleBuckets() {
+<span class="nc bnc" id="L153" title="All 2 branches missed.">        bucketsByKey.entrySet().removeIf(entry -&gt; entry.getValue().bucket().getAvailableTokens() &gt;= entry.getValue().capacity());</span>
+<span class="nc" id="L154">    }</span>
+
+    private String resolveClientIp(HttpServletRequest request) {
+        // Not reading X-Forwarded-For here: without a trusted reverse proxy stripping/overwriting
+        // it first, a client can set it themselves and defeat the whole rate limit.
+<span class="fc" id="L159">        return request.getRemoteAddr();</span>
+    }
+
+    @PreDestroy
+    public void shutdown() {
+<span class="fc" id="L164">        cleanupExecutor.shutdown();</span>
+<span class="fc" id="L165">    }</span>
+
+    @Override
+    protected boolean shouldNotFilterAsyncDispatch() {
+<span class="fc" id="L169">        return false;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

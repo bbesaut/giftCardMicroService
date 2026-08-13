@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AsyncConfig.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.config</a> &gt; <span class="el_source">AsyncConfig.java</span></div><h1>AsyncConfig.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.config;
+
+import org.slf4j.MDC;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.task.TaskDecorator;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.annotation.EnableScheduling;
+
+import java.util.Map;
+import java.util.concurrent.Executor;
+
+@EnableAsync
+@EnableScheduling
+@Configuration
+<span class="fc" id="L17">public class AsyncConfig {</span>
+
+    @Bean
+    public Executor taskExecutor() {
+<span class="fc" id="L21">        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();</span>
+
+<span class="fc" id="L23">        executor.setCorePoolSize(5); // = minimum number of threads to keep in the pool, even if they are idle</span>
+<span class="fc" id="L24">        executor.setMaxPoolSize(10); // = maximum number of threads to allow in the pool</span>
+<span class="fc" id="L25">        executor.setQueueCapacity(100); // = the capacity of the queue to hold tasks before they are executed</span>
+
+<span class="fc" id="L27">        executor.setTaskDecorator(new MdcTaskDecorator()); // = before executing a task, go into the decorator</span>
+
+<span class="fc" id="L29">        executor.initialize(); // start the executor, initialize the thread pool</span>
+<span class="fc" id="L30">        return executor; // save this as a pool used by the @Async annotation</span>
+    }
+
+<span class="fc" id="L33">    static class MdcTaskDecorator implements TaskDecorator { // intercepts every async task</span>
+
+        @Override
+        public Runnable decorate(Runnable runnable) { // spring gives the runnable (a task) before executing it
+
+<span class="fc" id="L38">            Map&lt;String, String&gt; contextMap = MDC.getCopyOfContextMap(); // = copy the current thread's MDC context map (correlationId) </span>
+
+<span class="fc" id="L40">            return () -&gt; { // we return a new task</span>
+                try {
+<span class="fc bfc" id="L42" title="All 2 branches covered.">                    if (contextMap != null) {</span>
+<span class="fc" id="L43">                        MDC.setContextMap(contextMap); // inject the MDC context map into the new thread's MDC context map (correlationId)</span>
+                    }
+<span class="fc" id="L45">                    runnable.run(); // exectue the given task in the new thread</span>
+                } finally {
+<span class="fc" id="L47">                    MDC.clear(); // clear MDC when finished</span>
+                }
+<span class="fc" id="L49">            };</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

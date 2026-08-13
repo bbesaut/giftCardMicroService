@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AuthService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.service</a> &gt; <span class="el_source">AuthService.java</span></div><h1>AuthService.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.service;
+
+import java.util.List;
+
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+
+import com.finovago.p2p.dto.AddMerchantUserRequest;
+import com.finovago.p2p.dto.AuthResponse;
+import com.finovago.p2p.dto.LoginRequest;
+import com.finovago.p2p.dto.RefreshTokenRequest;
+import com.finovago.p2p.dto.RegisterRequest;
+import com.finovago.p2p.exception.InvalidRefreshTokenException;
+import com.finovago.p2p.exception.MerchantNotFoundException;
+import com.finovago.p2p.exception.UserAlreadyExistsException;
+import com.finovago.p2p.model.Merchant;
+import com.finovago.p2p.model.Role;
+import com.finovago.p2p.model.User;
+import com.finovago.p2p.repository.MerchantRepository;
+import com.finovago.p2p.repository.UserRepository;
+import com.finovago.p2p.security.JwtService;
+
+import lombok.extern.slf4j.Slf4j;
+
+<span class="fc" id="L26">@Slf4j</span>
+@Service
+public class AuthService {
+
+    private final UserRepository userRepository;
+    private final MerchantRepository merchantRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
+    private final RefreshTokenService refreshTokenService;
+
+    public AuthService(
+            UserRepository userRepository,
+            MerchantRepository merchantRepository,
+            PasswordEncoder passwordEncoder,
+            JwtService jwtService,
+<span class="fc" id="L41">            RefreshTokenService refreshTokenService) {</span>
+<span class="fc" id="L42">        this.userRepository = userRepository;</span>
+<span class="fc" id="L43">        this.merchantRepository = merchantRepository;</span>
+<span class="fc" id="L44">        this.passwordEncoder = passwordEncoder;</span>
+<span class="fc" id="L45">        this.jwtService = jwtService;</span>
+<span class="fc" id="L46">        this.refreshTokenService = refreshTokenService;</span>
+<span class="fc" id="L47">    }</span>
+
+    public AuthResponse login(LoginRequest request) {
+<span class="fc" id="L50">        User user = userRepository.findByEmail(request.email())</span>
+<span class="fc" id="L51">                .orElseThrow(() -&gt; {</span>
+<span class="fc" id="L52">                    log.warn(&quot;Login failed - user not found for email&quot;);</span>
+<span class="fc" id="L53">                    return new BadCredentialsException(&quot;Invalid credentials&quot;);</span>
+                });
+
+<span class="fc" id="L56">        long start = System.nanoTime();</span>
+<span class="fc" id="L57">        boolean matches = passwordEncoder.matches(request.password(), user.getPassword());</span>
+<span class="fc" id="L58">        log.debug(&quot;BCrypt matches took {} ms&quot;, (System.nanoTime() - start) / 1_000_000);</span>
+
+<span class="fc bfc" id="L60" title="All 2 branches covered.">        if (!matches) {</span>
+<span class="fc" id="L61">            log.warn(&quot;Login failed - invalid password for user: {}&quot;, user.getEmail());</span>
+<span class="fc" id="L62">            throw new BadCredentialsException(&quot;Invalid credentials&quot;);</span>
+        }
+
+<span class="fc" id="L65">        AuthResponse response = issueTokens(user);</span>
+<span class="fc" id="L66">        log.info(&quot;Tokens issued for user: {} (role: {})&quot;, user.getEmail(), user.getRole());</span>
+<span class="fc" id="L67">        return response;</span>
+    }
+
+    public AuthResponse refresh(RefreshTokenRequest request) {
+        try {
+<span class="fc" id="L72">            User user = refreshTokenService.validateAndRotate(request.refreshToken());</span>
+<span class="fc" id="L73">            log.info(&quot;Token rotation successful for user: {}&quot;, user.getEmail());</span>
+<span class="fc" id="L74">            return issueTokens(user);</span>
+<span class="fc" id="L75">        } catch (InvalidRefreshTokenException e) {</span>
+<span class="fc" id="L76">            log.warn(&quot;Token rotation failed: {}&quot;, e.getMessage());</span>
+<span class="fc" id="L77">            throw e;</span>
+        }
+    }
+
+    public void logout(RefreshTokenRequest request) {
+        try {
+<span class="fc" id="L83">            refreshTokenService.revoke(request.refreshToken());</span>
+<span class="fc" id="L84">            log.info(&quot;Logout successful - refresh token revoked&quot;);</span>
+<span class="fc" id="L85">        } catch (InvalidRefreshTokenException e) {</span>
+<span class="fc" id="L86">            log.warn(&quot;Logout failed - refresh token not found or invalid&quot;);</span>
+<span class="fc" id="L87">            throw e;</span>
+<span class="fc" id="L88">        }</span>
+<span class="fc" id="L89">    }</span>
+
+    public AuthResponse register(RegisterRequest request) {
+<span class="fc bfc" id="L92" title="All 2 branches covered.">        if (userRepository.findByEmail(request.email()).isPresent()) {</span>
+<span class="fc" id="L93">            log.warn(&quot;Registration failed - email already exists: {}&quot;, request.email());</span>
+<span class="fc" id="L94">            throw new UserAlreadyExistsException(&quot;Email already registered&quot;);</span>
+        }
+
+<span class="fc" id="L97">        Merchant merchant = merchantRepository.save(new Merchant(request.merchantName(), request.email()));</span>
+
+        // First account for a newly created merchant defaults to being its service account
+        // (the credentials its automated integration authenticates with).
+<span class="fc" id="L101">        User user = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, merchant, true);</span>
+<span class="fc" id="L102">        userRepository.save(user);</span>
+<span class="fc" id="L103">        log.info(&quot;User registered successfully: {} (role: MERCHANT, merchantId: {})&quot;, user.getEmail(), merchant.getId());</span>
+<span class="fc" id="L104">        return issueTokens(user);</span>
+    }
+
+    public AuthResponse addUserToMerchant(Long merchantId, AddMerchantUserRequest request) {
+<span class="fc bfc" id="L108" title="All 2 branches covered.">        if (userRepository.findByEmail(request.email()).isPresent()) {</span>
+<span class="fc" id="L109">            log.warn(&quot;Adding merchant user failed - email already exists: {}&quot;, request.email());</span>
+<span class="fc" id="L110">            throw new UserAlreadyExistsException(&quot;Email already registered&quot;);</span>
+        }
+
+<span class="fc" id="L113">        Merchant merchant = merchantRepository.findById(merchantId)</span>
+<span class="fc" id="L114">                .orElseThrow(() -&gt; new MerchantNotFoundException(&quot;Merchant not found: &quot; + merchantId));</span>
+
+<span class="fc" id="L116">        User user = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, merchant, request.serviceAccount());</span>
+<span class="fc" id="L117">        userRepository.save(user);</span>
+<span class="fc" id="L118">        log.info(&quot;User added to merchant: {} (merchantId: {}, serviceAccount: {})&quot;, user.getEmail(), merchantId, request.serviceAccount());</span>
+<span class="fc" id="L119">        return issueTokens(user);</span>
+    }
+
+    private AuthResponse issueTokens(User user) {
+<span class="fc" id="L123">        List&lt;String&gt; roles = List.of(user.getRole().name());</span>
+<span class="fc bfc" id="L124" title="All 2 branches covered.">        Long merchantId = user.getMerchant() != null ? user.getMerchant().getId() : null;</span>
+<span class="fc" id="L125">        String accessToken = jwtService.generateToken(user.getEmail(), roles, merchantId, user.getId());</span>
+<span class="fc" id="L126">        String refreshToken = refreshTokenService.createRefreshToken(user);</span>
+<span class="fc" id="L127">        log.debug(&quot;New access and refresh tokens generated for user: {}&quot;, user.getEmail());</span>
+<span class="fc" id="L128">        return new AuthResponse(accessToken, refreshToken);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

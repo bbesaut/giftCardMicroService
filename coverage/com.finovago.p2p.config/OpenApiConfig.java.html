@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>OpenApiConfig.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.config</a> &gt; <span class="el_source">OpenApiConfig.java</span></div><h1>OpenApiConfig.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springdoc.core.models.GroupedOpenApi;
+
+@Configuration
+<span class="fc" id="L8">public class OpenApiConfig {</span>
+
+    @Bean
+    GroupedOpenApi publicApi() {
+<span class="fc" id="L12">        return GroupedOpenApi.builder()</span>
+<span class="fc" id="L13">                .group(&quot;public-api&quot;)</span>
+<span class="fc" id="L14">                .pathsToMatch(&quot;/api/v1/auth/login&quot;, &quot;/api/v1/auth/refresh&quot;, &quot;/api/v1/auth/logout&quot;)</span>
+<span class="fc" id="L15">                .build();</span>
+    }
+
+    @Bean
+    GroupedOpenApi customerApi() {
+<span class="fc" id="L20">        return GroupedOpenApi.builder()</span>
+<span class="fc" id="L21">                .group(&quot;customer-api&quot;)</span>
+<span class="fc" id="L22">                .pathsToMatch(&quot;/&quot;, &quot;/api/v1/giftcards/create&quot;, &quot;/api/v1/giftcards/redeem&quot;, &quot;/api/v1/giftcards/lookup/**&quot;,</span>
+                        &quot;/api/v1/giftcards/reserve&quot;, &quot;/api/v1/giftcards/holds/**&quot;, &quot;/api/v1/giftcards/*/ledger&quot;)
+<span class="fc" id="L24">                .build();</span>
+    }
+
+    @Bean
+    GroupedOpenApi adminApi() {
+<span class="fc" id="L29">        return GroupedOpenApi.builder()</span>
+<span class="fc" id="L30">                .group(&quot;admin-api&quot;)</span>
+<span class="fc" id="L31">                .pathsToMatch(&quot;/api/v1/auth/register&quot;, &quot;/api/v1/auth/merchants/*/users&quot;, &quot;/api/v1/giftcards/list&quot;)</span>
+<span class="fc" id="L32">                .build();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>IdempotencyKeyService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.service</a> &gt; <span class="el_source">IdempotencyKeyService.java</span></div><h1>IdempotencyKeyService.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.service;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.LocalDateTime;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Optional;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finovago.p2p.exception.IdempotencyKeyConflictException;
+import com.finovago.p2p.exception.IdempotencyKeyInProgressException;
+import com.finovago.p2p.model.IdempotencyKey;
+import com.finovago.p2p.repository.IdempotencyKeyRepository;
+
+/**
+ * Endpoint-agnostic idempotency support: any mutating endpoint can claim a merchant-scoped key
+ * before running its business logic, and cache its response (serialized as JSON) for replay on
+ * retry. Each method here runs in its own transaction (REQUIRES_NEW), independent of the
+ * caller's business transaction - claim() acts as a fast, immediately-committed lock that
+ * concurrent duplicate requests observe right away.
+ */
+@Service
+public class IdempotencyKeyService {
+<span class="fc" id="L35">    private static final Logger log = LoggerFactory.getLogger(IdempotencyKeyService.class);</span>
+
+    private final IdempotencyKeyRepository idempotencyKeyRepository;
+    private final ObjectMapper objectMapper;
+    private final long ttlHours;
+
+    public IdempotencyKeyService(
+            IdempotencyKeyRepository idempotencyKeyRepository,
+            ObjectMapper objectMapper,
+<span class="fc" id="L44">            @Value(&quot;${app.idempotency.ttl-hours:24}&quot;) long ttlHours) {</span>
+<span class="fc" id="L45">        this.idempotencyKeyRepository = idempotencyKeyRepository;</span>
+<span class="fc" id="L46">        this.objectMapper = objectMapper;</span>
+<span class="fc" id="L47">        this.ttlHours = ttlHours;</span>
+<span class="fc" id="L48">    }</span>
+
+    /**
+     * Attempts to claim the key for a new request. Returns the cached response if this exact
+     * request already completed successfully under this key. Returns empty if the caller should
+     * proceed with the business logic. Throws if the key is already in use by an in-flight or
+     * mismatched request.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public &lt;T&gt; Optional&lt;T&gt; claim(Long merchantId, String idempotencyKey, String requestHash, Class&lt;T&gt; responseType) {
+<span class="fc" id="L58">        Optional&lt;IdempotencyKey&gt; existing = idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(merchantId, idempotencyKey);</span>
+<span class="fc bfc" id="L59" title="All 2 branches covered.">        if (existing.isPresent()) {</span>
+<span class="fc" id="L60">            return resolveExisting(existing.get(), requestHash, responseType);</span>
+        }
+
+        try {
+<span class="fc" id="L64">            IdempotencyKey claimRow = new IdempotencyKey(merchantId, idempotencyKey, requestHash, LocalDateTime.now().plusHours(ttlHours));</span>
+<span class="fc" id="L65">            idempotencyKeyRepository.saveAndFlush(claimRow);</span>
+<span class="fc" id="L66">            return Optional.empty();</span>
+<span class="fc" id="L67">        } catch (DataIntegrityViolationException e) {</span>
+            // Lost the race against a concurrent request with the same key: fall back to whatever it wrote.
+<span class="fc" id="L69">            IdempotencyKey concurrent = idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(merchantId, idempotencyKey)</span>
+<span class="pc" id="L70">                    .orElseThrow(() -&gt; e);</span>
+<span class="nc" id="L71">            return resolveExisting(concurrent, requestHash, responseType);</span>
+        }
+    }
+
+    private &lt;T&gt; Optional&lt;T&gt; resolveExisting(IdempotencyKey existing, String requestHash, Class&lt;T&gt; responseType) {
+<span class="fc bfc" id="L76" title="All 2 branches covered.">        if (!existing.matchesRequest(requestHash)) {</span>
+<span class="fc" id="L77">            throw new IdempotencyKeyConflictException(&quot;This Idempotency-Key was already used with a different request payload&quot;);</span>
+        }
+<span class="fc bfc" id="L79" title="All 2 branches covered.">        if (existing.isInProgress()) {</span>
+<span class="fc" id="L80">            throw new IdempotencyKeyInProgressException(&quot;A request with this Idempotency-Key is already being processed&quot;);</span>
+        }
+<span class="fc" id="L82">        return Optional.of(deserialize(existing.getResponseBody(), responseType));</span>
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void complete(Long merchantId, String idempotencyKey, Object response) {
+<span class="fc" id="L87">        idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(merchantId, idempotencyKey)</span>
+<span class="fc" id="L88">                .ifPresent(key -&gt; key.complete(serialize(response)));</span>
+<span class="fc" id="L89">    }</span>
+
+    /** Best-effort cleanup so a genuine business failure (e.g. inactive card) doesn't permanently block retries under the same key. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void discard(Long merchantId, String idempotencyKey) {
+        try {
+<span class="fc" id="L95">            idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(merchantId, idempotencyKey)</span>
+<span class="fc" id="L96">                    .ifPresent(idempotencyKeyRepository::delete);</span>
+<span class="nc" id="L97">        } catch (Exception e) {</span>
+<span class="nc" id="L98">            log.warn(&quot;Failed to discard idempotency key claim for merchant {}: {}&quot;, merchantId, e.getMessage());</span>
+<span class="fc" id="L99">        }</span>
+<span class="fc" id="L100">    }</span>
+
+    public String hashRequest(String... parts) {
+        try {
+<span class="fc" id="L104">            MessageDigest digest = MessageDigest.getInstance(&quot;SHA-256&quot;);</span>
+<span class="fc" id="L105">            byte[] hash = digest.digest(String.join(&quot;|&quot;, parts).getBytes(StandardCharsets.UTF_8));</span>
+<span class="fc" id="L106">            return HexFormat.of().formatHex(hash);</span>
+<span class="nc" id="L107">        } catch (NoSuchAlgorithmException e) {</span>
+<span class="nc" id="L108">            throw new IllegalStateException(&quot;SHA-256 not available&quot;, e);</span>
+        }
+    }
+
+    @Transactional
+    public void deleteExpired(LocalDateTime cutoff) {
+<span class="fc" id="L114">        List&lt;IdempotencyKey&gt; expired = idempotencyKeyRepository.findByExpiresAtBefore(cutoff);</span>
+<span class="fc" id="L115">        idempotencyKeyRepository.deleteAll(expired);</span>
+<span class="fc" id="L116">    }</span>
+
+    private String serialize(Object response) {
+        try {
+<span class="fc" id="L120">            return objectMapper.writeValueAsString(response);</span>
+<span class="nc" id="L121">        } catch (JsonProcessingException e) {</span>
+<span class="nc" id="L122">            throw new IllegalStateException(&quot;Failed to serialize idempotent response&quot;, e);</span>
+        }
+    }
+
+    private &lt;T&gt; T deserialize(String responseBody, Class&lt;T&gt; responseType) {
+        try {
+<span class="fc" id="L128">            return objectMapper.readValue(responseBody, responseType);</span>
+<span class="nc" id="L129">        } catch (JsonProcessingException e) {</span>
+<span class="nc" id="L130">            throw new IllegalStateException(&quot;Failed to deserialize cached idempotent response&quot;, e);</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

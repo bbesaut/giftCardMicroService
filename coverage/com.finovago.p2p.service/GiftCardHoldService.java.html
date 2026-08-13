@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GiftCardHoldService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.service</a> &gt; <span class="el_source">GiftCardHoldService.java</span></div><h1>GiftCardHoldService.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.service;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.util.Optional;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.finovago.p2p.dto.HoldResponse;
+import com.finovago.p2p.dto.ReserveRequest;
+import com.finovago.p2p.exception.HoldAlreadyFinalizedException;
+import com.finovago.p2p.exception.HoldNotFoundException;
+import com.finovago.p2p.exception.InsufficientAvailableBalanceException;
+import com.finovago.p2p.exception.UnknownGiftCardException;
+import com.finovago.p2p.model.GiftCard;
+import com.finovago.p2p.model.GiftCardHold;
+import com.finovago.p2p.model.HoldStatus;
+import com.finovago.p2p.model.LedgerEntryType;
+import com.finovago.p2p.repository.GiftCardHoldRepository;
+import com.finovago.p2p.repository.GiftCardRepository;
+import com.finovago.p2p.security.CurrentUserContext;
+
+@Service
+public class GiftCardHoldService {
+<span class="fc" id="L30">    private static final Logger log = LoggerFactory.getLogger(GiftCardHoldService.class);</span>
+
+    private final GiftCardHoldRepository giftCardHoldRepository;
+    private final GiftCardRepository giftCardRepository;
+    private final CurrentUserContext currentUserContext;
+    private final IdempotencyKeyService idempotencyKeyService;
+    private final LedgerService ledgerService;
+    private final long holdTtlMinutes;
+
+    public GiftCardHoldService(
+            GiftCardHoldRepository giftCardHoldRepository,
+            GiftCardRepository giftCardRepository,
+            CurrentUserContext currentUserContext,
+            IdempotencyKeyService idempotencyKeyService,
+            LedgerService ledgerService,
+<span class="fc" id="L45">            @Value(&quot;${app.holds.ttl-minutes:15}&quot;) long holdTtlMinutes) {</span>
+<span class="fc" id="L46">        this.giftCardHoldRepository = giftCardHoldRepository;</span>
+<span class="fc" id="L47">        this.giftCardRepository = giftCardRepository;</span>
+<span class="fc" id="L48">        this.currentUserContext = currentUserContext;</span>
+<span class="fc" id="L49">        this.idempotencyKeyService = idempotencyKeyService;</span>
+<span class="fc" id="L50">        this.ledgerService = ledgerService;</span>
+<span class="fc" id="L51">        this.holdTtlMinutes = holdTtlMinutes;</span>
+<span class="fc" id="L52">    }</span>
+
+    /**
+     * claim()/complete()/discard() call a different bean (IdempotencyKeyService), so their
+     * REQUIRES_NEW transactions correctly nest inside this method's transaction despite it
+     * being a single @Transactional method - unlike a self-invoked inner method, this doesn't
+     * risk losing the pessimistic lock held below for the whole reserve.
+     */
+    @Transactional
+    public HoldResponse reserve(ReserveRequest request, String idempotencyKey) {
+<span class="fc" id="L62">        Long merchantId = currentUserContext.currentMerchantId();</span>
+<span class="fc" id="L63">        String requestHash = idempotencyKeyService.hashRequest(request.giftCardCode(), request.amount().setScale(2, RoundingMode.HALF_UP).toPlainString());</span>
+
+<span class="fc" id="L65">        Optional&lt;HoldResponse&gt; cached = idempotencyKeyService.claim(merchantId, idempotencyKey, requestHash, HoldResponse.class);</span>
+<span class="fc bfc" id="L66" title="All 2 branches covered.">        if (cached.isPresent()) {</span>
+<span class="fc" id="L67">            log.info(&quot;Idempotency-Key {} already completed, returning cached result&quot;, idempotencyKey);</span>
+<span class="fc" id="L68">            return cached.get();</span>
+        }
+
+        try {
+<span class="fc" id="L72">            HoldResponse response = reserveWithoutIdempotency(merchantId, request);</span>
+<span class="fc" id="L73">            idempotencyKeyService.complete(merchantId, idempotencyKey, response);</span>
+<span class="fc" id="L74">            return response;</span>
+<span class="fc" id="L75">        } catch (RuntimeException e) {</span>
+<span class="fc" id="L76">            idempotencyKeyService.discard(merchantId, idempotencyKey);</span>
+<span class="fc" id="L77">            throw e;</span>
+        }
+    }
+
+    private HoldResponse reserveWithoutIdempotency(Long merchantId, ReserveRequest request) {
+        // Locks the gift_card row for the whole transaction: the available-balance check below
+        // reads across gift_card and gift_card_hold, so the invariant being protected is
+        // per-gift-card and must be serialized at that granularity.
+<span class="fc" id="L85">        GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCodeForUpdate(merchantId, request.giftCardCode())</span>
+<span class="fc" id="L86">                .orElseThrow(() -&gt; new UnknownGiftCardException(&quot;Gift card not found&quot;));</span>
+
+<span class="fc" id="L88">        giftCard.ensureUsable();</span>
+
+        // @Digits on ReserveRequest already rejects more than 2 decimal places, so this only pads
+        // the scale (e.g. &quot;1&quot; -&gt; &quot;1.00&quot;) - see GiftCardService#executeRedemptionSync for the same pattern.
+<span class="fc" id="L92">        BigDecimal amount = request.amount().setScale(2, RoundingMode.HALF_UP);</span>
+
+<span class="fc" id="L94">        BigDecimal pendingHeld = giftCardHoldRepository.sumPendingHoldAmounts(giftCard.getId());</span>
+<span class="fc" id="L95">        BigDecimal available = giftCard.getBalance().subtract(pendingHeld);</span>
+
+<span class="fc bfc" id="L97" title="All 2 branches covered.">        if (available.compareTo(amount) &lt; 0) {</span>
+<span class="fc" id="L98">            throw new InsufficientAvailableBalanceException(&quot;Insufficient available balance to reserve this amount&quot;);</span>
+        }
+
+<span class="fc" id="L101">        LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(holdTtlMinutes);</span>
+<span class="fc" id="L102">        GiftCardHold hold = new GiftCardHold(giftCard, merchantId, amount, expiresAt);</span>
+<span class="fc" id="L103">        GiftCardHold saved = giftCardHoldRepository.save(hold);</span>
+
+<span class="fc" id="L105">        ledgerService.record(giftCard, merchantId, LedgerEntryType.HOLD_PLACED, amount, giftCard.getBalance(), saved.getId(), currentUserContext.currentUserIdOrNull());</span>
+
+<span class="fc" id="L107">        log.info(&quot;Reserved hold [{}] for {} on card [{}]&quot;, saved.getId(), amount, request.giftCardCode());</span>
+
+<span class="fc" id="L109">        return new HoldResponse(saved.getId(), saved.getStatus().name(), saved.getExpiresAt(), available.subtract(amount));</span>
+    }
+
+    @Transactional
+    public HoldResponse capture(Long holdId) {
+<span class="fc" id="L114">        Long merchantId = currentUserContext.currentMerchantId();</span>
+
+<span class="fc" id="L116">        GiftCardHold hold = giftCardHoldRepository.findByIdAndMerchantIdForUpdate(holdId, merchantId)</span>
+<span class="fc" id="L117">                .orElseThrow(() -&gt; new HoldNotFoundException(&quot;Hold not found&quot;));</span>
+
+        // Capture is idempotent by target state: retrying a capture that already succeeded
+        // replays the same 200 response instead of erroring, since re-asking for CAPTURED on an
+        // already-CAPTURED hold is not a real conflict. A different terminal state (RELEASED/
+        // EXPIRED) is a genuine conflict and still throws.
+<span class="fc bfc" id="L123" title="All 2 branches covered.">        if (hold.getStatus() == HoldStatus.CAPTURED) {</span>
+<span class="fc" id="L124">            return new HoldResponse(hold.getId(), hold.getStatus().name(), hold.getExpiresAt(), null);</span>
+        }
+
+<span class="fc bfc" id="L127" title="All 2 branches covered.">        if (!hold.isPending()) {</span>
+<span class="fc" id="L128">            throw new HoldAlreadyFinalizedException(&quot;Hold is already &quot; + hold.getStatus());</span>
+        }
+
+<span class="fc bfc" id="L131" title="All 2 branches covered.">        if (hold.getExpiresAt().isBefore(LocalDateTime.now())) {</span>
+<span class="fc" id="L132">            throw new HoldAlreadyFinalizedException(&quot;Hold has expired&quot;);</span>
+        }
+
+        // Re-lock the gift card row to perform the real balance deduction - this is the only
+        // point at which a hold's earmark becomes an actual balance mutation.
+<span class="fc" id="L137">        GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCodeForUpdate(merchantId, hold.getGiftCard().getCardCode())</span>
+<span class="pc" id="L138">                .orElseThrow(() -&gt; new UnknownGiftCardException(&quot;Gift card not found&quot;));</span>
+<span class="fc" id="L139">        giftCard.deductBalance(hold.getAmount());</span>
+<span class="fc" id="L140">        giftCardRepository.save(giftCard);</span>
+
+<span class="fc" id="L142">        hold.capture();</span>
+<span class="fc" id="L143">        giftCardHoldRepository.save(hold);</span>
+
+<span class="fc" id="L145">        ledgerService.record(giftCard, merchantId, LedgerEntryType.HOLD_CAPTURED, hold.getAmount(), giftCard.getBalance(), hold.getId(), currentUserContext.currentUserIdOrNull());</span>
+
+<span class="fc" id="L147">        log.info(&quot;Captured hold [{}], deducted {} from card [{}]&quot;, hold.getId(), hold.getAmount(), giftCard.getCardCode());</span>
+
+<span class="fc" id="L149">        return new HoldResponse(hold.getId(), hold.getStatus().name(), hold.getExpiresAt(), null);</span>
+    }
+
+    @Transactional
+    public HoldResponse release(Long holdId) {
+<span class="fc" id="L154">        Long merchantId = currentUserContext.currentMerchantId();</span>
+
+<span class="fc" id="L156">        GiftCardHold hold = giftCardHoldRepository.findByIdAndMerchantIdForUpdate(holdId, merchantId)</span>
+<span class="fc" id="L157">                .orElseThrow(() -&gt; new HoldNotFoundException(&quot;Hold not found&quot;));</span>
+
+        // Same idempotent-by-target-state replay as capture(): retrying a release that already
+        // succeeded returns the same 200 instead of erroring.
+<span class="fc bfc" id="L161" title="All 2 branches covered.">        if (hold.getStatus() == HoldStatus.RELEASED) {</span>
+<span class="fc" id="L162">            return new HoldResponse(hold.getId(), hold.getStatus().name(), hold.getExpiresAt(), null);</span>
+        }
+
+<span class="fc bfc" id="L165" title="All 2 branches covered.">        if (!hold.isPending()) {</span>
+<span class="fc" id="L166">            throw new HoldAlreadyFinalizedException(&quot;Hold is already &quot; + hold.getStatus());</span>
+        }
+
+<span class="fc" id="L169">        hold.release();</span>
+<span class="fc" id="L170">        giftCardHoldRepository.save(hold);</span>
+
+<span class="fc" id="L172">        ledgerService.record(hold.getGiftCard(), merchantId, LedgerEntryType.HOLD_RELEASED, hold.getAmount(), hold.getGiftCard().getBalance(), hold.getId(), currentUserContext.currentUserIdOrNull());</span>
+
+<span class="fc" id="L174">        log.info(&quot;Released hold [{}]&quot;, hold.getId());</span>
+
+<span class="fc" id="L176">        return new HoldResponse(hold.getId(), hold.getStatus().name(), hold.getExpiresAt(), null);</span>
+    }
+
+    /**
+     * Invoked by HoldExpirationScheduler for each expiry candidate, in its own transaction so
+     * one failure doesn't roll back the rest of the sweep. Not merchant-scoped: the scheduler
+     * already selected candidates system-wide.
+     */
+    @Transactional
+    public void expireIfStillPending(Long holdId) {
+<span class="fc" id="L186">        giftCardHoldRepository.findByIdForUpdate(holdId).ifPresent(hold -&gt; {</span>
+<span class="fc bfc" id="L187" title="All 2 branches covered.">            if (hold.isPending()) {</span>
+<span class="fc" id="L188">                hold.expire();</span>
+<span class="fc" id="L189">                giftCardHoldRepository.save(hold);</span>
+<span class="fc" id="L190">                log.info(&quot;Expired hold [{}]&quot;, hold.getId());</span>
+            }
+<span class="fc" id="L192">        });</span>
+<span class="fc" id="L193">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

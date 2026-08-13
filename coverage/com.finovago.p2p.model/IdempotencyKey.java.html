@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>IdempotencyKey.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.model</a> &gt; <span class="el_source">IdempotencyKey.java</span></div><h1>IdempotencyKey.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.model;
+
+import java.time.LocalDateTime;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+@Entity
+@NoArgsConstructor
+@Getter
+@Table(name = &quot;idempotency_key&quot;)
+public class IdempotencyKey {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = &quot;merchant_id&quot;, nullable = false)
+    private Long merchantId;
+
+    @Column(name = &quot;idempotency_key&quot;, nullable = false)
+    private String idempotencyKey;
+
+    @Column(name = &quot;request_hash&quot;, nullable = false)
+    private String requestHash;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private IdempotencyStatus status;
+
+    @Column(name = &quot;response_body&quot;, columnDefinition = &quot;TEXT&quot;)
+    private String responseBody;
+
+    @Column(name = &quot;created_at&quot;, nullable = false)
+    private LocalDateTime createdAt;
+
+    @Column(name = &quot;expires_at&quot;, nullable = false)
+    private LocalDateTime expiresAt;
+
+<span class="fc" id="L47">    public IdempotencyKey(Long merchantId, String idempotencyKey, String requestHash, LocalDateTime expiresAt) {</span>
+<span class="fc" id="L48">        this.merchantId = merchantId;</span>
+<span class="fc" id="L49">        this.idempotencyKey = idempotencyKey;</span>
+<span class="fc" id="L50">        this.requestHash = requestHash;</span>
+<span class="fc" id="L51">        this.status = IdempotencyStatus.IN_PROGRESS;</span>
+<span class="fc" id="L52">        this.createdAt = LocalDateTime.now();</span>
+<span class="fc" id="L53">        this.expiresAt = expiresAt;</span>
+<span class="fc" id="L54">    }</span>
+
+    public boolean matchesRequest(String requestHash) {
+<span class="fc" id="L57">        return this.requestHash.equals(requestHash);</span>
+    }
+
+    public boolean isInProgress() {
+<span class="fc bfc" id="L61" title="All 2 branches covered.">        return this.status == IdempotencyStatus.IN_PROGRESS;</span>
+    }
+
+    public void complete(String responseBody) {
+<span class="fc" id="L65">        this.status = IdempotencyStatus.COMPLETED;</span>
+<span class="fc" id="L66">        this.responseBody = responseBody;</span>
+<span class="fc" id="L67">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

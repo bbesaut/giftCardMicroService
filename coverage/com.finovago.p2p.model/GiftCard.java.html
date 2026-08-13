@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GiftCard.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.model</a> &gt; <span class="el_source">GiftCard.java</span></div><h1>GiftCard.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.model;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+
+import jakarta.annotation.Nullable;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+import com.finovago.p2p.exception.ExpiredGiftCardException;
+import com.finovago.p2p.exception.InactiveGiftCardException;
+
+@Entity
+@NoArgsConstructor
+@Getter
+@Table(name = &quot;gift_card&quot;, uniqueConstraints = @UniqueConstraint(name = &quot;uq_giftcard_merchant_cardcode&quot;, columnNames = {&quot;merchant_id&quot;, &quot;card_code&quot;}))
+public class GiftCard
+{
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    @Column(nullable = false)
+    private String cardCode;
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal balance;
+    private boolean active;
+    private LocalDate expirationDate;
+
+    @ManyToOne(optional = false)
+    @JoinColumn(name = &quot;merchant_id&quot;, nullable = false)
+    private Merchant merchant;
+
+<span class="fc" id="L42">    public GiftCard(Merchant merchant, String cardCode, BigDecimal balance, boolean active, @Nullable LocalDate expirationDate) {</span>
+<span class="fc" id="L43">        this.merchant = merchant;</span>
+<span class="fc" id="L44">        this.cardCode = cardCode;</span>
+<span class="fc" id="L45">        this.balance = balance;</span>
+<span class="fc" id="L46">        this.active = active;</span>
+<span class="fc bfc" id="L47" title="All 2 branches covered.">        this.expirationDate = expirationDate != null ? expirationDate : LocalDate.now().plusYears(2);</span>
+<span class="fc" id="L48">    }</span>
+
+    public void ensureUsable() {
+<span class="fc bfc" id="L51" title="All 2 branches covered.">        if (!active) {</span>
+<span class="fc" id="L52">            throw new InactiveGiftCardException(&quot;Card is already inactive&quot;);</span>
+        }
+<span class="fc bfc" id="L54" title="All 2 branches covered.">        if (expirationDate.isBefore(LocalDate.now())) {</span>
+<span class="fc" id="L55">            throw new ExpiredGiftCardException(&quot;Gift card has expired&quot;);</span>
+        }
+<span class="fc" id="L57">    }</span>
+
+    public void deductBalance(BigDecimal amount) {
+<span class="fc" id="L60">        this.balance = this.balance.subtract(amount);</span>
+<span class="fc" id="L61">    }</span>
+
+    public void drainCard() {
+<span class="fc" id="L64">        this.balance = BigDecimal.ZERO.setScale(2);</span>
+<span class="fc" id="L65">        this.active = false;</span>
+<span class="fc" id="L66">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ResponseTimeFilter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.config</a> &gt; <span class="el_source">ResponseTimeFilter.java</span></div><h1>ResponseTimeFilter.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.config;
+
+import jakarta.servlet.DispatcherType;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletOutputStream;
+import jakarta.servlet.WriteListener;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletResponseWrapper;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+import java.io.PrintWriter;
+
+// Must run before Spring Security's filter chain (default order -100), otherwise requests
+// rejected by Security itself (401/403, before reaching the controller) never get timed.
+@Component
+@Order(Ordered.HIGHEST_PRECEDENCE)
+<span class="fc" id="L23">public class ResponseTimeFilter extends OncePerRequestFilter {</span>
+
+    private static final String START_TIME_ATTRIBUTE = &quot;responseTimeFilter.startTime&quot;;
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
+
+<span class="fc bfc" id="L31" title="All 2 branches covered.">        if (request.getDispatcherType() == DispatcherType.ASYNC) {</span>
+            // Resuming an async controller (e.g. redeem): nothing has been written yet at this point,
+            // so the header can be set directly - no need to wrap.
+<span class="fc" id="L34">            long duration = System.currentTimeMillis() - (long) request.getAttribute(START_TIME_ATTRIBUTE);</span>
+<span class="fc" id="L35">            response.setHeader(&quot;X-Response-Time&quot;, String.valueOf(duration));</span>
+<span class="fc" id="L36">            filterChain.doFilter(request, response);</span>
+<span class="fc" id="L37">            return;</span>
+        }
+
+<span class="fc" id="L40">        long startTime = System.currentTimeMillis();</span>
+<span class="fc" id="L41">        request.setAttribute(START_TIME_ATTRIBUTE, startTime);</span>
+
+        // Setting the header in a finally block AFTER filterChain.doFilter() returns is too late for
+        // most real responses: the container commits the response (headers included) as soon as the
+        // body starts being written, which happens INSIDE that call - not after it. Once committed,
+        // setHeader() is a silent no-op per the Servlet spec. This wrapper sets the header lazily, the
+        // moment the body's output stream/writer is first requested - i.e. right before the first byte
+        // could possibly be written, which is always before commit. It never buffers or intercepts the
+        // actual bytes, so - unlike a fully buffering wrapper - it carries none of the async-lifecycle
+        // risk called out in TimingResponseWrapper's Javadoc below.
+<span class="fc" id="L51">        TimingResponseWrapper wrapped = new TimingResponseWrapper(response, startTime);</span>
+
+        try {
+<span class="fc" id="L54">            filterChain.doFilter(request, wrapped);</span>
+        } finally {
+            // Fallback for responses with no body at all (e.g. 204 No Content): the wrapper's streams
+            // are never requested in that case, so the header would otherwise never get set. Safe to
+            // set here too since nothing has been written.
+<span class="fc bfc" id="L59" title="All 4 branches covered.">            if (!request.isAsyncStarted() &amp;&amp; !wrapped.headerWritten()) {</span>
+<span class="fc" id="L60">                response.setHeader(&quot;X-Response-Time&quot;, String.valueOf(System.currentTimeMillis() - startTime));</span>
+            }
+        }
+<span class="fc" id="L63">    }</span>
+
+    @Override
+    protected boolean shouldNotFilterAsyncDispatch() {
+<span class="fc" id="L67">        return false;</span>
+    }
+
+    @Override
+    protected boolean shouldNotFilterErrorDispatch() {
+        // Default is true (skip on the internal /error forward Boot performs for unmapped routes
+        // and uncaught exceptions), which would leave error-page responses untimed. Re-run so those
+        // get X-Response-Time too, consistent with &quot;every response has this header&quot;.
+<span class="fc" id="L75">        return false;</span>
+    }
+
+    /**
+     * Adds X-Response-Time the moment the response body starts being written, instead of after the
+     * fact. Purely pass-through - it never buffers bytes itself, so (unlike e.g.
+     * ContentCachingResponseWrapper) there is no buffered content that could be silently dropped if
+     * this dispatch turns out to start async processing further down the chain.
+     */
+    private static final class TimingResponseWrapper extends HttpServletResponseWrapper {
+        private final long startTime;
+<span class="fc" id="L86">        private boolean headerWritten = false;</span>
+
+        TimingResponseWrapper(HttpServletResponse response, long startTime) {
+<span class="fc" id="L89">            super(response);</span>
+<span class="fc" id="L90">            this.startTime = startTime;</span>
+<span class="fc" id="L91">        }</span>
+
+        boolean headerWritten() {
+<span class="fc" id="L94">            return headerWritten;</span>
+        }
+
+        private void writeHeaderOnce() {
+<span class="pc bpc" id="L98" title="1 of 2 branches missed.">            if (!headerWritten) {</span>
+<span class="fc" id="L99">                headerWritten = true;</span>
+<span class="fc bfc" id="L100" title="All 2 branches covered.">                if (getHeader(&quot;X-Response-Time&quot;) == null) {</span>
+<span class="fc" id="L101">                    setHeader(&quot;X-Response-Time&quot;, String.valueOf(System.currentTimeMillis() - startTime));</span>
+                }
+            }
+<span class="fc" id="L104">        }</span>
+
+        @Override
+        public ServletOutputStream getOutputStream() throws IOException {
+<span class="fc" id="L108">            ServletOutputStream delegate = super.getOutputStream();</span>
+<span class="fc" id="L109">            return new ServletOutputStream() {</span>
+                @Override
+                public boolean isReady() {
+<span class="nc" id="L112">                    return delegate.isReady();</span>
+                }
+
+                @Override
+                public void setWriteListener(WriteListener writeListener) {
+<span class="nc" id="L117">                    delegate.setWriteListener(writeListener);</span>
+<span class="nc" id="L118">                }</span>
+
+                @Override
+                public void write(int b) throws IOException {
+<span class="nc" id="L122">                    writeHeaderOnce();</span>
+<span class="nc" id="L123">                    delegate.write(b);</span>
+<span class="nc" id="L124">                }</span>
+
+                @Override
+                public void write(byte[] b, int off, int len) throws IOException {
+<span class="fc" id="L128">                    writeHeaderOnce();</span>
+<span class="fc" id="L129">                    delegate.write(b, off, len);</span>
+<span class="fc" id="L130">                }</span>
+            };
+        }
+
+        @Override
+        public PrintWriter getWriter() throws IOException {
+<span class="fc" id="L136">            writeHeaderOnce();</span>
+<span class="fc" id="L137">            return super.getWriter();</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
