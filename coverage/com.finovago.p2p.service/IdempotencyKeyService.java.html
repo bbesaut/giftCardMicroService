@@ -68,7 +68,7 @@ public class IdempotencyKeyService {
             // Lost the race against a concurrent request with the same key: fall back to whatever it wrote.
 <span class="fc" id="L69">            IdempotencyKey concurrent = idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(merchantId, idempotencyKey)</span>
 <span class="pc" id="L70">                    .orElseThrow(() -&gt; e);</span>
-<span class="nc" id="L71">            return resolveExisting(concurrent, requestHash, responseType);</span>
+<span class="fc" id="L71">            return resolveExisting(concurrent, requestHash, responseType);</span>
         }
     }
 
@@ -94,8 +94,8 @@ public class IdempotencyKeyService {
         try {
 <span class="fc" id="L95">            idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(merchantId, idempotencyKey)</span>
 <span class="fc" id="L96">                    .ifPresent(idempotencyKeyRepository::delete);</span>
-<span class="nc" id="L97">        } catch (Exception e) {</span>
-<span class="nc" id="L98">            log.warn(&quot;Failed to discard idempotency key claim for merchant {}: {}&quot;, merchantId, e.getMessage());</span>
+<span class="fc" id="L97">        } catch (Exception e) {</span>
+<span class="fc" id="L98">            log.warn(&quot;Failed to discard idempotency key claim for merchant {}: {}&quot;, merchantId, e.getMessage());</span>
 <span class="fc" id="L99">        }</span>
 <span class="fc" id="L100">    }</span>
 
@@ -126,8 +126,8 @@ public class IdempotencyKeyService {
     private &lt;T&gt; T deserialize(String responseBody, Class&lt;T&gt; responseType) {
         try {
 <span class="fc" id="L128">            return objectMapper.readValue(responseBody, responseType);</span>
-<span class="nc" id="L129">        } catch (JsonProcessingException e) {</span>
-<span class="nc" id="L130">            throw new IllegalStateException(&quot;Failed to deserialize cached idempotent response&quot;, e);</span>
+<span class="fc" id="L129">        } catch (JsonProcessingException e) {</span>
+<span class="fc" id="L130">            throw new IllegalStateException(&quot;Failed to deserialize cached idempotent response&quot;, e);</span>
         }
     }
 }

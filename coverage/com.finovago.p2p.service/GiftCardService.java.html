@@ -167,16 +167,16 @@ public class GiftCardService {
 
     @Transactional(readOnly = true)
     public List&lt;GiftCardResponse&gt; getAllGiftCards() {
-<span class="nc" id="L170">        log.info(&quot;Fetching all gift cards from database&quot;);</span>
+<span class="fc" id="L170">        log.info(&quot;Fetching all gift cards from database&quot;);</span>
 
-<span class="nc bnc" id="L172" title="All 2 branches missed.">        List&lt;GiftCard&gt; cards = currentUserContext.isAdmin()</span>
-<span class="nc" id="L173">                ? giftCardRepository.findAll()</span>
-<span class="nc" id="L174">                : giftCardRepository.findAllByMerchantId(currentUserContext.currentMerchantId());</span>
+<span class="fc bfc" id="L172" title="All 2 branches covered.">        List&lt;GiftCard&gt; cards = currentUserContext.isAdmin()</span>
+<span class="fc" id="L173">                ? giftCardRepository.findAll()</span>
+<span class="fc" id="L174">                : giftCardRepository.findAllByMerchantId(currentUserContext.currentMerchantId());</span>
 
-<span class="nc" id="L176">        return cards</span>
-<span class="nc" id="L177">                .stream()</span>
-<span class="nc" id="L178">                .map(card -&gt; new GiftCardResponse(card.getCardCode(), card.getBalance(), card.isActive(), card.getExpirationDate(), card.getMerchant().getId()))</span>
-<span class="nc" id="L179">                .toList();</span>
+<span class="fc" id="L176">        return cards</span>
+<span class="fc" id="L177">                .stream()</span>
+<span class="fc" id="L178">                .map(card -&gt; new GiftCardResponse(card.getCardCode(), card.getBalance(), card.isActive(), card.getExpirationDate(), card.getMerchant().getId()))</span>
+<span class="fc" id="L179">                .toList();</span>
     }
 
     @Transactional(readOnly = true)

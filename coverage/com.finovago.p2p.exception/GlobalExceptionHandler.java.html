@@ -36,97 +36,97 @@ import io.jsonwebtoken.security.SignatureException;
 
     @ExceptionHandler(InactiveGiftCardException.class)
     public ResponseEntity&lt;Object&gt; handleInactiveGiftCardException(InactiveGiftCardException ex) {
-<span class="nc" id="L39">        log.warn(ex.getMessage()); // log the throw message</span>
+<span class="fc" id="L39">        log.warn(ex.getMessage()); // log the throw message</span>
 
-<span class="nc" id="L41">        return ResponseEntity</span>
-<span class="nc" id="L42">                .status(HttpStatus.UNPROCESSABLE_ENTITY)</span>
-<span class="nc" id="L43">                .body(Map.of(</span>
+<span class="fc" id="L41">        return ResponseEntity</span>
+<span class="fc" id="L42">                .status(HttpStatus.UNPROCESSABLE_ENTITY)</span>
+<span class="fc" id="L43">                .body(Map.of(</span>
                     &quot;error&quot;, &quot;Unprocessable Entity&quot;,
-<span class="nc" id="L45">                    &quot;message&quot;, ex.getMessage()</span>
+<span class="fc" id="L45">                    &quot;message&quot;, ex.getMessage()</span>
                 ));
     }
 
     @ExceptionHandler(ExpiredGiftCardException.class)
     public ResponseEntity&lt;Object&gt; handleExpiredGiftCardException(ExpiredGiftCardException ex) {
-<span class="nc" id="L51">        log.warn(ex.getMessage());</span>
+<span class="fc" id="L51">        log.warn(ex.getMessage());</span>
 
-<span class="nc" id="L53">        return ResponseEntity</span>
-<span class="nc" id="L54">                .status(HttpStatus.UNPROCESSABLE_ENTITY)</span>
-<span class="nc" id="L55">                .body(Map.of(</span>
+<span class="fc" id="L53">        return ResponseEntity</span>
+<span class="fc" id="L54">                .status(HttpStatus.UNPROCESSABLE_ENTITY)</span>
+<span class="fc" id="L55">                .body(Map.of(</span>
                     &quot;error&quot;, &quot;Unprocessable Entity&quot;,
-<span class="nc" id="L57">                    &quot;message&quot;, ex.getMessage()</span>
+<span class="fc" id="L57">                    &quot;message&quot;, ex.getMessage()</span>
                 ));
     }
 
     @ExceptionHandler(HoldNotFoundException.class)
     public ResponseEntity&lt;Object&gt; handleHoldNotFoundException(HoldNotFoundException ex) {
-<span class="nc" id="L63">        log.warn(ex.getMessage());</span>
+<span class="fc" id="L63">        log.warn(ex.getMessage());</span>
 
-<span class="nc" id="L65">        return ResponseEntity</span>
-<span class="nc" id="L66">                .status(HttpStatus.NOT_FOUND)</span>
-<span class="nc" id="L67">                .body(Map.of(</span>
+<span class="fc" id="L65">        return ResponseEntity</span>
+<span class="fc" id="L66">                .status(HttpStatus.NOT_FOUND)</span>
+<span class="fc" id="L67">                .body(Map.of(</span>
                     &quot;error&quot;, &quot;Not Found&quot;,
-<span class="nc" id="L69">                    &quot;message&quot;, ex.getMessage()</span>
+<span class="fc" id="L69">                    &quot;message&quot;, ex.getMessage()</span>
                 ));
     }
 
     @ExceptionHandler(HoldAlreadyFinalizedException.class)
     public ResponseEntity&lt;Object&gt; handleHoldAlreadyFinalizedException(HoldAlreadyFinalizedException ex) {
-<span class="nc" id="L75">        log.warn(ex.getMessage());</span>
+<span class="fc" id="L75">        log.warn(ex.getMessage());</span>
 
-<span class="nc" id="L77">        return ResponseEntity</span>
-<span class="nc" id="L78">                .status(HttpStatus.CONFLICT)</span>
-<span class="nc" id="L79">                .body(Map.of(</span>
+<span class="fc" id="L77">        return ResponseEntity</span>
+<span class="fc" id="L78">                .status(HttpStatus.CONFLICT)</span>
+<span class="fc" id="L79">                .body(Map.of(</span>
                     &quot;error&quot;, &quot;Conflict&quot;,
-<span class="nc" id="L81">                    &quot;message&quot;, ex.getMessage()</span>
+<span class="fc" id="L81">                    &quot;message&quot;, ex.getMessage()</span>
                 ));
     }
 
     @ExceptionHandler(InsufficientAvailableBalanceException.class)
     public ResponseEntity&lt;Object&gt; handleInsufficientAvailableBalanceException(InsufficientAvailableBalanceException ex) {
-<span class="nc" id="L87">        log.warn(ex.getMessage());</span>
+<span class="fc" id="L87">        log.warn(ex.getMessage());</span>
 
-<span class="nc" id="L89">        return ResponseEntity</span>
-<span class="nc" id="L90">                .status(HttpStatus.UNPROCESSABLE_ENTITY)</span>
-<span class="nc" id="L91">                .body(Map.of(</span>
+<span class="fc" id="L89">        return ResponseEntity</span>
+<span class="fc" id="L90">                .status(HttpStatus.UNPROCESSABLE_ENTITY)</span>
+<span class="fc" id="L91">                .body(Map.of(</span>
                     &quot;error&quot;, &quot;Unprocessable Entity&quot;,
-<span class="nc" id="L93">                    &quot;message&quot;, ex.getMessage()</span>
+<span class="fc" id="L93">                    &quot;message&quot;, ex.getMessage()</span>
                 ));
     }
 
     @ExceptionHandler(IdempotencyKeyConflictException.class)
     public ResponseEntity&lt;Object&gt; handleIdempotencyKeyConflictException(IdempotencyKeyConflictException ex) {
-<span class="nc" id="L99">        log.warn(ex.getMessage());</span>
+<span class="fc" id="L99">        log.warn(ex.getMessage());</span>
 
-<span class="nc" id="L101">        return ResponseEntity</span>
-<span class="nc" id="L102">                .status(HttpStatus.CONFLICT)</span>
-<span class="nc" id="L103">                .body(Map.of(</span>
+<span class="fc" id="L101">        return ResponseEntity</span>
+<span class="fc" id="L102">                .status(HttpStatus.CONFLICT)</span>
+<span class="fc" id="L103">                .body(Map.of(</span>
                     &quot;error&quot;, &quot;Conflict&quot;,
-<span class="nc" id="L105">                    &quot;message&quot;, ex.getMessage()</span>
+<span class="fc" id="L105">                    &quot;message&quot;, ex.getMessage()</span>
                 ));
     }
 
     @ExceptionHandler(IdempotencyKeyInProgressException.class)
     public ResponseEntity&lt;Object&gt; handleIdempotencyKeyInProgressException(IdempotencyKeyInProgressException ex) {
-<span class="nc" id="L111">        log.warn(ex.getMessage());</span>
+<span class="fc" id="L111">        log.warn(ex.getMessage());</span>
 
-<span class="nc" id="L113">        return ResponseEntity</span>
-<span class="nc" id="L114">                .status(HttpStatus.CONFLICT)</span>
-<span class="nc" id="L115">                .body(Map.of(</span>
+<span class="fc" id="L113">        return ResponseEntity</span>
+<span class="fc" id="L114">                .status(HttpStatus.CONFLICT)</span>
+<span class="fc" id="L115">                .body(Map.of(</span>
                     &quot;error&quot;, &quot;Conflict&quot;,
-<span class="nc" id="L117">                    &quot;message&quot;, ex.getMessage()</span>
+<span class="fc" id="L117">                    &quot;message&quot;, ex.getMessage()</span>
                 ));
     }
 
     @ExceptionHandler(MissingRequestHeaderException.class)
     public ResponseEntity&lt;Object&gt; handleMissingRequestHeaderException(MissingRequestHeaderException ex) {
-<span class="nc" id="L123">        log.warn(&quot;Missing required header: {}&quot;, ex.getHeaderName());</span>
+<span class="fc" id="L123">        log.warn(&quot;Missing required header: {}&quot;, ex.getHeaderName());</span>
 
-<span class="nc" id="L125">        return ResponseEntity</span>
-<span class="nc" id="L126">                .status(HttpStatus.BAD_REQUEST)</span>
-<span class="nc" id="L127">                .body(Map.of(</span>
+<span class="fc" id="L125">        return ResponseEntity</span>
+<span class="fc" id="L126">                .status(HttpStatus.BAD_REQUEST)</span>
+<span class="fc" id="L127">                .body(Map.of(</span>
                     &quot;error&quot;, &quot;Bad Request&quot;,
-<span class="nc" id="L129">                    &quot;message&quot;, &quot;The &quot; + ex.getHeaderName() + &quot; header is required&quot;</span>
+<span class="fc" id="L129">                    &quot;message&quot;, &quot;The &quot; + ex.getHeaderName() + &quot; header is required&quot;</span>
                 ));
     }
 
@@ -149,10 +149,10 @@ import io.jsonwebtoken.security.SignatureException;
 
     @ExceptionHandler(ExpiredJwtException.class)
     public ResponseEntity&lt;Map&lt;String, Object&gt;&gt; handleExpiredJwt(ExpiredJwtException ex) {
-<span class="nc" id="L152">        return ResponseEntity</span>
-<span class="nc" id="L153">                .status(HttpStatus.UNAUTHORIZED)</span>
-<span class="nc" id="L154">                .body(Map.of(</span>
-<span class="nc" id="L155">                    &quot;status&quot;, 401,</span>
+<span class="fc" id="L152">        return ResponseEntity</span>
+<span class="fc" id="L153">                .status(HttpStatus.UNAUTHORIZED)</span>
+<span class="fc" id="L154">                .body(Map.of(</span>
+<span class="fc" id="L155">                    &quot;status&quot;, 401,</span>
                     &quot;error&quot;, &quot;Unauthorized&quot;,
                     &quot;message&quot;, &quot;Token has expired. Please log in again to obtain a new token.&quot;
                 ));
@@ -160,10 +160,10 @@ import io.jsonwebtoken.security.SignatureException;
 
     @ExceptionHandler({MalformedJwtException.class, SignatureException.class})
     public ResponseEntity&lt;Map&lt;String, Object&gt;&gt; handleInvalidJwt() {
-<span class="nc" id="L163">        return ResponseEntity</span>
-<span class="nc" id="L164">                .status(HttpStatus.UNAUTHORIZED)</span>
-<span class="nc" id="L165">                .body(Map.of(</span>
-<span class="nc" id="L166">                    &quot;status&quot;, 401,</span>
+<span class="fc" id="L163">        return ResponseEntity</span>
+<span class="fc" id="L164">                .status(HttpStatus.UNAUTHORIZED)</span>
+<span class="fc" id="L165">                .body(Map.of(</span>
+<span class="fc" id="L166">                    &quot;status&quot;, 401,</span>
                     &quot;error&quot;, &quot;Unauthorized&quot;,
                     &quot;message&quot;, &quot;Invalid token, altered or corrupted.&quot;
                 ));
@@ -184,13 +184,13 @@ import io.jsonwebtoken.security.SignatureException;
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity&lt;Object&gt; handleIllegalArgumentException(IllegalArgumentException ex) {
 
-<span class="nc" id="L187">    log.warn(&quot;Illegal argument provided: {}&quot;, ex.getMessage());</span>
+<span class="fc" id="L187">    log.warn(&quot;Illegal argument provided: {}&quot;, ex.getMessage());</span>
 
-<span class="nc" id="L189">    return ResponseEntity</span>
-<span class="nc" id="L190">            .status(HttpStatus.CONFLICT)</span>
-<span class="nc" id="L191">            .body(Map.of(</span>
+<span class="fc" id="L189">    return ResponseEntity</span>
+<span class="fc" id="L190">            .status(HttpStatus.CONFLICT)</span>
+<span class="fc" id="L191">            .body(Map.of(</span>
                 &quot;error&quot;, &quot;Conflict&quot;,
-<span class="nc" id="L193">                &quot;message&quot;, ex.getMessage()</span>
+<span class="fc" id="L193">                &quot;message&quot;, ex.getMessage()</span>
             ));
 }
 
