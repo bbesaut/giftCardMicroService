@@ -17,10 +17,14 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.finovago.p2p.AbstractIntegrationTest;
+import com.finovago.p2p.config.PostgresTestcontainerInitializer;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.model.RefreshToken;
 import com.finovago.p2p.model.Role;
 import com.finovago.p2p.model.User;
+import com.finovago.p2p.repository.GiftCardHoldRepository;
+import com.finovago.p2p.repository.GiftCardRepository;
+import com.finovago.p2p.repository.IdempotencyKeyRepository;
 import com.finovago.p2p.repository.MerchantRepository;
 import com.finovago.p2p.repository.RefreshTokenRepository;
 import com.finovago.p2p.repository.UserRepository;
@@ -50,10 +54,34 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
     @Autowired
     private RefreshTokenCleanupScheduler refreshTokenCleanupScheduler;
 
+    @Autowired
+    private IdempotencyKeyRepository idempotencyKeyRepository;
+
+    @Autowired
+    private GiftCardHoldRepository giftCardHoldRepository;
+
+    @Autowired
+    private GiftCardRepository giftCardRepository;
+
     private User user;
 
     @BeforeEach
     void setUp() {
+        // Defensive cleanup, matching every other integration test class: some sibling classes
+        // (GiftCardServiceIntegrationTest, LedgerIntegrationTest, etc.) can't use @Transactional
+        // because they exercise code running on a separate thread, so they commit real rows and
+        // never see a rollback. Without this, this class's insert of the same fixed email can
+        // collide with whatever they left behind, depending on execution order - and deleting a
+        // leftover merchant/gift card without clearing its dependents first (ledger, holds) would
+        // just trade one FK violation for another.
+        idempotencyKeyRepository.deleteAll();
+        giftCardHoldRepository.deleteAll();
+        PostgresTestcontainerInitializer.executeAsMigrator("TRUNCATE TABLE gift_card_ledger RESTART IDENTITY");
+        giftCardRepository.deleteAll();
+        refreshTokenRepository.deleteAll();
+        userRepository.deleteAll();
+        merchantRepository.deleteAll();
+
         Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "merchant@example.com"));
         user = userRepository.save(new User(EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant));
     }
