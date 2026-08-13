@@ -54,6 +54,15 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        // Defensive cleanup, matching every other integration test class: some sibling classes
+        // (GiftCardServiceIntegrationTest, LedgerIntegrationTest, etc.) can't use @Transactional
+        // because they exercise code running on a separate thread, so they commit real rows and
+        // never see a rollback. Without this, this class's insert of the same fixed email can
+        // collide with whatever they left behind, depending on execution order.
+        refreshTokenRepository.deleteAll();
+        userRepository.deleteAll();
+        merchantRepository.deleteAll();
+
         Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "merchant@example.com"));
         user = userRepository.save(new User(EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant));
     }
