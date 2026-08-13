@@ -42,3 +42,41 @@ jobs:
 
     - name: Run unit + integration tests
       run: mvn test -P integration-tests
+
+    - name: Publish coverage summary
+      if: always()
+      run: |
+        echo "## Code coverage" >> "$GITHUB_STEP_SUMMARY"
+        echo "" >> "$GITHUB_STEP_SUMMARY"
+        echo "| Package | Line | Branch |" >> "$GITHUB_STEP_SUMMARY"
+        echo "|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+        awk -F',' '
+          NR==1 { for (i=1;i<=NF;i++) h[$i]=i; next }
+          {
+            pkg=$(h["PACKAGE"])
+            plc[pkg]+=$(h["LINE_COVERED"]); plm[pkg]+=$(h["LINE_MISSED"])
+            pbc[pkg]+=$(h["BRANCH_COVERED"]); pbm[pkg]+=$(h["BRANCH_MISSED"])
+            lc+=$(h["LINE_COVERED"]); lm+=$(h["LINE_MISSED"])
+            bc+=$(h["BRANCH_COVERED"]); bm+=$(h["BRANCH_MISSED"])
+            pkgs[pkg]=1
+          }
+          END {
+            printf "| **OVERALL** | **%.1f%%** | **%.1f%%** |\n", 100*lc/(lc+lm), 100*bc/(bc+bm)
+            for (p in pkgs) {
+              lt=plc[p]+plm[p]; bt=pbc[p]+pbm[p]
+              lp = lt>0 ? 100*plc[p]/lt : 100
+              bp = bt>0 ? 100*pbc[p]/bt : 100
+              printf "| %s | %.1f%% | %.1f%% |\n", p, lp, bp
+            }
+          }
+        ' target/site/jacoco/jacoco.csv | sort >> "$GITHUB_STEP_SUMMARY"
+        echo "" >> "$GITHUB_STEP_SUMMARY"
+        echo "Gate: \`com.finovago.p2p.service\` must stay >= 80% line/branch (enforced by \`jacoco:check\`, see pom.xml)." >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload full HTML coverage report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: jacoco-html-report
+        path: target/site/jacoco/
+        retention-days: 30
