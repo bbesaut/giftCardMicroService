@@ -302,4 +302,34 @@ class GiftCardServiceUnitTest
         assertThrows(UnknownGiftCardException.class, () -> giftCardService.getLedger(nonExistentCode));
         verify(ledgerService, never()).getEntriesForCard(any());
     }
+
+    @Test
+    void should_list_cards_across_all_merchants_when_caller_is_admin()
+    {
+        when(currentUserContext.isAdmin()).thenReturn(true);
+        GiftCard cardA = new GiftCard(merchant, "GC-A", BigDecimal.valueOf(100.0), true, LocalDate.now().plusDays(30));
+        GiftCard cardB = new GiftCard(merchant, "GC-B", BigDecimal.valueOf(200.0), true, LocalDate.now().plusDays(30));
+        when(giftCardRepository.findAll()).thenReturn(List.of(cardA, cardB));
+
+        List<GiftCardResponse> response = giftCardService.getAllGiftCards();
+
+        assertEquals(2, response.size());
+        assertEquals("GC-A", response.get(0).giftCardCode());
+        assertEquals("GC-B", response.get(1).giftCardCode());
+        verify(giftCardRepository, never()).findAllByMerchantId(any());
+    }
+
+    @Test
+    void should_list_only_own_cards_when_caller_is_merchant()
+    {
+        when(currentUserContext.isAdmin()).thenReturn(false);
+        GiftCard card = new GiftCard(merchant, "GC-OWN", BigDecimal.valueOf(50.0), true, LocalDate.now().plusDays(30));
+        when(giftCardRepository.findAllByMerchantId(MERCHANT_ID)).thenReturn(List.of(card));
+
+        List<GiftCardResponse> response = giftCardService.getAllGiftCards();
+
+        assertEquals(1, response.size());
+        assertEquals("GC-OWN", response.get(0).giftCardCode());
+        verify(giftCardRepository, never()).findAll();
+    }
 }

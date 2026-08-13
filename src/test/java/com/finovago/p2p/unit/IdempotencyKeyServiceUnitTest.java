@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -110,6 +111,24 @@ class IdempotencyKeyServiceUnitTest {
     }
 
     @Test
+    void claim_returnsConcurrentWinnersResponse_whenSaveLosesTheInsertRaceAndWinnerAlreadyCompleted() {
+        String requestHash = hash("GC-1", 10.0);
+        IdempotencyKey wonByConcurrentRequest = new IdempotencyKey(MERCHANT_ID, KEY, requestHash, LocalDateTime.now().plusHours(1));
+        wonByConcurrentRequest.complete("{\"status\":\"SUCCESS\",\"deductedAmount\":10.0,\"remainingBalance\":40.0,\"remainingToPay\":0.0}");
+
+        when(idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(MERCHANT_ID, KEY))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(wonByConcurrentRequest));
+        when(idempotencyKeyRepository.saveAndFlush(ArgumentMatchers.any(IdempotencyKey.class)))
+                .thenThrow(new DataIntegrityViolationException("unique violation"));
+
+        Optional<RedemptionResponse> result = idempotencyKeyService.claim(MERCHANT_ID, KEY, requestHash, RedemptionResponse.class);
+
+        assertTrue(result.isPresent());
+        assertEquals(new RedemptionResponse("SUCCESS", BigDecimal.valueOf(10.0), BigDecimal.valueOf(40.0), BigDecimal.valueOf(0.0)), result.get());
+    }
+
+    @Test
     void complete_marksExistingClaimAsCompletedWithSerializedResponse() {
         String requestHash = hash("GC-1", 10.0);
         IdempotencyKey claim = new IdempotencyKey(MERCHANT_ID, KEY, requestHash, LocalDateTime.now().plusHours(1));
@@ -129,6 +148,25 @@ class IdempotencyKeyServiceUnitTest {
         idempotencyKeyService.discard(MERCHANT_ID, KEY);
 
         verify(idempotencyKeyRepository).delete(claim);
+    }
+
+    @Test
+    void discard_swallowsRepositoryFailure_insteadOfPropagating() {
+        when(idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(MERCHANT_ID, KEY))
+                .thenThrow(new RuntimeException("db unavailable"));
+
+        assertDoesNotThrow(() -> idempotencyKeyService.discard(MERCHANT_ID, KEY));
+    }
+
+    @Test
+    void claim_throwsIllegalState_whenCachedResponseBodyIsCorrupted() {
+        String requestHash = hash("GC-1", 10.0);
+        IdempotencyKey completed = new IdempotencyKey(MERCHANT_ID, KEY, requestHash, LocalDateTime.now().plusHours(1));
+        completed.complete("not valid json");
+        when(idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(MERCHANT_ID, KEY)).thenReturn(Optional.of(completed));
+
+        assertThrows(IllegalStateException.class,
+                () -> idempotencyKeyService.claim(MERCHANT_ID, KEY, requestHash, RedemptionResponse.class));
     }
 
     @Test
