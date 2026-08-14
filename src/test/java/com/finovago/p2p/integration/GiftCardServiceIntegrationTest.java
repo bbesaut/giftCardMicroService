@@ -77,11 +77,11 @@ class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
         userRepository.deleteAll();
         merchantRepository.deleteAll();
 
-        Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "merchant@example.com"));
+        Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "giftcard-service-test@example.com"));
         merchantId = merchant.getId();
-        userId = userRepository.save(new User("merchant@example.com", "hashed", Role.MERCHANT, merchant)).getId();
+        userId = userRepository.save(new User("giftcard-service-test@example.com", "hashed", Role.MERCHANT, merchant)).getId();
 
-        AuthenticatedUser authenticatedUser = new AuthenticatedUser("merchant@example.com", "MERCHANT", merchantId, userId);
+        AuthenticatedUser authenticatedUser = new AuthenticatedUser("giftcard-service-test@example.com", "MERCHANT", merchantId, userId);
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(authenticatedUser, null, List.of()));
     }
