@@ -23,7 +23,8 @@ public class IdempotencyKeyCleanupScheduler {
     @Scheduled(fixedDelayString = "${app.idempotency.cleanup-sweep-interval-ms:3600000}")
     public void sweepExpiredKeys() {
         try {
-            idempotencyKeyService.deleteExpired(LocalDateTime.now());
+            int deleted = idempotencyKeyService.deleteExpired(LocalDateTime.now());
+            log.info("Idempotency key cleanup: {} deleted", deleted);
         } catch (Exception e) {
             log.warn("Failed to sweep expired idempotency keys: {}", e.getMessage());
         }

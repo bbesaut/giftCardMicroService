@@ -10,6 +10,7 @@ import org.mockito.Mock;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
 
@@ -51,13 +52,19 @@ class IdempotencyKeyCleanupSchedulerUnitTest {
 
     @Test
     void sweepExpiredKeys_delegatesToServiceWithCurrentTimestamp() {
+        when(idempotencyKeyService.deleteExpired(any())).thenReturn(3);
+
         LocalDateTime before = LocalDateTime.now();
 
         scheduler.sweepExpiredKeys();
 
         LocalDateTime after = LocalDateTime.now();
         verify(idempotencyKeyService).deleteExpired(argThatWithinRange(before, after));
-        assertTrue(logAppender.list.isEmpty());
+
+        assertEquals(1, logAppender.list.size());
+        ILoggingEvent event = logAppender.list.get(0);
+        assertEquals(Level.INFO, event.getLevel());
+        assertTrue(event.getFormattedMessage().contains("3 deleted"));
     }
 
     @Test
