@@ -33,7 +33,7 @@ import com.finovago.p2p.scheduler.RefreshTokenCleanupScheduler;
 @Transactional
 class AuthIntegrationTest extends AbstractIntegrationTest {
 
-    private static final String EMAIL = "merchant@example.com";
+    private static final String EMAIL = "auth-integration-test@example.com";
     private static final String PASSWORD = "password123";
 
     @Autowired
