@@ -74,10 +74,10 @@ class GiftCardMoneyValidationIntegrationTest extends AbstractIntegrationTest {
         userRepository.deleteAll();
         merchantRepository.deleteAll();
 
-        Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "merchant@example.com"));
-        userRepository.save(new User("merchant@example.com", passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant));
+        Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "giftcard-money-test@example.com"));
+        userRepository.save(new User("giftcard-money-test@example.com", passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant));
 
-        merchantToken = loginAndGetAccessToken("merchant@example.com");
+        merchantToken = loginAndGetAccessToken("giftcard-money-test@example.com");
     }
 
     private String loginAndGetAccessToken(String email) throws Exception {
