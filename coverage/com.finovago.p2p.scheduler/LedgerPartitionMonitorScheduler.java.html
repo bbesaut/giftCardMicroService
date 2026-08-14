@@ -56,7 +56,10 @@ public class LedgerPartitionMonitorScheduler {
 <span class="fc" id="L56">            log.warn(&quot;Only {} month(s) of gift_card_ledger partitions remain (furthest created: {}). &quot;</span>
                     + &quot;Add a new Flyway migration extending the partition range before it runs out.&quot;,
 <span class="fc" id="L58">                    monthsRemaining, latestPartitionYear);</span>
+        } else {
+<span class="fc" id="L60">            log.info(&quot;Ledger partition runway check: {} month(s) remaining (furthest created: {})&quot;,</span>
+<span class="fc" id="L61">                    monthsRemaining, latestPartitionYear);</span>
         }
-<span class="fc" id="L60">    }</span>
+<span class="fc" id="L63">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -23,10 +23,11 @@ public class IdempotencyKeyCleanupScheduler {
     @Scheduled(fixedDelayString = &quot;${app.idempotency.cleanup-sweep-interval-ms:3600000}&quot;)
     public void sweepExpiredKeys() {
         try {
-<span class="fc" id="L26">            idempotencyKeyService.deleteExpired(LocalDateTime.now());</span>
-<span class="fc" id="L27">        } catch (Exception e) {</span>
-<span class="fc" id="L28">            log.warn(&quot;Failed to sweep expired idempotency keys: {}&quot;, e.getMessage());</span>
-<span class="fc" id="L29">        }</span>
-<span class="fc" id="L30">    }</span>
+<span class="fc" id="L26">            int deleted = idempotencyKeyService.deleteExpired(LocalDateTime.now());</span>
+<span class="fc" id="L27">            log.info(&quot;Idempotency key cleanup: {} deleted&quot;, deleted);</span>
+<span class="fc" id="L28">        } catch (Exception e) {</span>
+<span class="fc" id="L29">            log.warn(&quot;Failed to sweep expired idempotency keys: {}&quot;, e.getMessage());</span>
+<span class="fc" id="L30">        }</span>
+<span class="fc" id="L31">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

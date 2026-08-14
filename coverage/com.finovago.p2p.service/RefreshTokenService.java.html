@@ -82,22 +82,19 @@ public class RefreshTokenService {
 <span class="fc" id="L82">    }</span>
 
     @Transactional
-    public void deleteExpired(Instant cutoff) {
+    public int deleteExpired(Instant cutoff) {
 <span class="fc" id="L86">        List&lt;RefreshToken&gt; expired = refreshTokenRepository.findByExpiryDateBefore(cutoff);</span>
 <span class="fc" id="L87">        refreshTokenRepository.deleteAll(expired);</span>
-
-<span class="fc bfc" id="L89" title="All 2 branches covered.">        if (!expired.isEmpty()) {</span>
-<span class="fc" id="L90">            log.info(&quot;Deleted {} expired refresh token(s)&quot;, expired.size());</span>
-        }
-<span class="fc" id="L92">    }</span>
+<span class="fc" id="L88">        return expired.size();</span>
+    }
 
     private String hash(String rawToken) {
         try {
-<span class="fc" id="L96">            MessageDigest digest = MessageDigest.getInstance(&quot;SHA-256&quot;);</span>
-<span class="fc" id="L97">            byte[] hashBytes = digest.digest(rawToken.getBytes(StandardCharsets.UTF_8));</span>
-<span class="fc" id="L98">            return HexFormat.of().formatHex(hashBytes);</span>
-<span class="nc" id="L99">        } catch (NoSuchAlgorithmException e) {</span>
-<span class="nc" id="L100">            throw new IllegalStateException(&quot;SHA-256 algorithm not available&quot;, e);</span>
+<span class="fc" id="L93">            MessageDigest digest = MessageDigest.getInstance(&quot;SHA-256&quot;);</span>
+<span class="fc" id="L94">            byte[] hashBytes = digest.digest(rawToken.getBytes(StandardCharsets.UTF_8));</span>
+<span class="fc" id="L95">            return HexFormat.of().formatHex(hashBytes);</span>
+<span class="nc" id="L96">        } catch (NoSuchAlgorithmException e) {</span>
+<span class="nc" id="L97">            throw new IllegalStateException(&quot;SHA-256 algorithm not available&quot;, e);</span>
         }
     }
 }

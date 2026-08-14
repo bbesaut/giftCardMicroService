@@ -110,24 +110,25 @@ public class IdempotencyKeyService {
     }
 
     @Transactional
-    public void deleteExpired(LocalDateTime cutoff) {
+    public int deleteExpired(LocalDateTime cutoff) {
 <span class="fc" id="L114">        List&lt;IdempotencyKey&gt; expired = idempotencyKeyRepository.findByExpiresAtBefore(cutoff);</span>
 <span class="fc" id="L115">        idempotencyKeyRepository.deleteAll(expired);</span>
-<span class="fc" id="L116">    }</span>
+<span class="fc" id="L116">        return expired.size();</span>
+    }
 
     private String serialize(Object response) {
         try {
-<span class="fc" id="L120">            return objectMapper.writeValueAsString(response);</span>
-<span class="nc" id="L121">        } catch (JsonProcessingException e) {</span>
-<span class="nc" id="L122">            throw new IllegalStateException(&quot;Failed to serialize idempotent response&quot;, e);</span>
+<span class="fc" id="L121">            return objectMapper.writeValueAsString(response);</span>
+<span class="nc" id="L122">        } catch (JsonProcessingException e) {</span>
+<span class="nc" id="L123">            throw new IllegalStateException(&quot;Failed to serialize idempotent response&quot;, e);</span>
         }
     }
 
     private &lt;T&gt; T deserialize(String responseBody, Class&lt;T&gt; responseType) {
         try {
-<span class="fc" id="L128">            return objectMapper.readValue(responseBody, responseType);</span>
-<span class="fc" id="L129">        } catch (JsonProcessingException e) {</span>
-<span class="fc" id="L130">            throw new IllegalStateException(&quot;Failed to deserialize cached idempotent response&quot;, e);</span>
+<span class="fc" id="L129">            return objectMapper.readValue(responseBody, responseType);</span>
+<span class="fc" id="L130">        } catch (JsonProcessingException e) {</span>
+<span class="fc" id="L131">            throw new IllegalStateException(&quot;Failed to deserialize cached idempotent response&quot;, e);</span>
         }
     }
 }

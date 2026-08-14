@@ -23,10 +23,11 @@ public class RefreshTokenCleanupScheduler {
     @Scheduled(fixedDelayString = &quot;${app.refresh-token.cleanup-sweep-interval-ms:3600000}&quot;)
     public void sweepExpiredTokens() {
         try {
-<span class="fc" id="L26">            refreshTokenService.deleteExpired(Instant.now());</span>
-<span class="nc" id="L27">        } catch (Exception e) {</span>
-<span class="nc" id="L28">            log.warn(&quot;Failed to sweep expired refresh tokens: {}&quot;, e.getMessage());</span>
-<span class="fc" id="L29">        }</span>
-<span class="fc" id="L30">    }</span>
+<span class="fc" id="L26">            int deleted = refreshTokenService.deleteExpired(Instant.now());</span>
+<span class="fc" id="L27">            log.info(&quot;Refresh token cleanup: {} deleted&quot;, deleted);</span>
+<span class="nc" id="L28">        } catch (Exception e) {</span>
+<span class="nc" id="L29">            log.warn(&quot;Failed to sweep expired refresh tokens: {}&quot;, e.getMessage());</span>
+<span class="fc" id="L30">        }</span>
+<span class="fc" id="L31">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

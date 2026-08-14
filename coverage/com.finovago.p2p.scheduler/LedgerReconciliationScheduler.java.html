@@ -36,9 +36,15 @@ public class LedgerReconciliationScheduler {
 <span class="fc" id="L36">                        discrepancy.getGiftCardId(), discrepancy.getCardCode(), discrepancy.getMerchantId(),</span>
 <span class="fc" id="L37">                        discrepancy.getActualBalance(), discrepancy.getTheoreticalBalance());</span>
 <span class="fc" id="L38">            }</span>
-<span class="fc" id="L39">        } catch (Exception e) {</span>
-<span class="fc" id="L40">            log.warn(&quot;Failed to run ledger reconciliation sweep: {}&quot;, e.getMessage());</span>
-<span class="fc" id="L41">        }</span>
-<span class="fc" id="L42">    }</span>
+
+<span class="fc bfc" id="L40" title="All 2 branches covered.">            if (discrepancies.isEmpty()) {</span>
+<span class="fc" id="L41">                log.debug(&quot;Ledger reconciliation sweep: 0 discrepancies found&quot;);</span>
+            } else {
+<span class="fc" id="L43">                log.info(&quot;Ledger reconciliation sweep: {} discrepancy(ies) found&quot;, discrepancies.size());</span>
+            }
+<span class="fc" id="L45">        } catch (Exception e) {</span>
+<span class="fc" id="L46">            log.warn(&quot;Failed to run ledger reconciliation sweep: {}&quot;, e.getMessage());</span>
+<span class="fc" id="L47">        }</span>
+<span class="fc" id="L48">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

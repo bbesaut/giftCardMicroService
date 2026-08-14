@@ -35,13 +35,21 @@ public class HoldExpirationScheduler {
 <span class="fc" id="L35">        List&lt;GiftCardHold&gt; candidates = giftCardHoldRepository</span>
 <span class="fc" id="L36">                .findByStatusAndExpiresAtBefore(HoldStatus.PENDING, LocalDateTime.now());</span>
 
-<span class="fc bfc" id="L38" title="All 2 branches covered.">        for (GiftCardHold hold : candidates) {</span>
+<span class="fc" id="L38">        int expired = 0;</span>
+<span class="fc bfc" id="L39" title="All 2 branches covered.">        for (GiftCardHold hold : candidates) {</span>
             try {
-<span class="fc" id="L40">                giftCardHoldService.expireIfStillPending(hold.getId());</span>
-<span class="nc" id="L41">            } catch (Exception e) {</span>
-<span class="nc" id="L42">                log.warn(&quot;Failed to expire hold {}: {}&quot;, hold.getId(), e.getMessage());</span>
-<span class="fc" id="L43">            }</span>
-<span class="fc" id="L44">        }</span>
-<span class="fc" id="L45">    }</span>
+<span class="fc" id="L41">                giftCardHoldService.expireIfStillPending(hold.getId());</span>
+<span class="fc" id="L42">                expired++;</span>
+<span class="nc" id="L43">            } catch (Exception e) {</span>
+<span class="nc" id="L44">                log.warn(&quot;Failed to expire hold {}: {}&quot;, hold.getId(), e.getMessage());</span>
+<span class="fc" id="L45">            }</span>
+<span class="fc" id="L46">        }</span>
+
+<span class="fc bfc" id="L48" title="All 2 branches covered.">        if (expired &gt; 0) {</span>
+<span class="fc" id="L49">            log.info(&quot;Hold expiration sweep: {} checked, {} expired&quot;, candidates.size(), expired);</span>
+        } else {
+<span class="fc" id="L51">            log.debug(&quot;Hold expiration sweep: {} checked, {} expired&quot;, candidates.size(), expired);</span>
+        }
+<span class="fc" id="L53">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
