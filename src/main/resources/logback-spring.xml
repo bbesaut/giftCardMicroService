@@ -1,46 +1,35 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <include resource="org/springframework/boot/logging/logback/defaults.xml" />
-    <include resource="org/springframework/boot/logging/logback/console-appender.xml" />
-
-    <springProfile name="dev">
-        <root level="INFO">
-            <appender-ref ref="CONSOLE" />
-        </root>
-        <logger name="com.finovago.p2p" level="DEBUG" />
-        <logger name="org.springframework.web" level="DEBUG" />
+    <!-- prod/test: unchanged, fully property-driven (logging.pattern.console/file, logging.level.*, logging.file.name) -->
+    <springProfile name="!dev">
+        <include resource="org/springframework/boot/logging/logback/base.xml"/>
     </springProfile>
 
-    <springProfile name="prod,production">
-        <springProperty scope="context" name="LOKI_USER" source="loki.username"/>
-        <springProperty scope="context" name="LOKI_TOKEN" source="loki.password"/>
+    <!-- dev: colored console, with scheduler logs (com.finovago.p2p.scheduler) split into their own
+         format - name in blue instead of buried among request logs, since they run outside any HTTP
+         request/correlationId. -->
+    <springProfile name="dev">
+        <conversionRule conversionWord="levelClr" converterClass="com.finovago.p2p.logging.LevelColorConverter"/>
+        <conversionRule conversionWord="clr" converterClass="org.springframework.boot.logging.logback.ColorConverter"/>
 
-        <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
-            <http>
-                <url>https://logs-prod-039.grafana.net/loki/api/v1/push</url>
-                <auth>
-                    <username>${LOKI_USER}</username>
-                    <password>${LOKI_TOKEN}</password>
-                </auth>
-            </http>
-            <format>
-                <label>
-                    <pattern>app=p2p,env=prod</pattern>
-                </label>
-                <message class="com.github.loki4j.logback.JsonLayout">
-                    <includeMdc>true</includeMdc>
-                </message>
-            </format>
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr([%thread]){faint} %levelClr(%-5level) %clr(%logger{36}){cyan} [correlationId=%X{correlationId}] - %msg%n</pattern>
+            </encoder>
         </appender>
 
-        <root level="WARN">
-            <appender-ref ref="CONSOLE" />
-            <appender-ref ref="LOKI" />
-        </root>
+        <appender name="SCHEDULER_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr([%thread]){faint} %levelClr(%-5level) %clr(%logger{20}){blue}: %msg%n</pattern>
+            </encoder>
+        </appender>
 
-        <logger name="com.finovago.p2p" level="INFO" />
-        <logger name="org.springframework.web" level="WARN" />
-        <logger name="org.springframework.web.servlet" level="WARN" />
-        <logger name="org.springframework.web.servlet.DispatcherServlet" level="WARN" />
+        <logger name="com.finovago.p2p.scheduler" level="DEBUG" additivity="false">
+            <appender-ref ref="SCHEDULER_CONSOLE"/>
+        </logger>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
     </springProfile>
 </configuration>

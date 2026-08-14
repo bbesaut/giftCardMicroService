@@ -35,12 +35,20 @@ public class HoldExpirationScheduler {
         List<GiftCardHold> candidates = giftCardHoldRepository
                 .findByStatusAndExpiresAtBefore(HoldStatus.PENDING, LocalDateTime.now());
 
+        int expired = 0;
         for (GiftCardHold hold : candidates) {
             try {
                 giftCardHoldService.expireIfStillPending(hold.getId());
+                expired++;
             } catch (Exception e) {
                 log.warn("Failed to expire hold {}: {}", hold.getId(), e.getMessage());
             }
+        }
+
+        if (expired > 0) {
+            log.info("Hold expiration sweep: {} checked, {} expired", candidates.size(), expired);
+        } else {
+            log.debug("Hold expiration sweep: {} checked, {} expired", candidates.size(), expired);
         }
     }
 }

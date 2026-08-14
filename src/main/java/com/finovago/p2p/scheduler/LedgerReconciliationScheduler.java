@@ -36,6 +36,12 @@ public class LedgerReconciliationScheduler {
                         discrepancy.getGiftCardId(), discrepancy.getCardCode(), discrepancy.getMerchantId(),
                         discrepancy.getActualBalance(), discrepancy.getTheoreticalBalance());
             }
+
+            if (discrepancies.isEmpty()) {
+                log.debug("Ledger reconciliation sweep: 0 discrepancies found");
+            } else {
+                log.info("Ledger reconciliation sweep: {} discrepancy(ies) found", discrepancies.size());
+            }
         } catch (Exception e) {
             log.warn("Failed to run ledger reconciliation sweep: {}", e.getMessage());
         }
