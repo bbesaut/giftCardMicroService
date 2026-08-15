@@ -49,22 +49,38 @@ public class LedgerEntry {
     @Column(name = &quot;actor_user_id&quot;)
     private Long actorUserId;
 
+    // Only set for REFUND: the id of the REDEMPTION entry this refund reverses. No FK - see V23
+    // migration comment (partitioned table self-reference constraint).
+    @Column(name = &quot;related_entry_id&quot;)
+    private Long relatedEntryId;
+
+    // Operator-supplied justification. Mandatory (enforced in GiftCardCreditService, not here) for
+    // ADJUSTMENT, optional for REFUND, unused for every other entry type.
+    @Column(name = &quot;reason&quot;, length = 500)
+    private String reason;
+
     @Column(name = &quot;created_at&quot;, nullable = false)
     private LocalDateTime createdAt;
 
     public LedgerEntry(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, @Nullable Long holdId) {
-<span class="fc" id="L56">        this(giftCard, merchantId, entryType, amount, balanceAfter, holdId, null);</span>
-<span class="fc" id="L57">    }</span>
+<span class="fc" id="L66">        this(giftCard, merchantId, entryType, amount, balanceAfter, holdId, null);</span>
+<span class="fc" id="L67">    }</span>
 
-<span class="fc" id="L59">    public LedgerEntry(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, @Nullable Long holdId, @Nullable Long actorUserId) {</span>
-<span class="fc" id="L60">        this.giftCard = giftCard;</span>
-<span class="fc" id="L61">        this.merchantId = merchantId;</span>
-<span class="fc" id="L62">        this.entryType = entryType;</span>
-<span class="fc" id="L63">        this.amount = amount;</span>
-<span class="fc" id="L64">        this.balanceAfter = balanceAfter;</span>
-<span class="fc" id="L65">        this.holdId = holdId;</span>
-<span class="fc" id="L66">        this.actorUserId = actorUserId;</span>
-<span class="fc" id="L67">        this.createdAt = LocalDateTime.now();</span>
-<span class="fc" id="L68">    }</span>
+    public LedgerEntry(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, @Nullable Long holdId, @Nullable Long actorUserId) {
+<span class="fc" id="L70">        this(giftCard, merchantId, entryType, amount, balanceAfter, holdId, actorUserId, null, null);</span>
+<span class="fc" id="L71">    }</span>
+
+<span class="fc" id="L73">    public LedgerEntry(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, @Nullable Long holdId, @Nullable Long actorUserId, @Nullable Long relatedEntryId, @Nullable String reason) {</span>
+<span class="fc" id="L74">        this.giftCard = giftCard;</span>
+<span class="fc" id="L75">        this.merchantId = merchantId;</span>
+<span class="fc" id="L76">        this.entryType = entryType;</span>
+<span class="fc" id="L77">        this.amount = amount;</span>
+<span class="fc" id="L78">        this.balanceAfter = balanceAfter;</span>
+<span class="fc" id="L79">        this.holdId = holdId;</span>
+<span class="fc" id="L80">        this.actorUserId = actorUserId;</span>
+<span class="fc" id="L81">        this.relatedEntryId = relatedEntryId;</span>
+<span class="fc" id="L82">        this.reason = reason;</span>
+<span class="fc" id="L83">        this.createdAt = LocalDateTime.now();</span>
+<span class="fc" id="L84">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

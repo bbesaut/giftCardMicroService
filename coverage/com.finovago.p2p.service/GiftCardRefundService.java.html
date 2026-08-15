@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GiftCardRefundService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.service</a> &gt; <span class="el_source">GiftCardRefundService.java</span></div><h1>GiftCardRefundService.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.service;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.Optional;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.finovago.p2p.dto.RefundRequest;
+import com.finovago.p2p.dto.RefundResponse;
+import com.finovago.p2p.exception.InvalidRefundTargetException;
+import com.finovago.p2p.exception.LedgerEntryNotFoundException;
+import com.finovago.p2p.exception.RefundExceedsOriginalAmountException;
+import com.finovago.p2p.exception.UnknownGiftCardException;
+import com.finovago.p2p.model.GiftCard;
+import com.finovago.p2p.model.LedgerEntry;
+import com.finovago.p2p.model.LedgerEntryType;
+import com.finovago.p2p.repository.GiftCardRepository;
+import com.finovago.p2p.repository.LedgerEntryRepository;
+import com.finovago.p2p.security.CurrentUserContext;
+
+/**
+ * Reverses a specific prior REDEMPTION entry, capped at what's left to refund on it. Open to any
+ * authenticated merchant account (human or service) - unlike GiftCardCreditService's free-form
+ * adjustment, a refund is structurally bounded by a real prior transaction, so there's no extra
+ * &quot;a human must assert this&quot; safety net needed here.
+ */
+@Service
+public class GiftCardRefundService {
+<span class="fc" id="L33">    private static final Logger log = LoggerFactory.getLogger(GiftCardRefundService.class);</span>
+
+    private final GiftCardRepository giftCardRepository;
+    private final LedgerEntryRepository ledgerEntryRepository;
+    private final CurrentUserContext currentUserContext;
+    private final IdempotencyKeyService idempotencyKeyService;
+    private final LedgerService ledgerService;
+
+    public GiftCardRefundService(
+            GiftCardRepository giftCardRepository,
+            LedgerEntryRepository ledgerEntryRepository,
+            CurrentUserContext currentUserContext,
+            IdempotencyKeyService idempotencyKeyService,
+<span class="fc" id="L46">            LedgerService ledgerService) {</span>
+<span class="fc" id="L47">        this.giftCardRepository = giftCardRepository;</span>
+<span class="fc" id="L48">        this.ledgerEntryRepository = ledgerEntryRepository;</span>
+<span class="fc" id="L49">        this.currentUserContext = currentUserContext;</span>
+<span class="fc" id="L50">        this.idempotencyKeyService = idempotencyKeyService;</span>
+<span class="fc" id="L51">        this.ledgerService = ledgerService;</span>
+<span class="fc" id="L52">    }</span>
+
+    /**
+     * claim()/complete()/discard() call a different bean (IdempotencyKeyService), so their
+     * REQUIRES_NEW transactions correctly nest inside this method's transaction despite it being a
+     * single @Transactional method - see GiftCardHoldService#reserve for the same reasoning.
+     */
+    @Transactional
+    public RefundResponse refund(RefundRequest request, String idempotencyKey) {
+<span class="fc" id="L61">        Long merchantId = currentUserContext.currentMerchantId();</span>
+<span class="fc" id="L62">        String requestHash = idempotencyKeyService.hashRequest(</span>
+<span class="fc" id="L63">                request.giftCardCode(),</span>
+<span class="fc" id="L64">                request.amount().setScale(2, RoundingMode.HALF_UP).toPlainString(),</span>
+<span class="fc" id="L65">                String.valueOf(request.redemptionLedgerEntryId()));</span>
+
+<span class="fc" id="L67">        Optional&lt;RefundResponse&gt; cached = idempotencyKeyService.claim(merchantId, idempotencyKey, requestHash, RefundResponse.class);</span>
+<span class="fc bfc" id="L68" title="All 2 branches covered.">        if (cached.isPresent()) {</span>
+<span class="fc" id="L69">            log.info(&quot;Idempotency-Key {} already completed, returning cached result&quot;, idempotencyKey);</span>
+<span class="fc" id="L70">            return cached.get();</span>
+        }
+
+        try {
+<span class="fc" id="L74">            RefundResponse response = refundWithoutIdempotency(merchantId, request);</span>
+<span class="fc" id="L75">            idempotencyKeyService.complete(merchantId, idempotencyKey, response);</span>
+<span class="fc" id="L76">            return response;</span>
+<span class="fc" id="L77">        } catch (RuntimeException e) {</span>
+<span class="fc" id="L78">            idempotencyKeyService.discard(merchantId, idempotencyKey);</span>
+<span class="fc" id="L79">            throw e;</span>
+        }
+    }
+
+    private RefundResponse refundWithoutIdempotency(Long merchantId, RefundRequest request) {
+        // Locks the gift_card row for the whole transaction, same as reserve()/capture(): the
+        // refund cap check below reads across gift_card_ledger for this card and must be
+        // serialized at that granularity.
+<span class="fc" id="L87">        GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCodeForUpdate(merchantId, request.giftCardCode())</span>
+<span class="fc" id="L88">                .orElseThrow(() -&gt; new UnknownGiftCardException(&quot;Gift card not found&quot;));</span>
+
+        // Deliberately no ensureUsable() call: refunding exists specifically to fix a card that had
+        // a problem, so blocking on inactive/expired status would defeat the purpose.
+
+<span class="fc" id="L93">        LedgerEntry target = ledgerEntryRepository.findByIdAndGiftCardIdAndMerchantId(request.redemptionLedgerEntryId(), giftCard.getId(), merchantId)</span>
+<span class="fc" id="L94">                .orElseThrow(() -&gt; new LedgerEntryNotFoundException(&quot;Ledger entry to refund not found&quot;));</span>
+
+<span class="fc bfc" id="L96" title="All 2 branches covered.">        if (target.getEntryType() != LedgerEntryType.REDEMPTION) {</span>
+<span class="fc" id="L97">            throw new InvalidRefundTargetException(&quot;Only a REDEMPTION entry can be refunded&quot;);</span>
+        }
+
+<span class="fc" id="L100">        BigDecimal amount = request.amount().setScale(2, RoundingMode.HALF_UP);</span>
+<span class="fc" id="L101">        BigDecimal alreadyRefunded = ledgerEntryRepository.sumRefundedAmountForEntry(request.redemptionLedgerEntryId());</span>
+<span class="fc" id="L102">        BigDecimal refundable = target.getAmount().subtract(alreadyRefunded);</span>
+<span class="fc bfc" id="L103" title="All 2 branches covered.">        if (amount.compareTo(refundable) &gt; 0) {</span>
+<span class="fc" id="L104">            throw new RefundExceedsOriginalAmountException(&quot;Refund amount exceeds what's left to refund on this entry (refundable: &quot; + refundable + &quot;)&quot;);</span>
+        }
+
+<span class="fc" id="L107">        giftCard.creditBalance(amount);</span>
+<span class="fc" id="L108">        giftCardRepository.save(giftCard);</span>
+
+<span class="fc" id="L110">        ledgerService.record(giftCard, merchantId, LedgerEntryType.REFUND, amount, giftCard.getBalance(), null,</span>
+<span class="fc" id="L111">                currentUserContext.currentUserIdOrNull(), request.redemptionLedgerEntryId(), request.reason());</span>
+
+<span class="fc" id="L113">        log.info(&quot;Refunded {} to card [{}] against ledger entry [{}], new balance {}&quot;, amount, request.giftCardCode(), request.redemptionLedgerEntryId(), giftCard.getBalance());</span>
+
+<span class="fc" id="L115">        return new RefundResponse(&quot;SUCCESS&quot;, amount, giftCard.getBalance());</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

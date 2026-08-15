@@ -60,9 +60,13 @@ public class GiftCard
 <span class="fc" id="L60">        this.balance = this.balance.subtract(amount);</span>
 <span class="fc" id="L61">    }</span>
 
+    public void creditBalance(BigDecimal amount) {
+<span class="fc" id="L64">        this.balance = this.balance.add(amount);</span>
+<span class="fc" id="L65">    }</span>
+
     public void drainCard() {
-<span class="fc" id="L64">        this.balance = BigDecimal.ZERO.setScale(2);</span>
-<span class="fc" id="L65">        this.active = false;</span>
-<span class="fc" id="L66">    }</span>
+<span class="fc" id="L68">        this.balance = BigDecimal.ZERO.setScale(2);</span>
+<span class="fc" id="L69">        this.active = false;</span>
+<span class="fc" id="L70">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -23,6 +23,9 @@ import io.swagger.v3.oas.annotations.media.Schema;
     LocalDateTime createdAt,
 
     @Schema(description = &quot;Who triggered this operation: the user's email (\&quot;SYSTEM / email\&quot; for a service account), \&quot;Deleted user\&quot; if the account no longer exists, or \&quot;Unknown\&quot; for entries recorded before this field existed.&quot;, example = &quot;user@example.com&quot;, nullable = true)
-    String actor
+    String actor,
+
+    @Schema(description = &quot;Operator-supplied justification. Set for ADJUSTMENT (mandatory when created) and optionally for REFUND; null for every other entry type.&quot;, example = &quot;Customer return - order #4521&quot;, nullable = true)
+    String reason
 ) {}
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

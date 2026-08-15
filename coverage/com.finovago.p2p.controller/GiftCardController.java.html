@@ -16,14 +16,20 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.finovago.p2p.dto.CreditRequest;
+import com.finovago.p2p.dto.CreditResponse;
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.GiftCardResponse;
 import com.finovago.p2p.dto.HoldResponse;
 import com.finovago.p2p.dto.LedgerEntryResponse;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.dto.RedemptionRequest;
+import com.finovago.p2p.dto.RefundRequest;
+import com.finovago.p2p.dto.RefundResponse;
 import com.finovago.p2p.dto.ReserveRequest;
+import com.finovago.p2p.service.GiftCardCreditService;
 import com.finovago.p2p.service.GiftCardHoldService;
+import com.finovago.p2p.service.GiftCardRefundService;
 import com.finovago.p2p.service.GiftCardService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -41,14 +47,18 @@ import jakarta.validation.Valid;
 @Tag(name = &quot;Gift Cards&quot;, description = &quot;Gift card management endpoints.&quot;)
 public class GiftCardController
 {
-<span class="fc" id="L44">    private static final Logger log = LoggerFactory.getLogger(GiftCardController.class);</span>
+<span class="fc" id="L50">    private static final Logger log = LoggerFactory.getLogger(GiftCardController.class);</span>
     private final GiftCardService giftCardService;
     private final GiftCardHoldService giftCardHoldService;
+    private final GiftCardRefundService giftCardRefundService;
+    private final GiftCardCreditService giftCardCreditService;
 
-<span class="fc" id="L48">    public GiftCardController(GiftCardService giftCardService, GiftCardHoldService giftCardHoldService) {</span>
-<span class="fc" id="L49">        this.giftCardService = giftCardService;</span>
-<span class="fc" id="L50">        this.giftCardHoldService = giftCardHoldService;</span>
-<span class="fc" id="L51">    }</span>
+<span class="fc" id="L56">    public GiftCardController(GiftCardService giftCardService, GiftCardHoldService giftCardHoldService, GiftCardRefundService giftCardRefundService, GiftCardCreditService giftCardCreditService) {</span>
+<span class="fc" id="L57">        this.giftCardService = giftCardService;</span>
+<span class="fc" id="L58">        this.giftCardHoldService = giftCardHoldService;</span>
+<span class="fc" id="L59">        this.giftCardRefundService = giftCardRefundService;</span>
+<span class="fc" id="L60">        this.giftCardCreditService = giftCardCreditService;</span>
+<span class="fc" id="L61">    }</span>
 
     @Operation(
         summary = &quot;Redeem a gift card&quot;,
@@ -81,9 +91,9 @@ public class GiftCardController
     public CompletableFuture&lt;RedemptionResponse&gt; redeemGiftCard(
             @Valid @RequestBody RedemptionRequest request,
             @RequestHeader(&quot;Idempotency-Key&quot;) String idempotencyKey) {
-<span class="fc" id="L84">        log.info(&quot;Received redemption request. Code: {}, Amount: {}, IdempotencyKey: {}&quot;, request.giftCardCode(), request.amount(), idempotencyKey);</span>
+<span class="fc" id="L94">        log.info(&quot;Received redemption request. Code: {}, Amount: {}, IdempotencyKey: {}&quot;, request.giftCardCode(), request.amount(), idempotencyKey);</span>
 
-<span class="fc" id="L86">        return giftCardService.redeemGiftCardAsync(request, idempotencyKey);</span>
+<span class="fc" id="L96">        return giftCardService.redeemGiftCardAsync(request, idempotencyKey);</span>
     }
 
     @Operation(
@@ -104,8 +114,8 @@ public class GiftCardController
     @GetMapping(&quot;/list&quot;)
     @ResponseStatus(HttpStatus.OK)
     public List&lt;GiftCardResponse&gt; listGiftCards() {
-<span class="nc" id="L107">        log.info(&quot;Received request to list all gift cards&quot;);</span>
-<span class="nc" id="L108">        return giftCardService.getAllGiftCards();</span>
+<span class="nc" id="L117">        log.info(&quot;Received request to list all gift cards&quot;);</span>
+<span class="nc" id="L118">        return giftCardService.getAllGiftCards();</span>
     }
 
     @Operation(
@@ -131,10 +141,10 @@ public class GiftCardController
     @PostMapping(&quot;/create&quot;)
     @ResponseStatus(HttpStatus.CREATED)
     public GiftCardResponse createGiftCard(@Valid @RequestBody GiftCardCreateRequest request) {
-<span class="fc" id="L134">        log.info(&quot;Received gift card creation request. Code: {}, Balance: {}&quot;,</span>
-<span class="fc" id="L135">                request.giftCardCode(), request.balance());</span>
+<span class="fc" id="L144">        log.info(&quot;Received gift card creation request. Code: {}, Balance: {}&quot;,</span>
+<span class="fc" id="L145">                request.giftCardCode(), request.balance());</span>
 
-<span class="fc" id="L137">        return giftCardService.createGiftCard(request);</span>
+<span class="fc" id="L147">        return giftCardService.createGiftCard(request);</span>
     }
 
     @Operation(
@@ -158,8 +168,8 @@ public class GiftCardController
     @GetMapping(&quot;/lookup/{code}&quot;)
     @ResponseStatus(HttpStatus.OK)
     public GiftCardResponse lookupGiftCard(@PathVariable String code) {
-<span class="fc" id="L161">        log.info(&quot;Received gift card lookup request. Code: {}&quot;, code);</span>
-<span class="nc" id="L162">        return giftCardService.lookupGiftCard(code);</span>
+<span class="fc" id="L171">        log.info(&quot;Received gift card lookup request. Code: {}&quot;, code);</span>
+<span class="nc" id="L172">        return giftCardService.lookupGiftCard(code);</span>
     }
 
     @Operation(
@@ -183,8 +193,8 @@ public class GiftCardController
     @GetMapping(&quot;/{code}/ledger&quot;)
     @ResponseStatus(HttpStatus.OK)
     public List&lt;LedgerEntryResponse&gt; getLedger(@PathVariable String code) {
-<span class="fc" id="L186">        log.info(&quot;Received gift card ledger request. Code: {}&quot;, code);</span>
-<span class="fc" id="L187">        return giftCardService.getLedger(code);</span>
+<span class="fc" id="L196">        log.info(&quot;Received gift card ledger request. Code: {}&quot;, code);</span>
+<span class="fc" id="L197">        return giftCardService.getLedger(code);</span>
     }
 
     @Operation(
@@ -219,8 +229,8 @@ public class GiftCardController
     public HoldResponse reserveGiftCard(
             @Valid @RequestBody ReserveRequest request,
             @RequestHeader(&quot;Idempotency-Key&quot;) String idempotencyKey) {
-<span class="nc" id="L222">        log.info(&quot;Received hold reservation request. Code: {}, Amount: {}, IdempotencyKey: {}&quot;, request.giftCardCode(), request.amount(), idempotencyKey);</span>
-<span class="nc" id="L223">        return giftCardHoldService.reserve(request, idempotencyKey);</span>
+<span class="nc" id="L232">        log.info(&quot;Received hold reservation request. Code: {}, Amount: {}, IdempotencyKey: {}&quot;, request.giftCardCode(), request.amount(), idempotencyKey);</span>
+<span class="nc" id="L233">        return giftCardHoldService.reserve(request, idempotencyKey);</span>
     }
 
     @Operation(
@@ -245,8 +255,8 @@ public class GiftCardController
     @PostMapping(&quot;/holds/{holdId}/capture&quot;)
     @ResponseStatus(HttpStatus.OK)
     public HoldResponse captureHold(@PathVariable Long holdId) {
-<span class="nc" id="L248">        log.info(&quot;Received hold capture request. HoldId: {}&quot;, holdId);</span>
-<span class="nc" id="L249">        return giftCardHoldService.capture(holdId);</span>
+<span class="nc" id="L258">        log.info(&quot;Received hold capture request. HoldId: {}&quot;, holdId);</span>
+<span class="nc" id="L259">        return giftCardHoldService.capture(holdId);</span>
     }
 
     @Operation(
@@ -271,9 +281,87 @@ public class GiftCardController
     @PostMapping(&quot;/holds/{holdId}/release&quot;)
     @ResponseStatus(HttpStatus.OK)
     public HoldResponse releaseHold(@PathVariable Long holdId) {
-<span class="nc" id="L274">        log.info(&quot;Received hold release request. HoldId: {}&quot;, holdId);</span>
-<span class="nc" id="L275">        return giftCardHoldService.release(holdId);</span>
+<span class="nc" id="L284">        log.info(&quot;Received hold release request. HoldId: {}&quot;, holdId);</span>
+<span class="nc" id="L285">        return giftCardHoldService.release(holdId);</span>
+    }
+
+    @Operation(
+        summary = &quot;Refund a gift card against a prior redemption&quot;,
+        description = &quot;Reverses a specific prior REDEMPTION entry (identified by redemptionLedgerEntryId, from GET /{code}/ledger), &quot;
+                    + &quot;exclusively through a new REFUND ledger entry (never a direct balance edit). Capped at what's left to refund &quot;
+                    + &quot;on that entry (its original amount minus any prior refunds against it). Callable by any authenticated merchant &quot;
+                    + &quot;account (human or the merchant's own service/integration account) - unlike /credit, a refund is structurally &quot;
+                    + &quot;bounded by a real prior transaction, so no extra restriction is needed. &quot;
+                    + &quot;Deliberately allowed on an inactive/expired card - refunding exists specifically to fix a problem, so blocking on &quot;
+                    + &quot;that same problem's status would defeat the purpose. Requires authentication (JWT token, MERCHANT role). &quot;
+                    + &quot;Requires the Idempotency-Key header: safely retry after a network failure by resending the same key - &quot;
+                    + &quot;a completed request replays its cached result instead of refunding a second time.&quot;
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = &quot;200&quot;, description = &quot;OK - Refund applied&quot;,
+            content = @Content(schema = @Schema(implementation = RefundResponse.class))),
+        @ApiResponse(responseCode = &quot;400&quot;, description = &quot;Bad Request - Invalid request body (missing or invalid fields) or missing Idempotency-Key header&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Bad Request\&quot;,\&quot;message\&quot;:\&quot;The gift card code cannot be blank\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;401&quot;, description = &quot;Unauthorized - Missing or invalid JWT token&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Unauthorized\&quot;,\&quot;message\&quot;:\&quot;Invalid or missing JWT token\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;404&quot;, description = &quot;Not Found - Gift card does not exist for the caller's merchant, or redemptionLedgerEntryId does not reference an entry on this card&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Not Found\&quot;,\&quot;message\&quot;:\&quot;Gift card not found\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;409&quot;, description = &quot;Conflict - Idempotency-Key already used with a different request payload, or a request with this key is still being processed&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Conflict\&quot;,\&quot;message\&quot;:\&quot;This Idempotency-Key was already used with a different request payload\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;422&quot;, description = &quot;Unprocessable Entity - redemptionLedgerEntryId does not reference a REDEMPTION entry, or the refund amount exceeds what's left to refund on it&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Unprocessable Entity\&quot;,\&quot;message\&quot;:\&quot;Refund amount exceeds what's left to refund on this entry\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;429&quot;, description = &quot;Too Many Requests - Rate limit exceeded for this merchant (max 300 requests/minute)&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Too Many Requests\&quot;,\&quot;message\&quot;:\&quot;Too many requests. Please try again later.\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;500&quot;, description = &quot;Internal Server Error - Unexpected server error&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Internal Server Error\&quot;,\&quot;message\&quot;:\&quot;Database error occurred\&quot;}&quot;)))
+    })
+    @PostMapping(&quot;/refund&quot;)
+    @ResponseStatus(HttpStatus.OK)
+    public RefundResponse refundGiftCard(
+            @Valid @RequestBody RefundRequest request,
+            @RequestHeader(&quot;Idempotency-Key&quot;) String idempotencyKey) {
+<span class="nc" id="L323">        log.info(&quot;Received refund request. Code: {}, Amount: {}, RedemptionLedgerEntryId: {}, IdempotencyKey: {}&quot;,</span>
+<span class="nc" id="L324">                request.giftCardCode(), request.amount(), request.redemptionLedgerEntryId(), idempotencyKey);</span>
+<span class="nc" id="L325">        return giftCardRefundService.refund(request, idempotencyKey);</span>
+    }
+
+    @Operation(
+        summary = &quot;Manually credit a gift card&quot;,
+        description = &quot;Add a free-form manual credit onto a gift card, not tied to any prior redemption, exclusively through a new &quot;
+                    + &quot;ADJUSTMENT ledger entry (never a direct balance edit). Requires a written reason for audit. &quot;
+                    + &quot;Only callable by a human merchant account - rejected with 403 if the caller is the merchant's own service/&quot;
+                    + &quot;integration account, since a free-form credit has no structural cap and must be asserted by a person. &quot;
+                    + &quot;Deliberately allowed on an inactive/expired card - crediting exists specifically to fix a problem, so blocking on &quot;
+                    + &quot;that same problem's status would defeat the purpose. Requires authentication (JWT token, MERCHANT role). &quot;
+                    + &quot;Requires the Idempotency-Key header: safely retry after a network failure by resending the same key - &quot;
+                    + &quot;a completed request replays its cached result instead of crediting a second time.&quot;
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = &quot;200&quot;, description = &quot;OK - Credit applied&quot;,
+            content = @Content(schema = @Schema(implementation = CreditResponse.class))),
+        @ApiResponse(responseCode = &quot;400&quot;, description = &quot;Bad Request - Invalid request body (missing or invalid fields, or missing reason) or missing Idempotency-Key header&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Bad Request\&quot;,\&quot;message\&quot;:\&quot;The reason is required\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;401&quot;, description = &quot;Unauthorized - Missing or invalid JWT token&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Unauthorized\&quot;,\&quot;message\&quot;:\&quot;Invalid or missing JWT token\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;403&quot;, description = &quot;Forbidden - Caller is a service/integration account, not a human merchant account&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Forbidden\&quot;,\&quot;message\&quot;:\&quot;Manual credits must be performed by a human account, not a service account\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;404&quot;, description = &quot;Not Found - Gift card does not exist for the caller's merchant&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Not Found\&quot;,\&quot;message\&quot;:\&quot;Gift card not found\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;409&quot;, description = &quot;Conflict - Idempotency-Key already used with a different request payload, or a request with this key is still being processed&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Conflict\&quot;,\&quot;message\&quot;:\&quot;This Idempotency-Key was already used with a different request payload\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;429&quot;, description = &quot;Too Many Requests - Rate limit exceeded for this merchant (max 300 requests/minute)&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Too Many Requests\&quot;,\&quot;message\&quot;:\&quot;Too many requests. Please try again later.\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;500&quot;, description = &quot;Internal Server Error - Unexpected server error&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Internal Server Error\&quot;,\&quot;message\&quot;:\&quot;Database error occurred\&quot;}&quot;)))
+    })
+    @PostMapping(&quot;/credit&quot;)
+    @ResponseStatus(HttpStatus.OK)
+    public CreditResponse creditGiftCard(
+            @Valid @RequestBody CreditRequest request,
+            @RequestHeader(&quot;Idempotency-Key&quot;) String idempotencyKey) {
+<span class="nc" id="L362">        log.info(&quot;Received credit request. Code: {}, Amount: {}, IdempotencyKey: {}&quot;,</span>
+<span class="nc" id="L363">                request.giftCardCode(), request.amount(), idempotencyKey);</span>
+<span class="nc" id="L364">        return giftCardCreditService.credit(request, idempotencyKey);</span>
     }
 }
-
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

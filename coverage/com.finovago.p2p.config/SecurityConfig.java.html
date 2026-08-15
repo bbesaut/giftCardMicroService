@@ -51,51 +51,53 @@ public class SecurityConfig {
             &quot;/api/v1/giftcards/create/**&quot;,
             &quot;/api/v1/giftcards/reserve/**&quot;,
             &quot;/api/v1/giftcards/holds/**&quot;,
-            &quot;/api/v1/giftcards/*/ledger&quot;
+            &quot;/api/v1/giftcards/*/ledger&quot;,
+            &quot;/api/v1/giftcards/refund/**&quot;,
+            &quot;/api/v1/giftcards/credit/**&quot;
     };
 
     private final JwtAuthenticationFilter jwtAuthFilter;
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
     private final JwtAccessDeniedHandler accessDeniedHandler;
 
-<span class="fc" id="L61">    public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter, JwtAuthenticationEntryPoint authenticationEntryPoint, JwtAccessDeniedHandler accessDeniedHandler) {</span>
-<span class="fc" id="L62">        this.jwtAuthFilter = jwtAuthFilter;</span>
-<span class="fc" id="L63">        this.authenticationEntryPoint = authenticationEntryPoint;</span>
-<span class="fc" id="L64">        this.accessDeniedHandler = accessDeniedHandler;</span>
-<span class="fc" id="L65">    }</span>
+<span class="fc" id="L63">    public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter, JwtAuthenticationEntryPoint authenticationEntryPoint, JwtAccessDeniedHandler accessDeniedHandler) {</span>
+<span class="fc" id="L64">        this.jwtAuthFilter = jwtAuthFilter;</span>
+<span class="fc" id="L65">        this.authenticationEntryPoint = authenticationEntryPoint;</span>
+<span class="fc" id="L66">        this.accessDeniedHandler = accessDeniedHandler;</span>
+<span class="fc" id="L67">    }</span>
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-<span class="fc" id="L69">        return new BCryptPasswordEncoder();</span>
+<span class="fc" id="L71">        return new BCryptPasswordEncoder();</span>
     }
 
     @Bean
     public RoleHierarchy roleHierarchy() {
         // No implied roles: ADMIN manages the platform (merchants, global gift card listing)
         // but does not act on behalf of a specific merchant's own gift cards.
-<span class="fc" id="L76">        return RoleHierarchyImpl.withDefaultRolePrefix().build();</span>
+<span class="fc" id="L78">        return RoleHierarchyImpl.withDefaultRolePrefix().build();</span>
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-<span class="fc" id="L81">        http</span>
-<span class="fc" id="L82">                .csrf(csrf -&gt; csrf.disable())</span>
-<span class="fc" id="L83">                .headers(headers -&gt; headers.frameOptions(frame -&gt; frame.disable()))</span>
-<span class="fc" id="L84">                .sessionManagement(session -&gt; session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))</span>
+<span class="fc" id="L83">        http</span>
+<span class="fc" id="L84">                .csrf(csrf -&gt; csrf.disable())</span>
+<span class="fc" id="L85">                .headers(headers -&gt; headers.frameOptions(frame -&gt; frame.disable()))</span>
+<span class="fc" id="L86">                .sessionManagement(session -&gt; session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))</span>
 
-<span class="fc" id="L86">                .authorizeHttpRequests(auth -&gt; auth</span>
-<span class="fc" id="L87">                        .requestMatchers(&quot;/h2-console/**&quot;).permitAll()</span>
-<span class="fc" id="L88">                        .requestMatchers(PUBLIC_ROUTES).permitAll()</span>
-<span class="fc" id="L89">                        .requestMatchers(ADMIN_ROUTES).hasRole(&quot;ADMIN&quot;)</span>
-<span class="fc" id="L90">                        .requestMatchers(MERCHANT_ROUTES).hasRole(&quot;MERCHANT&quot;)</span>
-<span class="fc" id="L91">                        .anyRequest().authenticated())</span>
+<span class="fc" id="L88">                .authorizeHttpRequests(auth -&gt; auth</span>
+<span class="fc" id="L89">                        .requestMatchers(&quot;/h2-console/**&quot;).permitAll()</span>
+<span class="fc" id="L90">                        .requestMatchers(PUBLIC_ROUTES).permitAll()</span>
+<span class="fc" id="L91">                        .requestMatchers(ADMIN_ROUTES).hasRole(&quot;ADMIN&quot;)</span>
+<span class="fc" id="L92">                        .requestMatchers(MERCHANT_ROUTES).hasRole(&quot;MERCHANT&quot;)</span>
+<span class="fc" id="L93">                        .anyRequest().authenticated())</span>
 
-<span class="fc" id="L93">                .exceptionHandling(exception -&gt; exception</span>
-<span class="fc" id="L94">                        .authenticationEntryPoint(authenticationEntryPoint)</span>
-<span class="fc" id="L95">                        .accessDeniedHandler(accessDeniedHandler))</span>
-<span class="fc" id="L96">                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);</span>
+<span class="fc" id="L95">                .exceptionHandling(exception -&gt; exception</span>
+<span class="fc" id="L96">                        .authenticationEntryPoint(authenticationEntryPoint)</span>
+<span class="fc" id="L97">                        .accessDeniedHandler(accessDeniedHandler))</span>
+<span class="fc" id="L98">                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);</span>
 
-<span class="fc" id="L98">        return http.build();</span>
+<span class="fc" id="L100">        return http.build();</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

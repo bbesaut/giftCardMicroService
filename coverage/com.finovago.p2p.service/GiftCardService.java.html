@@ -214,16 +214,17 @@ public class GiftCardService {
 <span class="fc" id="L214">                        entry.getBalanceAfter(),</span>
 <span class="fc" id="L215">                        entry.getHoldId(),</span>
 <span class="fc" id="L216">                        entry.getCreatedAt(),</span>
-<span class="fc" id="L217">                        resolveActorDisplay(entry.getActorUserId(), actorsByUserId)</span>
+<span class="fc" id="L217">                        resolveActorDisplay(entry.getActorUserId(), actorsByUserId),</span>
+<span class="fc" id="L218">                        entry.getReason()</span>
                 ))
-<span class="fc" id="L219">                .toList();</span>
+<span class="fc" id="L220">                .toList();</span>
     }
 
     private static String resolveActorDisplay(Long actorUserId, Map&lt;Long, String&gt; actorsByUserId) {
-<span class="fc bfc" id="L223" title="All 2 branches covered.">        if (actorUserId == null) {</span>
-<span class="fc" id="L224">            return &quot;Unknown&quot;;</span>
+<span class="fc bfc" id="L224" title="All 2 branches covered.">        if (actorUserId == null) {</span>
+<span class="fc" id="L225">            return &quot;Unknown&quot;;</span>
         }
-<span class="fc" id="L226">        return actorsByUserId.getOrDefault(actorUserId, &quot;Deleted user&quot;);</span>
+<span class="fc" id="L227">        return actorsByUserId.getOrDefault(actorUserId, &quot;Deleted user&quot;);</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
