@@ -22,8 +22,11 @@ import com.finovago.p2p.dto.HoldResponse;
 import com.finovago.p2p.dto.LedgerEntryResponse;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.dto.RedemptionRequest;
+import com.finovago.p2p.dto.RefundRequest;
+import com.finovago.p2p.dto.RefundResponse;
 import com.finovago.p2p.dto.ReserveRequest;
 import com.finovago.p2p.service.GiftCardHoldService;
+import com.finovago.p2p.service.GiftCardRefundService;
 import com.finovago.p2p.service.GiftCardService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -44,10 +47,12 @@ public class GiftCardController
     private static final Logger log = LoggerFactory.getLogger(GiftCardController.class);
     private final GiftCardService giftCardService;
     private final GiftCardHoldService giftCardHoldService;
+    private final GiftCardRefundService giftCardRefundService;
 
-    public GiftCardController(GiftCardService giftCardService, GiftCardHoldService giftCardHoldService) {
+    public GiftCardController(GiftCardService giftCardService, GiftCardHoldService giftCardHoldService, GiftCardRefundService giftCardRefundService) {
         this.giftCardService = giftCardService;
         this.giftCardHoldService = giftCardHoldService;
+        this.giftCardRefundService = giftCardRefundService;
     }
 
     @Operation(
@@ -274,5 +279,44 @@ public class GiftCardController
         log.info("Received hold release request. HoldId: {}", holdId);
         return giftCardHoldService.release(holdId);
     }
-}
 
+    @Operation(
+        summary = "Refund a gift card against a prior redemption",
+        description = "Reverses a specific prior REDEMPTION entry (identified by redemptionLedgerEntryId, from GET /{code}/ledger), "
+                    + "exclusively through a new REFUND ledger entry (never a direct balance edit). Capped at what's left to refund "
+                    + "on that entry (its original amount minus any prior refunds against it). Callable by any authenticated merchant "
+                    + "account (human or the merchant's own service/integration account) - unlike /credit, a refund is structurally "
+                    + "bounded by a real prior transaction, so no extra restriction is needed. "
+                    + "Deliberately allowed on an inactive/expired card - refunding exists specifically to fix a problem, so blocking on "
+                    + "that same problem's status would defeat the purpose. Requires authentication (JWT token, MERCHANT role). "
+                    + "Requires the Idempotency-Key header: safely retry after a network failure by resending the same key - "
+                    + "a completed request replays its cached result instead of refunding a second time."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "OK - Refund applied",
+            content = @Content(schema = @Schema(implementation = RefundResponse.class))),
+        @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request body (missing or invalid fields) or missing Idempotency-Key header",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"The gift card code cannot be blank\"}"))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
+        @ApiResponse(responseCode = "404", description = "Not Found - Gift card does not exist for the caller's merchant, or redemptionLedgerEntryId does not reference an entry on this card",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Not Found\",\"message\":\"Gift card not found\"}"))),
+        @ApiResponse(responseCode = "409", description = "Conflict - Idempotency-Key already used with a different request payload, or a request with this key is still being processed",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Conflict\",\"message\":\"This Idempotency-Key was already used with a different request payload\"}"))),
+        @ApiResponse(responseCode = "422", description = "Unprocessable Entity - redemptionLedgerEntryId does not reference a REDEMPTION entry, or the refund amount exceeds what's left to refund on it",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unprocessable Entity\",\"message\":\"Refund amount exceeds what's left to refund on this entry\"}"))),
+        @ApiResponse(responseCode = "429", description = "Too Many Requests - Rate limit exceeded for this merchant (max 300 requests/minute)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Too Many Requests\",\"message\":\"Too many requests. Please try again later.\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error - Unexpected server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
+    })
+    @PostMapping("/refund")
+    @ResponseStatus(HttpStatus.OK)
+    public RefundResponse refundGiftCard(
+            @Valid @RequestBody RefundRequest request,
+            @RequestHeader("Idempotency-Key") String idempotencyKey) {
+        log.info("Received refund request. Code: {}, Amount: {}, RedemptionLedgerEntryId: {}, IdempotencyKey: {}",
+                request.giftCardCode(), request.amount(), request.redemptionLedgerEntryId(), idempotencyKey);
+        return giftCardRefundService.refund(request, idempotencyKey);
+    }
+}

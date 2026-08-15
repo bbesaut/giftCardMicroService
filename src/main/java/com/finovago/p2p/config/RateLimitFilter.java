@@ -51,7 +51,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
         LOGIN_PREFIX,
         "/api/v1/giftcards/lookup/",
         "/api/v1/giftcards/redeem",
-        "/api/v1/giftcards/reserve"
+        "/api/v1/giftcards/reserve",
+        "/api/v1/giftcards/refund"
     );
 
     private final boolean enabled;

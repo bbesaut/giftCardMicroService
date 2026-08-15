@@ -194,6 +194,42 @@ public class GlobalExceptionHandler {
             ));
 }
 
+    @ExceptionHandler(LedgerEntryNotFoundException.class)
+    public ResponseEntity<Object> handleLedgerEntryNotFoundException(LedgerEntryNotFoundException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(Map.of(
+                    "error", "Not Found",
+                    "message", ex.getMessage()
+                ));
+    }
+
+    @ExceptionHandler(InvalidRefundTargetException.class)
+    public ResponseEntity<Object> handleInvalidRefundTargetException(InvalidRefundTargetException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(Map.of(
+                    "error", "Unprocessable Entity",
+                    "message", ex.getMessage()
+                ));
+    }
+
+    @ExceptionHandler(RefundExceedsOriginalAmountException.class)
+    public ResponseEntity<Object> handleRefundExceedsOriginalAmountException(RefundExceedsOriginalAmountException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(Map.of(
+                    "error", "Unprocessable Entity",
+                    "message", ex.getMessage()
+                ));
+    }
+
     @ExceptionHandler(MerchantNotFoundException.class)
     public ResponseEntity<Object> handleMerchantNotFoundException(MerchantNotFoundException ex) {
         log.warn(ex.getMessage());
