@@ -1,17 +1,28 @@
 package com.finovago.p2p.repository;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.finovago.p2p.model.LedgerEntry;
 
 public interface LedgerEntryRepository extends JpaRepository<LedgerEntry, Long> {
 
     List<LedgerEntry> findByGiftCardIdOrderByCreatedAtAsc(Long giftCardId);
+
+    // Scoped by giftCardId + merchantId so a refund can only ever target an entry that belongs to
+    // the caller's own tenant, not merely an entry id that happens to exist somewhere in the table.
+    Optional<LedgerEntry> findByIdAndGiftCardIdAndMerchantId(Long id, Long giftCardId, Long merchantId);
+
+    // How much has already been refunded against a given REDEMPTION entry, so a new refund can be
+    // capped at what's actually left (original amount minus prior refunds).
+    @Query("select coalesce(sum(e.amount), 0) from LedgerEntry e where e.relatedEntryId = :entryId and e.entryType = com.finovago.p2p.model.LedgerEntryType.REFUND")
+    BigDecimal sumRefundedAmountForEntry(@Param("entryId") Long entryId);
 
     // gift_card_ledger is RANGE-partitioned by year (see V21); dated partitions follow the naming
     // convention gift_card_ledger_YYYY. This finds January 1st of the furthest-out one already

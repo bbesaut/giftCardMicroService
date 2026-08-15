@@ -273,6 +273,77 @@ Header: `Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000`
 - `429 Too Many Requests`: Rate limit exceeded (max 10 attempts/minute per IP)
 - `500 Internal Server Error`: Server error
 
+### POST /api/v1/giftcards/refund
+**Description**: Reverses a specific prior `REDEMPTION` entry, scoped to the caller's merchant, exclusively through a new `REFUND` ledger entry (never a direct balance edit). Identified by `redemptionLedgerEntryId` (from `GET /{code}/ledger`). Capped at what's left to refund on that entry (its original amount minus any prior refunds against it). Callable by any authenticated merchant account — human or the merchant's own service/integration account (e.g. their checkout backend auto-triggering a refund when it registers a customer return) — since a refund is structurally bounded by a real prior transaction, unlike `/credit` below.
+
+Deliberately allowed on an inactive/expired card — refunding exists specifically to fix a problem, so blocking on that same problem's status would defeat the purpose. Requires authentication (MERCHANT role).
+
+**Idempotency**: Requires an `Idempotency-Key` header, same semantics as `redeem`/`reserve` — a retry with the same key replays the cached result instead of refunding twice. The hash covers `giftCardCode`/`amount`/`redemptionLedgerEntryId` (not `reason`, so rewording a justification on retry doesn't trigger a spurious `409`).
+
+**Request** (RefundRequest):
+```json
+{
+  "giftCardCode": "GC-12345",
+  "amount": 30.0,
+  "redemptionLedgerEntryId": 987,
+  "reason": null
+}
+```
+Header: `Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000`
+
+**Response** (RefundResponse - HTTP 200 OK):
+```json
+{
+  "status": "SUCCESS",
+  "refundedAmount": 30.0,
+  "newBalance": 130.0
+}
+```
+
+**Error Responses**:
+- `400 Bad Request`: Invalid request body (missing or invalid fields), or missing `Idempotency-Key` header
+- `401 Unauthorized`: Missing or invalid JWT token
+- `404 Not Found`: Gift card does not exist for the caller's merchant, or `redemptionLedgerEntryId` does not reference an entry on this card
+- `409 Conflict`: `Idempotency-Key` reused with a different request payload, or a request with this key is still being processed
+- `422 Unprocessable Entity`: `redemptionLedgerEntryId` does not reference a `REDEMPTION` entry, or the refund amount exceeds what's left to refund on it
+- `429 Too Many Requests`: Rate limit exceeded (max 300 requests/minute per merchant)
+- `500 Internal Server Error`: Server error
+
+### POST /api/v1/giftcards/credit
+**Description**: Adds a free-form manual credit onto a gift card, scoped to the caller's merchant, not tied to any prior redemption, exclusively through a new `ADJUSTMENT` ledger entry (never a direct balance edit). Requires a `reason` (audit trail for support/finance) — unlike `/refund`, there's no structural cap on this amount, so **only a human merchant account may call it**: rejected with `403` if the caller is the merchant's own service/integration account, since a free-form credit must be asserted by a person, not an automated script.
+
+Deliberately allowed on an inactive/expired card — crediting exists specifically to fix a problem, so blocking on that same problem's status would defeat the purpose. Requires authentication (MERCHANT role).
+
+**Idempotency**: Requires an `Idempotency-Key` header, same semantics as `redeem`/`reserve` — a retry with the same key replays the cached result instead of crediting twice. The hash covers `giftCardCode`/`amount` (not `reason`).
+
+**Request** (CreditRequest):
+```json
+{
+  "giftCardCode": "GC-12345",
+  "amount": 20.0,
+  "reason": "Goodwill gesture - support ticket #123"
+}
+```
+Header: `Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000`
+
+**Response** (CreditResponse - HTTP 200 OK):
+```json
+{
+  "status": "SUCCESS",
+  "creditedAmount": 20.0,
+  "newBalance": 70.0
+}
+```
+
+**Error Responses**:
+- `400 Bad Request`: Invalid request body (missing or invalid fields, or missing `reason`), or missing `Idempotency-Key` header
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Caller is a service/integration account, not a human merchant account
+- `404 Not Found`: Gift card does not exist for the caller's merchant
+- `409 Conflict`: `Idempotency-Key` reused with a different request payload, or a request with this key is still being processed
+- `429 Too Many Requests`: Rate limit exceeded (max 300 requests/minute per merchant)
+- `500 Internal Server Error`: Server error
+
 ### POST /api/v1/giftcards/create
 **Description**: Create a new gift card with the specified code and initial balance, under the caller's own merchant. Requires authentication (MERCHANT role). Gift card code must be unique within that merchant.
 
@@ -379,12 +450,38 @@ Response for redemption operations
 
 ### LedgerEntryResponse
 Response for a single gift card ledger entry (GET /api/v1/giftcards/{code}/ledger)
-- `entryType` (String): Kind of operation (CREATION, REDEMPTION, HOLD_PLACED, HOLD_CAPTURED, HOLD_RELEASED)
+- `entryType` (String): Kind of operation (CREATION, REDEMPTION, HOLD_PLACED, HOLD_CAPTURED, HOLD_RELEASED, REFUND, ADJUSTMENT)
 - `amount` (BigDecimal): Amount involved in this operation
 - `balanceAfter` (BigDecimal): Gift card balance immediately after this operation
 - `holdId` (Long, nullable): Identifier of the related hold, if any
 - `createdAt` (LocalDateTime): Timestamp at which this entry was recorded
 - `actor` (String, nullable): Who triggered this operation — the user's email (`"SYSTEM / email"` for a service account), `"Deleted user"` if the account no longer exists, or `"Unknown"` for entries recorded before this field existed
+- `reason` (String, nullable): Operator-supplied justification — set for ADJUSTMENT (mandatory when created) and optionally for REFUND, null otherwise
+
+### RefundRequest
+Used for refunding gift cards against a prior redemption (POST /api/v1/giftcards/refund)
+- `giftCardCode` (String): Gift card code to refund
+- `amount` (BigDecimal): Amount to refund (must be > 0)
+- `redemptionLedgerEntryId` (Long): Id of the REDEMPTION ledger entry being refunded
+- `reason` (String, nullable): Optional justification, max 500 chars — the link to the original redemption is usually enough on its own
+
+### RefundResponse
+Response for a successful refund operation
+- `status` (String): Refund status (e.g., "SUCCESS")
+- `refundedAmount` (BigDecimal): Amount refunded to the card
+- `newBalance` (BigDecimal): Balance after this refund
+
+### CreditRequest
+Used for free-form manual credits, not tied to any redemption (POST /api/v1/giftcards/credit) — only callable by a human merchant account, not a service account
+- `giftCardCode` (String): Gift card code to credit
+- `amount` (BigDecimal): Amount to credit (must be > 0)
+- `reason` (String): Mandatory justification, max 500 chars
+
+### CreditResponse
+Response for a successful credit operation
+- `status` (String): Credit status (e.g., "SUCCESS")
+- `creditedAmount` (BigDecimal): Amount credited to the card
+- `newBalance` (BigDecimal): Balance after this credit
 
 ## ⚠️ Error Responses
 
