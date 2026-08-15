@@ -309,6 +309,41 @@ Header: `Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000`
 - `429 Too Many Requests`: Rate limit exceeded (max 300 requests/minute per merchant)
 - `500 Internal Server Error`: Server error
 
+### POST /api/v1/giftcards/credit
+**Description**: Adds a free-form manual credit onto a gift card, scoped to the caller's merchant, not tied to any prior redemption, exclusively through a new `ADJUSTMENT` ledger entry (never a direct balance edit). Requires a `reason` (audit trail for support/finance) — unlike `/refund`, there's no structural cap on this amount, so **only a human merchant account may call it**: rejected with `403` if the caller is the merchant's own service/integration account, since a free-form credit must be asserted by a person, not an automated script.
+
+Deliberately allowed on an inactive/expired card — crediting exists specifically to fix a problem, so blocking on that same problem's status would defeat the purpose. Requires authentication (MERCHANT role).
+
+**Idempotency**: Requires an `Idempotency-Key` header, same semantics as `redeem`/`reserve` — a retry with the same key replays the cached result instead of crediting twice. The hash covers `giftCardCode`/`amount` (not `reason`).
+
+**Request** (CreditRequest):
+```json
+{
+  "giftCardCode": "GC-12345",
+  "amount": 20.0,
+  "reason": "Goodwill gesture - support ticket #123"
+}
+```
+Header: `Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000`
+
+**Response** (CreditResponse - HTTP 200 OK):
+```json
+{
+  "status": "SUCCESS",
+  "creditedAmount": 20.0,
+  "newBalance": 70.0
+}
+```
+
+**Error Responses**:
+- `400 Bad Request`: Invalid request body (missing or invalid fields, or missing `reason`), or missing `Idempotency-Key` header
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Caller is a service/integration account, not a human merchant account
+- `404 Not Found`: Gift card does not exist for the caller's merchant
+- `409 Conflict`: `Idempotency-Key` reused with a different request payload, or a request with this key is still being processed
+- `429 Too Many Requests`: Rate limit exceeded (max 300 requests/minute per merchant)
+- `500 Internal Server Error`: Server error
+
 ### POST /api/v1/giftcards/create
 **Description**: Create a new gift card with the specified code and initial balance, under the caller's own merchant. Requires authentication (MERCHANT role). Gift card code must be unique within that merchant.
 
@@ -435,6 +470,18 @@ Response for a successful refund operation
 - `status` (String): Refund status (e.g., "SUCCESS")
 - `refundedAmount` (BigDecimal): Amount refunded to the card
 - `newBalance` (BigDecimal): Balance after this refund
+
+### CreditRequest
+Used for free-form manual credits, not tied to any redemption (POST /api/v1/giftcards/credit) — only callable by a human merchant account, not a service account
+- `giftCardCode` (String): Gift card code to credit
+- `amount` (BigDecimal): Amount to credit (must be > 0)
+- `reason` (String): Mandatory justification, max 500 chars
+
+### CreditResponse
+Response for a successful credit operation
+- `status` (String): Credit status (e.g., "SUCCESS")
+- `creditedAmount` (BigDecimal): Amount credited to the card
+- `newBalance` (BigDecimal): Balance after this credit
 
 ## ⚠️ Error Responses
 

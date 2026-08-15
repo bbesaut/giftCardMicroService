@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.finovago.p2p.dto.CreditRequest;
+import com.finovago.p2p.dto.CreditResponse;
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.GiftCardResponse;
 import com.finovago.p2p.dto.HoldResponse;
@@ -25,6 +27,7 @@ import com.finovago.p2p.dto.RedemptionRequest;
 import com.finovago.p2p.dto.RefundRequest;
 import com.finovago.p2p.dto.RefundResponse;
 import com.finovago.p2p.dto.ReserveRequest;
+import com.finovago.p2p.service.GiftCardCreditService;
 import com.finovago.p2p.service.GiftCardHoldService;
 import com.finovago.p2p.service.GiftCardRefundService;
 import com.finovago.p2p.service.GiftCardService;
@@ -48,11 +51,13 @@ public class GiftCardController
     private final GiftCardService giftCardService;
     private final GiftCardHoldService giftCardHoldService;
     private final GiftCardRefundService giftCardRefundService;
+    private final GiftCardCreditService giftCardCreditService;
 
-    public GiftCardController(GiftCardService giftCardService, GiftCardHoldService giftCardHoldService, GiftCardRefundService giftCardRefundService) {
+    public GiftCardController(GiftCardService giftCardService, GiftCardHoldService giftCardHoldService, GiftCardRefundService giftCardRefundService, GiftCardCreditService giftCardCreditService) {
         this.giftCardService = giftCardService;
         this.giftCardHoldService = giftCardHoldService;
         this.giftCardRefundService = giftCardRefundService;
+        this.giftCardCreditService = giftCardCreditService;
     }
 
     @Operation(
@@ -318,5 +323,44 @@ public class GiftCardController
         log.info("Received refund request. Code: {}, Amount: {}, RedemptionLedgerEntryId: {}, IdempotencyKey: {}",
                 request.giftCardCode(), request.amount(), request.redemptionLedgerEntryId(), idempotencyKey);
         return giftCardRefundService.refund(request, idempotencyKey);
+    }
+
+    @Operation(
+        summary = "Manually credit a gift card",
+        description = "Add a free-form manual credit onto a gift card, not tied to any prior redemption, exclusively through a new "
+                    + "ADJUSTMENT ledger entry (never a direct balance edit). Requires a written reason for audit. "
+                    + "Only callable by a human merchant account - rejected with 403 if the caller is the merchant's own service/"
+                    + "integration account, since a free-form credit has no structural cap and must be asserted by a person. "
+                    + "Deliberately allowed on an inactive/expired card - crediting exists specifically to fix a problem, so blocking on "
+                    + "that same problem's status would defeat the purpose. Requires authentication (JWT token, MERCHANT role). "
+                    + "Requires the Idempotency-Key header: safely retry after a network failure by resending the same key - "
+                    + "a completed request replays its cached result instead of crediting a second time."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "OK - Credit applied",
+            content = @Content(schema = @Schema(implementation = CreditResponse.class))),
+        @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request body (missing or invalid fields, or missing reason) or missing Idempotency-Key header",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"The reason is required\"}"))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
+        @ApiResponse(responseCode = "403", description = "Forbidden - Caller is a service/integration account, not a human merchant account",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Forbidden\",\"message\":\"Manual credits must be performed by a human account, not a service account\"}"))),
+        @ApiResponse(responseCode = "404", description = "Not Found - Gift card does not exist for the caller's merchant",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Not Found\",\"message\":\"Gift card not found\"}"))),
+        @ApiResponse(responseCode = "409", description = "Conflict - Idempotency-Key already used with a different request payload, or a request with this key is still being processed",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Conflict\",\"message\":\"This Idempotency-Key was already used with a different request payload\"}"))),
+        @ApiResponse(responseCode = "429", description = "Too Many Requests - Rate limit exceeded for this merchant (max 300 requests/minute)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Too Many Requests\",\"message\":\"Too many requests. Please try again later.\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error - Unexpected server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
+    })
+    @PostMapping("/credit")
+    @ResponseStatus(HttpStatus.OK)
+    public CreditResponse creditGiftCard(
+            @Valid @RequestBody CreditRequest request,
+            @RequestHeader("Idempotency-Key") String idempotencyKey) {
+        log.info("Received credit request. Code: {}, Amount: {}, IdempotencyKey: {}",
+                request.giftCardCode(), request.amount(), idempotencyKey);
+        return giftCardCreditService.credit(request, idempotencyKey);
     }
 }

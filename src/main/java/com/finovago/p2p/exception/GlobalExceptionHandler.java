@@ -230,6 +230,18 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(ServiceAccountNotAllowedException.class)
+    public ResponseEntity<Object> handleServiceAccountNotAllowedException(ServiceAccountNotAllowedException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(Map.of(
+                    "error", "Forbidden",
+                    "message", ex.getMessage()
+                ));
+    }
+
     @ExceptionHandler(MerchantNotFoundException.class)
     public ResponseEntity<Object> handleMerchantNotFoundException(MerchantNotFoundException ex) {
         log.warn(ex.getMessage());
