@@ -214,7 +214,8 @@ public class GiftCardService {
                         entry.getBalanceAfter(),
                         entry.getHoldId(),
                         entry.getCreatedAt(),
-                        resolveActorDisplay(entry.getActorUserId(), actorsByUserId)
+                        resolveActorDisplay(entry.getActorUserId(), actorsByUserId),
+                        entry.getReason()
                 ))
                 .toList();
     }

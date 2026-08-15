@@ -5,5 +5,7 @@ public enum LedgerEntryType {
     REDEMPTION,
     HOLD_PLACED,
     HOLD_CAPTURED,
-    HOLD_RELEASED
+    HOLD_RELEASED,
+    REFUND,
+    ADJUSTMENT
 }

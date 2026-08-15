@@ -38,6 +38,11 @@ public class LedgerService {
         ledgerEntryRepository.save(new LedgerEntry(giftCard, merchantId, entryType, amount, balanceAfter, holdId, actorUserId));
     }
 
+    /** Same as {@link #record}, but also carries a REFUND's link back to the redemption it reverses and/or an operator-supplied reason. */
+    public void record(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, Long holdId, Long actorUserId, Long relatedEntryId, String reason) {
+        ledgerEntryRepository.save(new LedgerEntry(giftCard, merchantId, entryType, amount, balanceAfter, holdId, actorUserId, relatedEntryId, reason));
+    }
+
     /** Gift cards whose stored balance disagrees with what their own ledger says it should be. */
     public List<LedgerDiscrepancy> findBalanceDiscrepancies() {
         return ledgerEntryRepository.findBalanceDiscrepancies();

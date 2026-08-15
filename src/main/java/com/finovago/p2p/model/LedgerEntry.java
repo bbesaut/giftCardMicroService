@@ -49,6 +49,16 @@ public class LedgerEntry {
     @Column(name = "actor_user_id")
     private Long actorUserId;
 
+    // Only set for REFUND: the id of the REDEMPTION entry this refund reverses. No FK - see V23
+    // migration comment (partitioned table self-reference constraint).
+    @Column(name = "related_entry_id")
+    private Long relatedEntryId;
+
+    // Operator-supplied justification. Mandatory (enforced in GiftCardCreditService, not here) for
+    // ADJUSTMENT, optional for REFUND, unused for every other entry type.
+    @Column(name = "reason", length = 500)
+    private String reason;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -57,6 +67,10 @@ public class LedgerEntry {
     }
 
     public LedgerEntry(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, @Nullable Long holdId, @Nullable Long actorUserId) {
+        this(giftCard, merchantId, entryType, amount, balanceAfter, holdId, actorUserId, null, null);
+    }
+
+    public LedgerEntry(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, @Nullable Long holdId, @Nullable Long actorUserId, @Nullable Long relatedEntryId, @Nullable String reason) {
         this.giftCard = giftCard;
         this.merchantId = merchantId;
         this.entryType = entryType;
@@ -64,6 +78,8 @@ public class LedgerEntry {
         this.balanceAfter = balanceAfter;
         this.holdId = holdId;
         this.actorUserId = actorUserId;
+        this.relatedEntryId = relatedEntryId;
+        this.reason = reason;
         this.createdAt = LocalDateTime.now();
     }
 }

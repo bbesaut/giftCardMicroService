@@ -23,5 +23,8 @@ public record LedgerEntryResponse(
     LocalDateTime createdAt,
 
     @Schema(description = "Who triggered this operation: the user's email (\"SYSTEM / email\" for a service account), \"Deleted user\" if the account no longer exists, or \"Unknown\" for entries recorded before this field existed.", example = "user@example.com", nullable = true)
-    String actor
+    String actor,
+
+    @Schema(description = "Operator-supplied justification. Set for ADJUSTMENT (mandatory when created) and optionally for REFUND; null for every other entry type.", example = "Customer return - order #4521", nullable = true)
+    String reason
 ) {}
