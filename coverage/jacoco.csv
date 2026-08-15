@@ -52,7 +52,7 @@ p2p,com.finovago.p2p.config,ResponseTimeFilter.TimingResponseWrapper.new Servlet
 p2p,com.finovago.p2p.config,AsyncConfig,0,25,0,0,0,8,0,2,0,2
 p2p,com.finovago.p2p.config,MdcFilter,0,32,1,3,0,11,1,5,0,4
 p2p,com.finovago.p2p.config,StartupLog,1,22,1,1,0,6,1,2,0,2
-p2p,com.finovago.p2p.config,RateLimitFilter,23,223,2,8,2,53,3,15,2,11
+p2p,com.finovago.p2p.config,RateLimitFilter,27,219,2,8,4,51,4,14,3,10
 p2p,com.finovago.p2p.config,DataInitializer,58,0,2,0,10,0,3,0,2,0
 p2p,com.finovago.p2p.config,OpenApiConfig,0,79,0,0,0,13,0,4,0,4
 p2p,com.finovago.p2p.config,AsyncConfig.MdcTaskDecorator,0,17,0,2,0,8,0,4,0,3
