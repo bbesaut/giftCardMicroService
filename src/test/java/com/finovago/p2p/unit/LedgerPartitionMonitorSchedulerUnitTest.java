@@ -13,7 +13,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
@@ -49,14 +48,15 @@ class LedgerPartitionMonitorSchedulerUnitTest {
     }
 
     @Test
-    void checkPartitionRunway_plentyOfYearsRemaining_logsNothing() {
+    void checkPartitionRunway_plentyOfYearsRemaining_logsInfoSummary() {
         when(ledgerService.findLatestLedgerPartitionYear())
                 .thenReturn(Optional.of(LocalDate.now().plusYears(2).withDayOfMonth(1)));
         when(ledgerService.existsAnyRowInDefaultLedgerPartition()).thenReturn(false);
 
         scheduler.checkPartitionRunway();
 
-        assertTrue(logAppender.list.isEmpty());
+        assertEquals(1, logAppender.list.size());
+        assertEquals(Level.INFO, logAppender.list.get(0).getLevel());
     }
 
     @Test
@@ -90,8 +90,9 @@ class LedgerPartitionMonitorSchedulerUnitTest {
 
         scheduler.checkPartitionRunway();
 
-        assertEquals(1, logAppender.list.size());
-        assertEquals(Level.ERROR, logAppender.list.get(0).getLevel());
+        assertEquals(2, logAppender.list.size());
+        assertEquals(Level.INFO, logAppender.list.get(0).getLevel());
+        assertEquals(Level.ERROR, logAppender.list.get(1).getLevel());
     }
 
     @Test

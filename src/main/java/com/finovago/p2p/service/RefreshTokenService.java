@@ -82,13 +82,10 @@ public class RefreshTokenService {
     }
 
     @Transactional
-    public void deleteExpired(Instant cutoff) {
+    public int deleteExpired(Instant cutoff) {
         List<RefreshToken> expired = refreshTokenRepository.findByExpiryDateBefore(cutoff);
         refreshTokenRepository.deleteAll(expired);
-
-        if (!expired.isEmpty()) {
-            log.info("Deleted {} expired refresh token(s)", expired.size());
-        }
+        return expired.size();
     }
 
     private String hash(String rawToken) {

@@ -23,7 +23,8 @@ public class RefreshTokenCleanupScheduler {
     @Scheduled(fixedDelayString = "${app.refresh-token.cleanup-sweep-interval-ms:3600000}")
     public void sweepExpiredTokens() {
         try {
-            refreshTokenService.deleteExpired(Instant.now());
+            int deleted = refreshTokenService.deleteExpired(Instant.now());
+            log.info("Refresh token cleanup: {} deleted", deleted);
         } catch (Exception e) {
             log.warn("Failed to sweep expired refresh tokens: {}", e.getMessage());
         }

@@ -56,6 +56,9 @@ public class LedgerPartitionMonitorScheduler {
             log.warn("Only {} month(s) of gift_card_ledger partitions remain (furthest created: {}). "
                     + "Add a new Flyway migration extending the partition range before it runs out.",
                     monthsRemaining, latestPartitionYear);
+        } else {
+            log.info("Ledger partition runway check: {} month(s) remaining (furthest created: {})",
+                    monthsRemaining, latestPartitionYear);
         }
     }
 }

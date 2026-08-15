@@ -110,9 +110,10 @@ public class IdempotencyKeyService {
     }
 
     @Transactional
-    public void deleteExpired(LocalDateTime cutoff) {
+    public int deleteExpired(LocalDateTime cutoff) {
         List<IdempotencyKey> expired = idempotencyKeyRepository.findByExpiresAtBefore(cutoff);
         idempotencyKeyRepository.deleteAll(expired);
+        return expired.size();
     }
 
     private String serialize(Object response) {

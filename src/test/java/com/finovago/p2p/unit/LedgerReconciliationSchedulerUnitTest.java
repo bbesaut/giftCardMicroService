@@ -76,7 +76,7 @@ class LedgerReconciliationSchedulerUnitTest {
 
         scheduler.reconcileBalances();
 
-        assertEquals(1, logAppender.list.size());
+        assertEquals(2, logAppender.list.size());
         ILoggingEvent event = logAppender.list.get(0);
         assertEquals(Level.ERROR, event.getLevel());
         String message = event.getFormattedMessage();
@@ -84,6 +84,8 @@ class LedgerReconciliationSchedulerUnitTest {
         assertTrue(message.contains("42"));
         assertTrue(message.contains("80.0"));
         assertTrue(message.contains("100.0"));
+
+        assertEquals(Level.INFO, logAppender.list.get(1).getLevel());
     }
 
     @Test
