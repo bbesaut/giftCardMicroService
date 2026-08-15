@@ -51,6 +51,7 @@ Never push directly to `main`. PRs into `develop` or `main` require tests passin
 - Full API reference (endpoints, DTOs, error codes): [CLAUDE.md](CLAUDE.md)
 - Production setup (admin bootstrap, secrets): [docs/PRODUCTION_SETUP.md](docs/PRODUCTION_SETUP.md)
 - Database schema (auto-generated on push to `develop`/`main`): https://bbesaut.github.io/giftCardMicroService/schema/
+- Code coverage report (auto-generated on push to `develop`/`main`): https://bbesaut.github.io/giftCardMicroService/coverage/
 
 ## Architecture notes
 
