@@ -16,12 +16,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finovago.p2p.exception.IdempotencyKeyConflictException;
 import com.finovago.p2p.exception.IdempotencyKeyInProgressException;
 import com.finovago.p2p.model.IdempotencyKey;
 import com.finovago.p2p.repository.IdempotencyKeyRepository;
+
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Endpoint-agnostic idempotency support: any mutating endpoint can claim a merchant-scoped key
@@ -32,20 +33,20 @@ import com.finovago.p2p.repository.IdempotencyKeyRepository;
  */
 @Service
 public class IdempotencyKeyService {
-<span class="fc" id="L35">    private static final Logger log = LoggerFactory.getLogger(IdempotencyKeyService.class);</span>
+<span class="fc" id="L36">    private static final Logger log = LoggerFactory.getLogger(IdempotencyKeyService.class);</span>
 
     private final IdempotencyKeyRepository idempotencyKeyRepository;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
     private final long ttlHours;
 
     public IdempotencyKeyService(
             IdempotencyKeyRepository idempotencyKeyRepository,
-            ObjectMapper objectMapper,
-<span class="fc" id="L44">            @Value(&quot;${app.idempotency.ttl-hours:24}&quot;) long ttlHours) {</span>
-<span class="fc" id="L45">        this.idempotencyKeyRepository = idempotencyKeyRepository;</span>
-<span class="fc" id="L46">        this.objectMapper = objectMapper;</span>
-<span class="fc" id="L47">        this.ttlHours = ttlHours;</span>
-<span class="fc" id="L48">    }</span>
+            JsonMapper jsonMapper,
+<span class="fc" id="L45">            @Value(&quot;${app.idempotency.ttl-hours:24}&quot;) long ttlHours) {</span>
+<span class="fc" id="L46">        this.idempotencyKeyRepository = idempotencyKeyRepository;</span>
+<span class="fc" id="L47">        this.jsonMapper = jsonMapper;</span>
+<span class="fc" id="L48">        this.ttlHours = ttlHours;</span>
+<span class="fc" id="L49">    }</span>
 
     /**
      * Attempts to claim the key for a new request. Returns the cached response if this exact
@@ -55,80 +56,80 @@ public class IdempotencyKeyService {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public &lt;T&gt; Optional&lt;T&gt; claim(Long merchantId, String idempotencyKey, String requestHash, Class&lt;T&gt; responseType) {
-<span class="fc" id="L58">        Optional&lt;IdempotencyKey&gt; existing = idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(merchantId, idempotencyKey);</span>
-<span class="fc bfc" id="L59" title="All 2 branches covered.">        if (existing.isPresent()) {</span>
-<span class="fc" id="L60">            return resolveExisting(existing.get(), requestHash, responseType);</span>
+<span class="fc" id="L59">        Optional&lt;IdempotencyKey&gt; existing = idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(merchantId, idempotencyKey);</span>
+<span class="fc bfc" id="L60" title="All 2 branches covered.">        if (existing.isPresent()) {</span>
+<span class="fc" id="L61">            return resolveExisting(existing.get(), requestHash, responseType);</span>
         }
 
         try {
-<span class="fc" id="L64">            IdempotencyKey claimRow = new IdempotencyKey(merchantId, idempotencyKey, requestHash, LocalDateTime.now().plusHours(ttlHours));</span>
-<span class="fc" id="L65">            idempotencyKeyRepository.saveAndFlush(claimRow);</span>
-<span class="fc" id="L66">            return Optional.empty();</span>
-<span class="fc" id="L67">        } catch (DataIntegrityViolationException e) {</span>
+<span class="fc" id="L65">            IdempotencyKey claimRow = new IdempotencyKey(merchantId, idempotencyKey, requestHash, LocalDateTime.now().plusHours(ttlHours));</span>
+<span class="fc" id="L66">            idempotencyKeyRepository.saveAndFlush(claimRow);</span>
+<span class="fc" id="L67">            return Optional.empty();</span>
+<span class="fc" id="L68">        } catch (DataIntegrityViolationException e) {</span>
             // Lost the race against a concurrent request with the same key: fall back to whatever it wrote.
-<span class="fc" id="L69">            IdempotencyKey concurrent = idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(merchantId, idempotencyKey)</span>
-<span class="pc" id="L70">                    .orElseThrow(() -&gt; e);</span>
-<span class="fc" id="L71">            return resolveExisting(concurrent, requestHash, responseType);</span>
+<span class="fc" id="L70">            IdempotencyKey concurrent = idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(merchantId, idempotencyKey)</span>
+<span class="pc" id="L71">                    .orElseThrow(() -&gt; e);</span>
+<span class="fc" id="L72">            return resolveExisting(concurrent, requestHash, responseType);</span>
         }
     }
 
     private &lt;T&gt; Optional&lt;T&gt; resolveExisting(IdempotencyKey existing, String requestHash, Class&lt;T&gt; responseType) {
-<span class="fc bfc" id="L76" title="All 2 branches covered.">        if (!existing.matchesRequest(requestHash)) {</span>
-<span class="fc" id="L77">            throw new IdempotencyKeyConflictException(&quot;This Idempotency-Key was already used with a different request payload&quot;);</span>
+<span class="fc bfc" id="L77" title="All 2 branches covered.">        if (!existing.matchesRequest(requestHash)) {</span>
+<span class="fc" id="L78">            throw new IdempotencyKeyConflictException(&quot;This Idempotency-Key was already used with a different request payload&quot;);</span>
         }
-<span class="fc bfc" id="L79" title="All 2 branches covered.">        if (existing.isInProgress()) {</span>
-<span class="fc" id="L80">            throw new IdempotencyKeyInProgressException(&quot;A request with this Idempotency-Key is already being processed&quot;);</span>
+<span class="fc bfc" id="L80" title="All 2 branches covered.">        if (existing.isInProgress()) {</span>
+<span class="fc" id="L81">            throw new IdempotencyKeyInProgressException(&quot;A request with this Idempotency-Key is already being processed&quot;);</span>
         }
-<span class="fc" id="L82">        return Optional.of(deserialize(existing.getResponseBody(), responseType));</span>
+<span class="fc" id="L83">        return Optional.of(deserialize(existing.getResponseBody(), responseType));</span>
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void complete(Long merchantId, String idempotencyKey, Object response) {
-<span class="fc" id="L87">        idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(merchantId, idempotencyKey)</span>
-<span class="fc" id="L88">                .ifPresent(key -&gt; key.complete(serialize(response)));</span>
-<span class="fc" id="L89">    }</span>
+<span class="fc" id="L88">        idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(merchantId, idempotencyKey)</span>
+<span class="fc" id="L89">                .ifPresent(key -&gt; key.complete(serialize(response)));</span>
+<span class="fc" id="L90">    }</span>
 
     /** Best-effort cleanup so a genuine business failure (e.g. inactive card) doesn't permanently block retries under the same key. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void discard(Long merchantId, String idempotencyKey) {
         try {
-<span class="fc" id="L95">            idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(merchantId, idempotencyKey)</span>
-<span class="fc" id="L96">                    .ifPresent(idempotencyKeyRepository::delete);</span>
-<span class="fc" id="L97">        } catch (Exception e) {</span>
-<span class="fc" id="L98">            log.warn(&quot;Failed to discard idempotency key claim for merchant {}: {}&quot;, merchantId, e.getMessage());</span>
-<span class="fc" id="L99">        }</span>
-<span class="fc" id="L100">    }</span>
+<span class="fc" id="L96">            idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(merchantId, idempotencyKey)</span>
+<span class="fc" id="L97">                    .ifPresent(idempotencyKeyRepository::delete);</span>
+<span class="fc" id="L98">        } catch (Exception e) {</span>
+<span class="fc" id="L99">            log.warn(&quot;Failed to discard idempotency key claim for merchant {}: {}&quot;, merchantId, e.getMessage());</span>
+<span class="fc" id="L100">        }</span>
+<span class="fc" id="L101">    }</span>
 
     public String hashRequest(String... parts) {
         try {
-<span class="fc" id="L104">            MessageDigest digest = MessageDigest.getInstance(&quot;SHA-256&quot;);</span>
-<span class="fc" id="L105">            byte[] hash = digest.digest(String.join(&quot;|&quot;, parts).getBytes(StandardCharsets.UTF_8));</span>
-<span class="fc" id="L106">            return HexFormat.of().formatHex(hash);</span>
-<span class="nc" id="L107">        } catch (NoSuchAlgorithmException e) {</span>
-<span class="nc" id="L108">            throw new IllegalStateException(&quot;SHA-256 not available&quot;, e);</span>
+<span class="fc" id="L105">            MessageDigest digest = MessageDigest.getInstance(&quot;SHA-256&quot;);</span>
+<span class="fc" id="L106">            byte[] hash = digest.digest(String.join(&quot;|&quot;, parts).getBytes(StandardCharsets.UTF_8));</span>
+<span class="fc" id="L107">            return HexFormat.of().formatHex(hash);</span>
+<span class="nc" id="L108">        } catch (NoSuchAlgorithmException e) {</span>
+<span class="nc" id="L109">            throw new IllegalStateException(&quot;SHA-256 not available&quot;, e);</span>
         }
     }
 
     @Transactional
     public int deleteExpired(LocalDateTime cutoff) {
-<span class="fc" id="L114">        List&lt;IdempotencyKey&gt; expired = idempotencyKeyRepository.findByExpiresAtBefore(cutoff);</span>
-<span class="fc" id="L115">        idempotencyKeyRepository.deleteAll(expired);</span>
-<span class="fc" id="L116">        return expired.size();</span>
+<span class="fc" id="L115">        List&lt;IdempotencyKey&gt; expired = idempotencyKeyRepository.findByExpiresAtBefore(cutoff);</span>
+<span class="fc" id="L116">        idempotencyKeyRepository.deleteAll(expired);</span>
+<span class="fc" id="L117">        return expired.size();</span>
     }
 
     private String serialize(Object response) {
         try {
-<span class="fc" id="L121">            return objectMapper.writeValueAsString(response);</span>
-<span class="nc" id="L122">        } catch (JsonProcessingException e) {</span>
-<span class="nc" id="L123">            throw new IllegalStateException(&quot;Failed to serialize idempotent response&quot;, e);</span>
+<span class="fc" id="L122">            return jsonMapper.writeValueAsString(response);</span>
+<span class="nc" id="L123">        } catch (JacksonException e) {</span>
+<span class="nc" id="L124">            throw new IllegalStateException(&quot;Failed to serialize idempotent response&quot;, e);</span>
         }
     }
 
     private &lt;T&gt; T deserialize(String responseBody, Class&lt;T&gt; responseType) {
         try {
-<span class="fc" id="L129">            return objectMapper.readValue(responseBody, responseType);</span>
-<span class="fc" id="L130">        } catch (JsonProcessingException e) {</span>
-<span class="fc" id="L131">            throw new IllegalStateException(&quot;Failed to deserialize cached idempotent response&quot;, e);</span>
+<span class="fc" id="L130">            return jsonMapper.readValue(responseBody, responseType);</span>
+<span class="fc" id="L131">        } catch (JacksonException e) {</span>
+<span class="fc" id="L132">            throw new IllegalStateException(&quot;Failed to deserialize cached idempotent response&quot;, e);</span>
         }
     }
 }
