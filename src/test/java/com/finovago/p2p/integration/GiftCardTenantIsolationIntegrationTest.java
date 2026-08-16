@@ -16,7 +16,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finovago.p2p.AbstractIntegrationTest;
 import com.finovago.p2p.config.PostgresTestcontainerInitializer;
 import com.finovago.p2p.dto.AuthResponse;
@@ -28,6 +27,8 @@ import com.finovago.p2p.repository.IdempotencyKeyRepository;
 import com.finovago.p2p.repository.MerchantRepository;
 import com.finovago.p2p.repository.RefreshTokenRepository;
 import com.finovago.p2p.repository.UserRepository;
+
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Proves that gift cards are isolated per merchant: two merchants can use the same card code
@@ -64,7 +65,7 @@ class GiftCardTenantIsolationIntegrationTest extends AbstractIntegrationTest {
     private PasswordEncoder passwordEncoder;
 
     @Autowired
-    private ObjectMapper objectMapper;
+    private JsonMapper objectMapper;
 
     private String merchantAToken;
     private String merchantBToken;
