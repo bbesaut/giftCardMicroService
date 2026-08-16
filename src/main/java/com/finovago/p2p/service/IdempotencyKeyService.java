@@ -16,12 +16,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finovago.p2p.exception.IdempotencyKeyConflictException;
 import com.finovago.p2p.exception.IdempotencyKeyInProgressException;
 import com.finovago.p2p.model.IdempotencyKey;
 import com.finovago.p2p.repository.IdempotencyKeyRepository;
+
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Endpoint-agnostic idempotency support: any mutating endpoint can claim a merchant-scoped key
@@ -35,15 +36,15 @@ public class IdempotencyKeyService {
     private static final Logger log = LoggerFactory.getLogger(IdempotencyKeyService.class);
 
     private final IdempotencyKeyRepository idempotencyKeyRepository;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
     private final long ttlHours;
 
     public IdempotencyKeyService(
             IdempotencyKeyRepository idempotencyKeyRepository,
-            ObjectMapper objectMapper,
+            JsonMapper jsonMapper,
             @Value("${app.idempotency.ttl-hours:24}") long ttlHours) {
         this.idempotencyKeyRepository = idempotencyKeyRepository;
-        this.objectMapper = objectMapper;
+        this.jsonMapper = jsonMapper;
         this.ttlHours = ttlHours;
     }
 
@@ -118,16 +119,16 @@ public class IdempotencyKeyService {
 
     private String serialize(Object response) {
         try {
-            return objectMapper.writeValueAsString(response);
-        } catch (JsonProcessingException e) {
+            return jsonMapper.writeValueAsString(response);
+        } catch (JacksonException e) {
             throw new IllegalStateException("Failed to serialize idempotent response", e);
         }
     }
 
     private <T> T deserialize(String responseBody, Class<T> responseType) {
         try {
-            return objectMapper.readValue(responseBody, responseType);
-        } catch (JsonProcessingException e) {
+            return jsonMapper.readValue(responseBody, responseType);
+        } catch (JacksonException e) {
             throw new IllegalStateException("Failed to deserialize cached idempotent response", e);
         }
     }
