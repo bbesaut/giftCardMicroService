@@ -9,10 +9,16 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.stereotype.Component;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 @Component
 public class JwtAccessDeniedHandler implements AccessDeniedHandler {
+
+    private final JsonMapper jsonMapper;
+
+    public JwtAccessDeniedHandler(JsonMapper jsonMapper) {
+        this.jsonMapper = jsonMapper;
+    }
 
     @Override
     public void handle(HttpServletRequest request, HttpServletResponse response, AccessDeniedException accessDeniedException) throws IOException {
@@ -24,7 +30,6 @@ public class JwtAccessDeniedHandler implements AccessDeniedHandler {
             "message", "Insufficient permissions for this resource"
         );
 
-        ObjectMapper mapper = new ObjectMapper();
-        response.getWriter().write(mapper.writeValueAsString(errorResponse));
+        response.getWriter().write(jsonMapper.writeValueAsString(errorResponse));
     }
 }
