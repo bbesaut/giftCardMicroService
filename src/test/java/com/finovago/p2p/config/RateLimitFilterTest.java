@@ -19,6 +19,8 @@ import java.io.IOException;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import tools.jackson.databind.json.JsonMapper;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -45,7 +47,7 @@ class RateLimitFilterTest {
         merchantRepository = mock(MerchantRepository.class);
         when(merchantRepository.findById(any())).thenReturn(Optional.empty());
 
-        filter = new RateLimitFilter(true, LOGIN_CAPACITY, MERCHANT_CAPACITY, 60, currentUserContext, merchantRepository);
+        filter = new RateLimitFilter(true, LOGIN_CAPACITY, MERCHANT_CAPACITY, 60, currentUserContext, merchantRepository, JsonMapper.builder().build());
         chainInvocations = new AtomicInteger();
         filterChain = (req, res) -> chainInvocations.incrementAndGet();
     }
@@ -174,7 +176,7 @@ class RateLimitFilterTest {
     @DisplayName("Should bypass rate limiting entirely when disabled")
     void bypassesWhenDisabled() throws ServletException, IOException {
         RateLimitFilter disabledFilter =
-                new RateLimitFilter(false, LOGIN_CAPACITY, MERCHANT_CAPACITY, 60, currentUserContext, merchantRepository);
+                new RateLimitFilter(false, LOGIN_CAPACITY, MERCHANT_CAPACITY, 60, currentUserContext, merchantRepository, JsonMapper.builder().build());
 
         // Go through doFilter() (not doFilterInternal directly) so shouldNotFilter() is actually consulted,
         // exactly like the real servlet container would.

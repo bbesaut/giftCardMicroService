@@ -15,7 +15,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.repository.MerchantRepository;
 import com.finovago.p2p.security.CurrentUserContext;
@@ -29,6 +28,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Caps requests on endpoints exposed to enumeration/brute-force abuse. Login (not yet
@@ -44,7 +45,6 @@ import jakarta.servlet.http.HttpServletResponse;
 public class RateLimitFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(RateLimitFilter.class);
-    private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final String LOGIN_PREFIX = "/api/v1/auth/login";
 
     private static final List<String> PROTECTED_PATH_PREFIXES = List.of(
@@ -62,6 +62,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final Duration refillPeriod;
     private final CurrentUserContext currentUserContext;
     private final MerchantRepository merchantRepository;
+    private final JsonMapper jsonMapper;
     private final Map<String, BucketEntry> bucketsByKey = new ConcurrentHashMap<>();
     private final ScheduledExecutorService cleanupExecutor = Executors.newSingleThreadScheduledExecutor();
 
@@ -73,13 +74,15 @@ public class RateLimitFilter extends OncePerRequestFilter {
             @Value("${app.rate-limit.merchant-capacity:300}") int defaultMerchantCapacity,
             @Value("${app.rate-limit.refill-period-seconds:60}") long refillPeriodSeconds,
             CurrentUserContext currentUserContext,
-            MerchantRepository merchantRepository) {
+            MerchantRepository merchantRepository,
+            JsonMapper jsonMapper) {
         this.enabled = enabled;
         this.loginCapacity = loginCapacity;
         this.defaultMerchantCapacity = defaultMerchantCapacity;
         this.refillPeriod = Duration.ofSeconds(refillPeriodSeconds);
         this.currentUserContext = currentUserContext;
         this.merchantRepository = merchantRepository;
+        this.jsonMapper = jsonMapper;
         cleanupExecutor.scheduleAtFixedRate(this::evictIdleBuckets, 10, 10, TimeUnit.MINUTES);
     }
 
@@ -126,7 +129,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 "error", "Too Many Requests",
                 "message", "Too many requests. Please try again later."
             );
-            response.getWriter().write(MAPPER.writeValueAsString(errorResponse));
+            response.getWriter().write(jsonMapper.writeValueAsString(errorResponse));
             return;
         }
 

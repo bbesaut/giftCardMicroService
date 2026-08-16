@@ -1,6 +1,5 @@
 package com.finovago.p2p.security;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.MalformedJwtException;
 import io.jsonwebtoken.security.SignatureException;
@@ -23,16 +22,19 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
+import tools.jackson.databind.json.JsonMapper;
+
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final RoleHierarchy roleHierarchy;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final JsonMapper jsonMapper;
 
-    public JwtAuthenticationFilter(JwtService jwtService, @Lazy RoleHierarchy roleHierarchy) {
+    public JwtAuthenticationFilter(JwtService jwtService, @Lazy RoleHierarchy roleHierarchy, JsonMapper jsonMapper) {
         this.jwtService = jwtService;
         this.roleHierarchy = roleHierarchy;
+        this.jsonMapper = jsonMapper;
     }
 
     @Override
@@ -100,7 +102,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-            response.getWriter().write(objectMapper.writeValueAsString(Map.of(
+            response.getWriter().write(jsonMapper.writeValueAsString(Map.of(
                     "status", 401,
                     "error", "Unauthorized",
                     "message", message
