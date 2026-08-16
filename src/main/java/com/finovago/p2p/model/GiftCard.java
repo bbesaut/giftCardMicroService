@@ -60,6 +60,10 @@ public class GiftCard
         this.balance = this.balance.subtract(amount);
     }
 
+    public void creditBalance(BigDecimal amount) {
+        this.balance = this.balance.add(amount);
+    }
+
     public void drainCard() {
         this.balance = BigDecimal.ZERO.setScale(2);
         this.active = false;
