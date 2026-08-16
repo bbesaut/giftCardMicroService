@@ -48,14 +48,6 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
-        <!-- Stop-gap for Jackson 2 -> 3 transition (Boot 4 defaults to Jackson 3's JsonMapper and
-             no longer auto-configures a Jackson 2 ObjectMapper bean). Our code and jjwt-jackson
-             still depend on com.fasterxml.jackson.databind.ObjectMapper directly; migrating those
-             to Jackson 3 is a separate, deliberate task, not a side effect of this version bump. -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-jackson2</artifactId>
-        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>

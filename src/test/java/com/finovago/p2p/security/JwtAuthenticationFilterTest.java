@@ -30,6 +30,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import tools.jackson.databind.json.JsonMapper;
+
 @ExtendWith(MockitoExtension.class)
 @DisplayName("JwtAuthenticationFilter Tests")
 class JwtAuthenticationFilterTest {
@@ -44,7 +46,7 @@ class JwtAuthenticationFilterTest {
 
     @BeforeEach
     void setUp() {
-        filter = new JwtAuthenticationFilter(jwtService, RoleHierarchyImpl.withDefaultRolePrefix().build());
+        filter = new JwtAuthenticationFilter(jwtService, RoleHierarchyImpl.withDefaultRolePrefix().build(), JsonMapper.builder().build());
         request = new MockHttpServletRequest();
         response = new MockHttpServletResponse();
         filterChain = mock(FilterChain.class);

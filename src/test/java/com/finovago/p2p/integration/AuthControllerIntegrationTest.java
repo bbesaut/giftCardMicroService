@@ -1,6 +1,5 @@
 package com.finovago.p2p.integration;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finovago.p2p.AbstractIntegrationTest;
 import com.finovago.p2p.config.PostgresTestcontainerInitializer;
 import com.finovago.p2p.dto.AuthResponse;
@@ -28,6 +27,8 @@ import static org.springframework.http.HttpHeaders.AUTHORIZATION;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import tools.jackson.databind.json.JsonMapper;
 
 @Transactional
 class AuthControllerIntegrationTest extends AbstractIntegrationTest {
@@ -57,7 +58,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
     private PasswordEncoder passwordEncoder;
 
     @Autowired
-    private ObjectMapper objectMapper;
+    private JsonMapper objectMapper;
 
     @BeforeEach
     void setUp() {

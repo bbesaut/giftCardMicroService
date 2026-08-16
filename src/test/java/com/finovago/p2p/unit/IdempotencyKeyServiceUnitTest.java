@@ -22,13 +22,14 @@ import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.exception.IdempotencyKeyConflictException;
 import com.finovago.p2p.exception.IdempotencyKeyInProgressException;
 import com.finovago.p2p.model.IdempotencyKey;
 import com.finovago.p2p.repository.IdempotencyKeyRepository;
 import com.finovago.p2p.service.IdempotencyKeyService;
+
+import tools.jackson.databind.json.JsonMapper;
 
 @ExtendWith(MockitoExtension.class)
 class IdempotencyKeyServiceUnitTest {
@@ -42,7 +43,7 @@ class IdempotencyKeyServiceUnitTest {
 
     @BeforeEach
     void setUp() {
-        idempotencyKeyService = new IdempotencyKeyService(idempotencyKeyRepository, new ObjectMapper(), 24);
+        idempotencyKeyService = new IdempotencyKeyService(idempotencyKeyRepository, JsonMapper.builder().build(), 24);
     }
 
     private String hash(String code, double amount) {
