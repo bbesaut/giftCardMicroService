@@ -49,16 +49,19 @@ END $$;
 -- otherwise try (and fail) to create its own.
 DO $$
 BEGIN
-    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_partman')
-       AND NOT EXISTS (SELECT 1 FROM public.part_config WHERE parent_table = 'public.gift_card_ledger') THEN
-        PERFORM public.create_parent(
-            p_parent_table => 'public.gift_card_ledger',
-            p_control => 'created_at',
-            p_interval => '1 year',
-            p_premake => 3,
-            p_start_partition => '2030-01-01',
-            p_default_table => false
-        );
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_partman') THEN
+        -- Nested IF (not combined with AND above): Postgres doesn't guarantee short-circuit
+        -- evaluation, and public.part_config only exists once pg_partman is installed.
+        IF NOT EXISTS (SELECT 1 FROM public.part_config WHERE parent_table = 'public.gift_card_ledger') THEN
+            PERFORM public.create_parent(
+                p_parent_table => 'public.gift_card_ledger',
+                p_control => 'created_at',
+                p_interval => '1 year',
+                p_premake => 3,
+                p_start_partition => '2030-01-01',
+                p_default_table => false
+            );
+        END IF;
     END IF;
 END $$;
 
