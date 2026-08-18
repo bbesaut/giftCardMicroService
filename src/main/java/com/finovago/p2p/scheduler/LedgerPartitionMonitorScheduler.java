@@ -13,11 +13,11 @@ import org.springframework.stereotype.Component;
 import com.finovago.p2p.service.LedgerService;
 
 /**
- * gift_card_ledger is RANGE-partitioned by year (see V21__partition_gift_card_ledger_by_date.sql),
- * with only a fixed window of future partitions pre-created. Extending that window requires a new
- * Flyway migration - p2p_app has no DDL rights (V17), so it can't be done automatically at runtime.
- * This scheduler only ever reads: it surfaces, via logs, when that follow-up migration is due, so
- * the gap between "someone needs to act" and "someone finds out" isn't silence.
+ * gift_card_ledger is RANGE-partitioned by year (see V21__partition_gift_card_ledger_by_date.sql).
+ * From 2030 onward, partitions are created automatically by pg_partman on a pg_cron schedule (see
+ * V24__automate_ledger_partition_maintenance.sql) - Neon-only, not exercised by Testcontainers/dev.
+ * This scheduler only ever reads: it's a safety net that catches that automation silently failing
+ * (e.g. the cron job stops running), rather than the primary mechanism for keeping runway healthy.
  */
 @Component
 public class LedgerPartitionMonitorScheduler {
@@ -41,9 +41,9 @@ public class LedgerPartitionMonitorScheduler {
                     () -> log.warn("No dated partitions found for gift_card_ledger - partition maintenance may not have run"));
 
             if (ledgerService.existsAnyRowInDefaultLedgerPartition()) {
-                log.error("gift_card_ledger_default has rows: the pre-created partition range was exhausted "
-                        + "before a follow-up migration extended it. Add a new Flyway migration with the next batch "
-                        + "of yearly partitions.");
+                log.error("gift_card_ledger_default has rows: the partition range was exhausted before a new one "
+                        + "was created. Check whether the pg_cron job (partman-maintenance-ledger) is still running "
+                        + "before falling back to a manual Flyway migration.");
             }
         } catch (Exception e) {
             log.warn("Failed to check gift_card_ledger partition runway: {}", e.getMessage());
@@ -54,7 +54,8 @@ public class LedgerPartitionMonitorScheduler {
         long monthsRemaining = Period.between(YearMonth.now().atDay(1), latestPartitionYear).toTotalMonths();
         if (monthsRemaining < WARNING_THRESHOLD_MONTHS) {
             log.warn("Only {} month(s) of gift_card_ledger partitions remain (furthest created: {}). "
-                    + "Add a new Flyway migration extending the partition range before it runs out.",
+                    + "Check whether the pg_cron job (partman-maintenance-ledger) is still running before "
+                    + "falling back to a manual Flyway migration.",
                     monthsRemaining, latestPartitionYear);
         } else {
             log.info("Ledger partition runway check: {} month(s) remaining (furthest created: {})",
