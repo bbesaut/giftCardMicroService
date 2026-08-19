@@ -5,6 +5,7 @@ import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
+import com.finovago.p2p.dto.RegisterResponse;
 import com.finovago.p2p.exception.MerchantNotFoundException;
 import com.finovago.p2p.exception.UserAlreadyExistsException;
 import com.finovago.p2p.service.AuthService;
@@ -65,13 +66,15 @@ public class AuthController {
     }
 
     @Operation(
-        summary = "User registration",
-        description = "Creates a new user account with email and password. New users are automatically assigned the CLIENT role. "
+        summary = "Merchant registration",
+        description = "Creates a new Merchant along with two accounts: a human owner account (the submitted email/password, "
+                    + "which can log in and manage the merchant's other users) and an automated service account "
+                    + "(generated credentials, returned once in this response, for the merchant's own backend integration). "
                     + "Requires authentication (JWT token) and ADMIN role."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Registration successful",
-            content = @Content(schema = @Schema(implementation = AuthResponse.class))),
+            content = @Content(schema = @Schema(implementation = RegisterResponse.class))),
         @ApiResponse(responseCode = "400", description = "Invalid request body (missing or invalid fields)",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"Email should be valid\"}"))),
         @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token",
@@ -84,11 +87,11 @@ public class AuthController {
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
     })
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
+    public ResponseEntity<RegisterResponse> register(@Valid @RequestBody RegisterRequest request) {
         log.info("Registration attempt for email: {}", sanitizeEmail(request.email()));
 
         try {
-            AuthResponse response = authService.register(request);
+            RegisterResponse response = authService.register(request);
             log.info("Registration successful for email: {}", sanitizeEmail(request.email()));
             return ResponseEntity.ok(response);
         } catch (UserAlreadyExistsException e) {

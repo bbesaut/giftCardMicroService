@@ -1,5 +1,7 @@
 package com.finovago.p2p.service;
 
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.List;
 
 import org.springframework.security.authentication.BadCredentialsException;
@@ -11,6 +13,7 @@ import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
+import com.finovago.p2p.dto.RegisterResponse;
 import com.finovago.p2p.exception.InvalidRefreshTokenException;
 import com.finovago.p2p.exception.MerchantNotFoundException;
 import com.finovago.p2p.exception.UserAlreadyExistsException;
@@ -26,6 +29,8 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @Service
 public class AuthService {
+
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final UserRepository userRepository;
     private final MerchantRepository merchantRepository;
@@ -88,7 +93,7 @@ public class AuthService {
         }
     }
 
-    public AuthResponse register(RegisterRequest request) {
+    public RegisterResponse register(RegisterRequest request) {
         if (userRepository.findByEmail(request.email()).isPresent()) {
             log.warn("Registration failed - email already exists: {}", request.email());
             throw new UserAlreadyExistsException("Email already registered");
@@ -96,12 +101,22 @@ public class AuthService {
 
         Merchant merchant = merchantRepository.save(new Merchant(request.merchantName(), request.email()));
 
-        // First account for a newly created merchant defaults to being its service account
-        // (the credentials its automated integration authenticates with).
-        User user = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, merchant, true);
-        userRepository.save(user);
-        log.info("User registered successfully: {} (role: MERCHANT, merchantId: {})", user.getEmail(), merchant.getId());
-        return issueTokens(user);
+        // The submitted credentials belong to the human owner: the account that can log in,
+        // manage the merchant's other users, and use owner-only endpoints like /credit.
+        User owner = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, merchant, false, true);
+        userRepository.save(owner);
+
+        // A service account (for the merchant's own backend integration) is created alongside it,
+        // so the merchant isn't stuck with only an owner account for API-key-style automated calls.
+        String serviceAccountEmail = serviceAccountEmailFor(request.email(), merchant.getId());
+        String serviceAccountPassword = generateServiceAccountPassword();
+        User serviceAccount = new User(serviceAccountEmail, passwordEncoder.encode(serviceAccountPassword), Role.MERCHANT, merchant, true, false);
+        userRepository.save(serviceAccount);
+
+        log.info("Merchant registered successfully: merchantId: {}, owner: {}, serviceAccount: {}",
+                merchant.getId(), owner.getEmail(), serviceAccountEmail);
+
+        return new RegisterResponse(issueTokens(owner), serviceAccountEmail, serviceAccountPassword);
     }
 
     public AuthResponse addUserToMerchant(Long merchantId, AddMerchantUserRequest request) {
@@ -117,6 +132,19 @@ public class AuthService {
         userRepository.save(user);
         log.info("User added to merchant: {} (merchantId: {}, serviceAccount: {})", user.getEmail(), merchantId, request.serviceAccount());
         return issueTokens(user);
+    }
+
+    private String serviceAccountEmailFor(String ownerEmail, Long merchantId) {
+        int at = ownerEmail.indexOf('@');
+        String localPart = ownerEmail.substring(0, at);
+        String domain = ownerEmail.substring(at + 1);
+        return localPart + "+service-" + merchantId + "@" + domain;
+    }
+
+    private String generateServiceAccountPassword() {
+        byte[] randomBytes = new byte[24];
+        SECURE_RANDOM.nextBytes(randomBytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
     }
 
     private AuthResponse issueTokens(User user) {

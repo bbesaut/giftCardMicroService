@@ -80,7 +80,7 @@ Content-Type: application/json
 ## 🔐 Authentication Endpoints
 
 ### POST /api/v1/auth/register
-**Description**: Create a new merchant. A merchant is exactly one email account: this endpoint creates both the `Merchant` record (business name) and its single MERCHANT-role user account together, in one transaction. Requires authentication (ADMIN role) — merchant onboarding is admin-gated, not public self-signup.
+**Description**: Create a new merchant. Creates the `Merchant` record (business name) together with **two** MERCHANT-role users in one transaction: a human **owner** account (the submitted email/password — logs in, and will be the only account that can manage the merchant's other users) and an automated **service account** (server-generated credentials, for the merchant's own backend integration). Requires authentication (ADMIN role) — merchant onboarding is admin-gated, not public self-signup.
 
 **Request** (RegisterRequest):
 ```json
@@ -91,13 +91,18 @@ Content-Type: application/json
 }
 ```
 
-**Response** (AuthResponse - HTTP 200):
+**Response** (RegisterResponse - HTTP 200):
 ```json
 {
-  "accessToken": "eyJhbGc...",
-  "refreshToken": "550e8400-e29b-41d4-a716-446655440000"
+  "owner": {
+    "accessToken": "eyJhbGc...",
+    "refreshToken": "550e8400-e29b-41d4-a716-446655440000"
+  },
+  "serviceAccountEmail": "user+service-42@example.com",
+  "serviceAccountPassword": "kQ2f...-generated-once"
 }
 ```
+`serviceAccountPassword` is shown **only in this response** — there is no retrieval endpoint, so hand it to the merchant immediately or have them rotate it via a future credential-rotation flow (not implemented yet).
 
 **Error Responses**:
 - `400 Bad Request`: Invalid email format or blank/missing fields (including blank `merchantName`)
@@ -108,15 +113,13 @@ Content-Type: application/json
 
 **Logging**:
 - `INFO`: "Registration attempt for email: u***@example.com"
-- `INFO`: "User registered successfully: user@example.com (role: MERCHANT, merchantId: 1)"
+- `INFO`: "Merchant registered successfully: merchantId: 1, owner: user@example.com, serviceAccount: user+service-1@example.com"
 - `WARN`: "Registration failed - email already exists: u***@example.com"
 
 **Field Validation**:
-- `email`: Required, must be valid email format, must be unique in database
-- `password`: Required, non-blank
+- `email`: Required, must be valid email format, must be unique in database — becomes the owner's login
+- `password`: Required, non-blank — the owner's password
 - `merchantName`: Required, non-blank — becomes the new Merchant's business name
-
-**Note**: There is currently no way to attach a *second* user to an existing merchant (register always creates a brand-new Merchant). `Merchant` and `User` are still modeled as separate entities (1 Merchant → N Users) so that capability can be added later without a schema change — but no such endpoint exists today.
 
 ### POST /api/v1/auth/login
 **Description**: Authenticate user with credentials and obtain JWT tokens.
@@ -406,10 +409,16 @@ Header: `Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000`
 ## 📦 DTOs
 
 ### RegisterRequest
-Used for merchant registration (POST /api/v1/auth/register)
-- `email` (String): User's email, must be unique, validated with @Email
-- `password` (String): User's password, non-blank
+Used for merchant registration (POST /api/v1/auth/register) — describes the new merchant's **owner** account
+- `email` (String): Owner's email, must be unique, validated with @Email
+- `password` (String): Owner's password, non-blank
 - `merchantName` (String): Business name for the new Merchant created alongside this user, non-blank
+
+### RegisterResponse
+Response for merchant registration
+- `owner` (AuthResponse): Tokens for the newly created owner account
+- `serviceAccountEmail` (String): Email of the auto-generated service account
+- `serviceAccountPassword` (String): Plaintext password of the service account — shown only in this response, never retrievable again
 
 ### LoginRequest
 Used for authentication (POST /api/v1/auth/login)
