@@ -29,7 +29,6 @@ import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
 import com.finovago.p2p.dto.RegisterResponse;
 import com.finovago.p2p.dto.UserStatusResponse;
-import com.finovago.p2p.exception.MerchantNotFoundException;
 import com.finovago.p2p.exception.OwnerPrivilegeRequiredException;
 import com.finovago.p2p.exception.SelfDeactivationException;
 import com.finovago.p2p.exception.UserAlreadyExistsException;
@@ -167,44 +166,6 @@ class AuthServiceUnitTest {
         when(userRepository.findByEmail("existing@example.com")).thenReturn(Optional.of(existingUser));
 
         assertThrows(UserAlreadyExistsException.class, () -> authService.register(request));
-    }
-
-    @Test
-    void should_returnAuthResponseAndPropagateServiceAccountFlag_when_addingUserToExistingMerchant() {
-        Merchant merchant = merchant();
-        AddMerchantUserRequest request = new AddMerchantUserRequest("employee@example.com", "password123", true);
-
-        when(userRepository.findByEmail("employee@example.com")).thenReturn(Optional.empty());
-        when(merchantRepository.findById(1L)).thenReturn(Optional.of(merchant));
-        when(passwordEncoder.encode("password123")).thenReturn("hashed");
-        when(jwtService.generateToken(eq("employee@example.com"), anyList(), any(), any())).thenReturn("access-token");
-        when(refreshTokenService.createRefreshToken(any(User.class))).thenReturn("refresh-token");
-
-        AuthResponse response = authService.addUserToMerchant(1L, request);
-
-        assertEquals("access-token", response.accessToken());
-        assertEquals("refresh-token", response.refreshToken());
-        verify(userRepository).save(argThat(saved -> saved.isServiceAccount() && saved.getMerchant() == merchant));
-    }
-
-    @Test
-    void should_throwUserAlreadyExistsException_when_addingUserWithEmailAlreadyRegistered() {
-        AddMerchantUserRequest request = new AddMerchantUserRequest("existing@example.com", "password123", false);
-        User existingUser = new User("existing@example.com", "hashed", Role.MERCHANT, merchant());
-
-        when(userRepository.findByEmail("existing@example.com")).thenReturn(Optional.of(existingUser));
-
-        assertThrows(UserAlreadyExistsException.class, () -> authService.addUserToMerchant(1L, request));
-    }
-
-    @Test
-    void should_throwMerchantNotFoundException_when_merchantDoesNotExist() {
-        AddMerchantUserRequest request = new AddMerchantUserRequest("employee@example.com", "password123", false);
-
-        when(userRepository.findByEmail("employee@example.com")).thenReturn(Optional.empty());
-        when(merchantRepository.findById(99L)).thenReturn(Optional.empty());
-
-        assertThrows(MerchantNotFoundException.class, () -> authService.addUserToMerchant(99L, request));
     }
 
     private User owner(Long id, Merchant merchant) {

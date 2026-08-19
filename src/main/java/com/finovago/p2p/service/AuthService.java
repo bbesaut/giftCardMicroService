@@ -16,7 +16,6 @@ import com.finovago.p2p.dto.RegisterRequest;
 import com.finovago.p2p.dto.RegisterResponse;
 import com.finovago.p2p.dto.UserStatusResponse;
 import com.finovago.p2p.exception.InvalidRefreshTokenException;
-import com.finovago.p2p.exception.MerchantNotFoundException;
 import com.finovago.p2p.exception.OwnerPrivilegeRequiredException;
 import com.finovago.p2p.exception.SelfDeactivationException;
 import com.finovago.p2p.exception.UserAlreadyExistsException;
@@ -130,21 +129,6 @@ public class AuthService {
                 merchant.getId(), owner.getEmail(), serviceAccountEmail);
 
         return new RegisterResponse(issueTokens(owner), serviceAccountEmail, serviceAccountPassword);
-    }
-
-    public AuthResponse addUserToMerchant(Long merchantId, AddMerchantUserRequest request) {
-        if (userRepository.findByEmail(request.email()).isPresent()) {
-            log.warn("Adding merchant user failed - email already exists: {}", request.email());
-            throw new UserAlreadyExistsException("Email already registered");
-        }
-
-        Merchant merchant = merchantRepository.findById(merchantId)
-                .orElseThrow(() -> new MerchantNotFoundException("Merchant not found: " + merchantId));
-
-        User user = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, merchant, request.serviceAccount());
-        userRepository.save(user);
-        log.info("User added to merchant: {} (merchantId: {}, serviceAccount: {})", user.getEmail(), merchantId, request.serviceAccount());
-        return issueTokens(user);
     }
 
     public AuthResponse addUserToOwnMerchant(Long callerId, AddMerchantUserRequest request) {

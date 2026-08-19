@@ -254,18 +254,6 @@ public class GlobalExceptionHandler {
                 ));
     }
 
-    @ExceptionHandler(MerchantNotFoundException.class)
-    public ResponseEntity<Object> handleMerchantNotFoundException(MerchantNotFoundException ex) {
-        log.warn(ex.getMessage());
-
-        return ResponseEntity
-                .status(HttpStatus.NOT_FOUND)
-                .body(Map.of(
-                    "error", "Not Found",
-                    "message", ex.getMessage()
-                ));
-    }
-
     @ExceptionHandler(OwnerPrivilegeRequiredException.class)
     public ResponseEntity<Object> handleOwnerPrivilegeRequiredException(OwnerPrivilegeRequiredException ex) {
         log.warn(ex.getMessage());
