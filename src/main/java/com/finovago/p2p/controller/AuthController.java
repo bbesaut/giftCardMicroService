@@ -6,8 +6,13 @@ import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
 import com.finovago.p2p.dto.RegisterResponse;
+import com.finovago.p2p.dto.UserStatusResponse;
 import com.finovago.p2p.exception.MerchantNotFoundException;
+import com.finovago.p2p.exception.OwnerPrivilegeRequiredException;
+import com.finovago.p2p.exception.SelfDeactivationException;
 import com.finovago.p2p.exception.UserAlreadyExistsException;
+import com.finovago.p2p.exception.UserNotFoundException;
+import com.finovago.p2p.security.CurrentUserContext;
 import com.finovago.p2p.service.AuthService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -30,9 +35,11 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    private final CurrentUserContext currentUserContext;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, CurrentUserContext currentUserContext) {
         this.authService = authService;
+        this.currentUserContext = currentUserContext;
     }
 
     @Operation(
@@ -134,6 +141,90 @@ public class AuthController {
             return ResponseEntity.ok(response);
         } catch (UserAlreadyExistsException | MerchantNotFoundException e) {
             log.warn("Add-user failed for merchantId {}: {}", merchantId, e.getMessage());
+            throw e;
+        }
+    }
+
+    @Operation(
+        summary = "Add a user to my own merchant",
+        description = "Lets the caller's own merchant owner attach an additional user (human employee or another "
+                    + "service account) to their own merchant, self-service, no admin involved. Requires "
+                    + "authentication (JWT token), MERCHANT role, and the caller must be that merchant's owner "
+                    + "account (not an employee, not a service account)."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "User added successfully",
+            content = @Content(schema = @Schema(implementation = AuthResponse.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid request body (missing or invalid fields)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"Email should be valid\"}"))),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Full authentication is required to access this resource\"}"))),
+        @ApiResponse(responseCode = "403", description = "Insufficient permissions (caller must be the merchant's owner)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Forbidden\",\"message\":\"Only the merchant's owner account can manage other users\"}"))),
+        @ApiResponse(responseCode = "409", description = "Email already registered",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Conflict\",\"message\":\"Email already registered\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
+    })
+    @PostMapping("/me/users")
+    public ResponseEntity<AuthResponse> addUserToOwnMerchant(@Valid @RequestBody AddMerchantUserRequest request) {
+        log.info("Self-service add-user attempt for email: {}", sanitizeEmail(request.email()));
+
+        try {
+            AuthResponse response = authService.addUserToOwnMerchant(currentUserContext.currentUserIdOrNull(), request);
+            log.info("Self-service user added successfully: {}", sanitizeEmail(request.email()));
+            return ResponseEntity.ok(response);
+        } catch (UserAlreadyExistsException | OwnerPrivilegeRequiredException e) {
+            log.warn("Self-service add-user failed: {}", e.getMessage());
+            throw e;
+        }
+    }
+
+    @Operation(
+        summary = "Deactivate a user in my own merchant",
+        description = "Disables a user account under the caller's own merchant and revokes its active refresh tokens, "
+                    + "logging it out. The caller must be that merchant's owner and cannot deactivate their own account. "
+                    + "Requires authentication (JWT token) and MERCHANT role."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "User deactivated",
+            content = @Content(schema = @Schema(implementation = UserStatusResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token"),
+        @ApiResponse(responseCode = "403", description = "Insufficient permissions (caller must be the merchant's owner)"),
+        @ApiResponse(responseCode = "404", description = "User not found for the caller's merchant"),
+        @ApiResponse(responseCode = "409", description = "Caller attempted to deactivate their own account"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @PostMapping("/me/users/{userId}/deactivate")
+    public ResponseEntity<UserStatusResponse> deactivateUser(@PathVariable Long userId) {
+        return setUserActive(userId, false);
+    }
+
+    @Operation(
+        summary = "Reactivate a user in my own merchant",
+        description = "Re-enables a previously deactivated user account under the caller's own merchant. "
+                    + "The caller must be that merchant's owner. Requires authentication (JWT token) and MERCHANT role."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "User reactivated",
+            content = @Content(schema = @Schema(implementation = UserStatusResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token"),
+        @ApiResponse(responseCode = "403", description = "Insufficient permissions (caller must be the merchant's owner)"),
+        @ApiResponse(responseCode = "404", description = "User not found for the caller's merchant"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @PostMapping("/me/users/{userId}/activate")
+    public ResponseEntity<UserStatusResponse> activateUser(@PathVariable Long userId) {
+        return setUserActive(userId, true);
+    }
+
+    private ResponseEntity<UserStatusResponse> setUserActive(Long userId, boolean active) {
+        try {
+            UserStatusResponse response = authService.setUserActive(currentUserContext.currentUserIdOrNull(), userId, active);
+            log.info("User {} {} via self-service", userId, active ? "reactivated" : "deactivated");
+            return ResponseEntity.ok(response);
+        } catch (OwnerPrivilegeRequiredException | SelfDeactivationException | UserNotFoundException e) {
+            log.warn("Self-service set-active failed for userId {}: {}", userId, e.getMessage());
             throw e;
         }
     }

@@ -53,7 +53,9 @@ public class SecurityConfig {
             "/api/v1/giftcards/holds/**",
             "/api/v1/giftcards/*/ledger",
             "/api/v1/giftcards/refund/**",
-            "/api/v1/giftcards/credit/**"
+            "/api/v1/giftcards/credit/**",
+            "/api/v1/auth/me/users",
+            "/api/v1/auth/me/users/**"
     };
 
     private final JwtAuthenticationFilter jwtAuthFilter;

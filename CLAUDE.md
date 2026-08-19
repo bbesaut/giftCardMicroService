@@ -47,6 +47,7 @@ Two ways to see it without running Maven yourself:
 
 ## 🏗️ Architecture Summary
 - **Multi-tenancy**: every gift card belongs to exactly one `Merchant`. `ADMIN` is the platform owner (manages merchants, sees all cards via `/list`); `MERCHANT` is a merchant account, scoped to its own cards only. Tenant scoping is derived server-side from the JWT (`merchantId` claim), never from client input.
+- **Merchant users**: a `Merchant` has N `User`s (all role MERCHANT), distinguished by two independent flags — `serviceAccount` (automated integration vs. human) and `owner` (can manage the merchant's other users: create via `POST /auth/me/users`, activate/deactivate via `POST /auth/me/users/{userId}/(de)activate`). `/register` creates exactly one owner + one service account per new merchant; every other user is added afterwards via the owner's self-service routes (or, as a support fallback, an admin via `POST /auth/merchants/{merchantId}/users`). Deactivated users are blocked at login/refresh and their refresh tokens are revoked, but an access token already issued before deactivation stays valid until its own ~15 min expiry (stateless JWT, no per-request DB check by design).
 - **JWT auth**: JJWT-based, stateless, roles (ADMIN/MERCHANT), JWT carries a `merchantId` claim (null for ADMIN)
 - **Service layer**: GiftCardService with async redemption (CompletableFuture)
 - **Observability**: Correlation IDs in MDC, Loki logging in prod
@@ -120,6 +121,57 @@ Content-Type: application/json
 - `email`: Required, must be valid email format, must be unique in database — becomes the owner's login
 - `password`: Required, non-blank — the owner's password
 - `merchantName`: Required, non-blank — becomes the new Merchant's business name
+
+### POST /api/v1/auth/merchants/{merchantId}/users
+**Description**: Admin-only route to attach an additional user to an existing merchant by id — useful for support cases (e.g. a merchant lost access to their owner account). Prefer `/auth/me/users` below for the normal self-service flow. Requires authentication (ADMIN role).
+
+**Request** (AddMerchantUserRequest):
+```json
+{
+  "email": "employee@example.com",
+  "password": "securePassword123",
+  "serviceAccount": false
+}
+```
+
+**Response** (AuthResponse - HTTP 200): tokens for the newly created user.
+
+**Error Responses**:
+- `400 Bad Request`: Invalid request body
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Insufficient permissions (ADMIN role required)
+- `404 Not Found`: Merchant not found
+- `409 Conflict`: Email already registered
+- `500 Internal Server Error`: Server error
+
+### POST /api/v1/auth/me/users
+**Description**: Self-service equivalent of the admin-only `/auth/merchants/{merchantId}/users` above — the caller's own merchant **owner** attaches an additional user (human employee, or another service account) to their own merchant, without any admin involvement. `merchantId` is derived from the caller's JWT, never from the request. Requires authentication (MERCHANT role) **and** the caller must be that merchant's owner (not an employee, not a service account) — otherwise `403`.
+
+**Request** (AddMerchantUserRequest): same shape as the admin route above.
+
+**Response** (AuthResponse - HTTP 200): tokens for the newly created user.
+
+**Error Responses**:
+- `400 Bad Request`: Invalid request body
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Caller is not the merchant's owner account
+- `409 Conflict`: Email already registered
+- `500 Internal Server Error`: Server error
+
+### POST /api/v1/auth/me/users/{userId}/deactivate
+### POST /api/v1/auth/me/users/{userId}/activate
+**Description**: Disable/re-enable a user under the caller's own merchant. Caller must be that merchant's owner; deactivating requires target user to belong to the caller's merchant (`404` otherwise, tenant existence never leaked) and the owner cannot deactivate their own account (`409`). Deactivating a user also revokes all of its active refresh tokens (immediate logout on next refresh/login attempt).
+
+**Known limitation**: access tokens are stateless JWTs — `JwtAuthenticationFilter` checks signature/expiry only, no DB lookup per request. A token already issued before deactivation stays valid on any endpoint until it naturally expires (`application.security.jwt.access-token-expiration`, 15 min by default). Login and refresh are cut off immediately; an already-issued access token is not revoked early. Deliberate trade-off to avoid a DB/cache lookup on every authenticated request.
+
+**Response** (UserStatusResponse - HTTP 200): `{ "userId": 5, "email": "employee@example.com", "active": false }`
+
+**Error Responses**:
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Caller is not the merchant's owner account
+- `404 Not Found`: User does not belong to the caller's merchant
+- `409 Conflict`: Caller attempted to deactivate their own account
+- `500 Internal Server Error`: Server error
 
 ### POST /api/v1/auth/login
 **Description**: Authenticate user with credentials and obtain JWT tokens.
@@ -420,6 +472,18 @@ Response for merchant registration
 - `serviceAccountEmail` (String): Email of the auto-generated service account
 - `serviceAccountPassword` (String): Plaintext password of the service account — shown only in this response, never retrievable again
 
+### AddMerchantUserRequest
+Used to attach an additional user to a merchant, either by an admin (POST /api/v1/auth/merchants/{merchantId}/users) or self-service by a merchant owner (POST /api/v1/auth/me/users)
+- `email` (String): New user's email, must be unique
+- `password` (String): New user's password, non-blank
+- `serviceAccount` (boolean): Whether this is an automated-integration account rather than a human employee. Defaults to false.
+
+### UserStatusResponse
+Response for POST /api/v1/auth/me/users/{userId}/activate and .../deactivate
+- `userId` (Long): Id of the affected user
+- `email` (String): Email of the affected user
+- `active` (boolean): The user's active status after this call
+
 ### LoginRequest
 Used for authentication (POST /api/v1/auth/login)
 - `email` (String): User's registered email
@@ -545,7 +609,8 @@ The correlation ID is **not** duplicated in the body — it is already returned 
 
 **Development**: Admin + Merchant users created by DataInitializer on startup:
 - `admin@finovago.com` / `admin123` (role: ADMIN, no merchant)
-- `client@finovago.com` / `client123` (role: MERCHANT, attached to the seeded "Finovago Demo Merchant")
+- `client@finovago.com` / `client123` (role: MERCHANT, owner of the seeded "Finovago Demo Merchant" — can call `/credit` and manage other users via `/me/users/**`)
+- `client-service@finovago.com` / `client123` (role: MERCHANT, service account of the same merchant — for exercising the service-account-restricted paths like `/credit`'s 403 and self-service user management's 403)
 
 ## 📝 Git Commits
 - Write commit messages like a human, not a report: short sentences, no filler.

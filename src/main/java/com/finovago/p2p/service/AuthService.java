@@ -14,9 +14,13 @@ import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
 import com.finovago.p2p.dto.RegisterResponse;
+import com.finovago.p2p.dto.UserStatusResponse;
 import com.finovago.p2p.exception.InvalidRefreshTokenException;
 import com.finovago.p2p.exception.MerchantNotFoundException;
+import com.finovago.p2p.exception.OwnerPrivilegeRequiredException;
+import com.finovago.p2p.exception.SelfDeactivationException;
 import com.finovago.p2p.exception.UserAlreadyExistsException;
+import com.finovago.p2p.exception.UserNotFoundException;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.model.Role;
 import com.finovago.p2p.model.User;
@@ -67,6 +71,11 @@ public class AuthService {
             throw new BadCredentialsException("Invalid credentials");
         }
 
+        if (!user.isActive()) {
+            log.warn("Login failed - account deactivated for user: {}", user.getEmail());
+            throw new BadCredentialsException("Invalid credentials");
+        }
+
         AuthResponse response = issueTokens(user);
         log.info("Tokens issued for user: {} (role: {})", user.getEmail(), user.getRole());
         return response;
@@ -75,6 +84,10 @@ public class AuthService {
     public AuthResponse refresh(RefreshTokenRequest request) {
         try {
             User user = refreshTokenService.validateAndRotate(request.refreshToken());
+            if (!user.isActive()) {
+                log.warn("Token rotation failed - account deactivated for user: {}", user.getEmail());
+                throw new InvalidRefreshTokenException("Account has been deactivated");
+            }
             log.info("Token rotation successful for user: {}", user.getEmail());
             return issueTokens(user);
         } catch (InvalidRefreshTokenException e) {
@@ -132,6 +145,52 @@ public class AuthService {
         userRepository.save(user);
         log.info("User added to merchant: {} (merchantId: {}, serviceAccount: {})", user.getEmail(), merchantId, request.serviceAccount());
         return issueTokens(user);
+    }
+
+    public AuthResponse addUserToOwnMerchant(Long callerId, AddMerchantUserRequest request) {
+        User caller = requireOwner(callerId);
+
+        if (userRepository.findByEmail(request.email()).isPresent()) {
+            log.warn("Adding merchant user failed - email already exists: {}", request.email());
+            throw new UserAlreadyExistsException("Email already registered");
+        }
+
+        User user = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, caller.getMerchant(), request.serviceAccount());
+        userRepository.save(user);
+        log.info("User self-added by owner {} to merchantId: {} (serviceAccount: {})",
+                caller.getEmail(), caller.getMerchant().getId(), request.serviceAccount());
+        return issueTokens(user);
+    }
+
+    public UserStatusResponse setUserActive(Long callerId, Long userId, boolean active) {
+        User caller = requireOwner(callerId);
+
+        if (!active && userId.equals(caller.getId())) {
+            throw new SelfDeactivationException("An owner cannot deactivate their own account");
+        }
+
+        User target = userRepository.findByIdAndMerchant_Id(userId, caller.getMerchant().getId())
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + userId));
+
+        target.setActive(active);
+        userRepository.save(target);
+
+        if (!active) {
+            refreshTokenService.revokeAllForUser(target);
+        }
+
+        log.info("User {} (id: {}) {} by owner {}", target.getEmail(), target.getId(),
+                active ? "reactivated" : "deactivated", caller.getEmail());
+
+        return new UserStatusResponse(target.getId(), target.getEmail(), target.isActive());
+    }
+
+    private User requireOwner(Long callerId) {
+        User caller = callerId == null ? null : userRepository.findById(callerId).orElse(null);
+        if (caller == null || !caller.isOwner() || caller.isServiceAccount() || !caller.isActive()) {
+            throw new OwnerPrivilegeRequiredException("Only the merchant's owner account can manage other users");
+        }
+        return caller;
     }
 
     private String serviceAccountEmailFor(String ownerEmail, Long merchantId) {
