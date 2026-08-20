@@ -99,11 +99,11 @@ Content-Type: application/json
     "accessToken": "eyJhbGc...",
     "refreshToken": "550e8400-e29b-41d4-a716-446655440000"
   },
-  "serviceAccountEmail": "finovago_service_account+42@example.com",
+  "serviceAccountEmail": "finovago_service_account+42@service.finovago.com",
   "serviceAccountPassword": "kQ2f...-generated-once"
 }
 ```
-`serviceAccountPassword` is shown **only in this response** — there is no retrieval endpoint, so hand it to the merchant immediately or have them rotate it via a future credential-rotation flow (not implemented yet). `serviceAccountEmail` is always `finovago_service_account+<merchantId>@<owner's email domain>` — deterministic and easy to grep for, and the `merchantId` suffix means two merchants whose owners happen to share an email domain (e.g. both on `gmail.com`) never collide.
+`serviceAccountPassword` is shown **only in this response** — there is no retrieval endpoint, so hand it to the merchant immediately or have them rotate it via a future credential-rotation flow (not implemented yet). `serviceAccountEmail` is always `finovago_service_account+<merchantId>@service.finovago.com` — hosted under our own domain rather than the merchant's (it's our credential to manage, not a mailbox that should exist inside the merchant's company namespace), deterministic and easy to grep for, and the `merchantId` suffix guarantees uniqueness without a DB lookup.
 
 **Error Responses**:
 - `400 Bad Request`: Invalid email format or blank/missing fields (including blank `merchantName`)
@@ -114,7 +114,7 @@ Content-Type: application/json
 
 **Logging**:
 - `INFO`: "Registration attempt for email: u***@example.com"
-- `INFO`: "Merchant registered successfully: merchantId: 1, owner: user@example.com, serviceAccount: finovago_service_account+1@example.com"
+- `INFO`: "Merchant registered successfully: merchantId: 1, owner: user@example.com, serviceAccount: finovago_service_account+1@service.finovago.com"
 - `WARN`: "Registration failed - email already exists: u***@example.com"
 
 **Field Validation**:
@@ -593,7 +593,7 @@ The correlation ID is **not** duplicated in the body — it is already returned 
 **Development**: Admin + Merchant users created by DataInitializer on startup:
 - `admin@finovago.com` / `admin123` (role: ADMIN, no merchant)
 - `client@finovago.com` / `client123` (role: MERCHANT, owner of the seeded "Finovago Demo Merchant" — can call `/credit` and manage other users via `/me/users/**`)
-- `finovago_service_account@finovago.com` / `client123` (role: MERCHANT, service account of the same merchant — for exercising the service-account-restricted paths like `/credit`'s 403 and self-service user management's 403)
+- `finovago_service_account+<demoMerchantId>@service.finovago.com` / `client123` (role: MERCHANT, service account of the same merchant — the exact address depends on the demo merchant's generated id, check `DataInitializer` logs or the DB; used for exercising the service-account-restricted paths like `/credit`'s 403)
 
 ## 📝 Git Commits
 - Write commit messages like a human, not a report: short sentences, no filler.

@@ -152,7 +152,7 @@ class AuthServiceUnitTest {
         assertEquals("access-token", response.owner().accessToken());
         assertEquals("refresh-token", response.owner().refreshToken());
         // merchant().getId() is null here since the mocked Merchant is never actually persisted.
-        assertEquals("finovago_service_account+null@example.com", response.serviceAccountEmail());
+        assertEquals("finovago_service_account+null@service.finovago.com", response.serviceAccountEmail());
         verify(merchantRepository).save(any(Merchant.class));
         verify(userRepository).save(argThat(saved -> saved.getEmail().equals("newuser@example.com") && saved.isOwner() && !saved.isServiceAccount()));
         verify(userRepository).save(argThat(saved -> saved.isServiceAccount() && !saved.isOwner()));

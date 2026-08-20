@@ -13,7 +13,7 @@ public record RegisterResponse(
     AuthResponse owner,
 
     @Schema(description = "Email of the automated service/integration account created for this merchant.",
-        example = "finovago_service_account+42@example.com", requiredMode = Schema.RequiredMode.REQUIRED)
+        example = "finovago_service_account+42@service.finovago.com", requiredMode = Schema.RequiredMode.REQUIRED)
     String serviceAccountEmail,
 
     @Schema(description = "Plaintext password of the service account. Shown only in this response - store it securely.",

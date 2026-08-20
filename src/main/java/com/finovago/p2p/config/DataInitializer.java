@@ -33,7 +33,8 @@ public class DataInitializer {
 
             userRepository.save(new User("admin@finovago.com", passwordEncoder.encode("admin123"), Role.ADMIN, null));
             userRepository.save(new User("client@finovago.com", passwordEncoder.encode("client123"), Role.MERCHANT, demoMerchant, false, true));
-            userRepository.save(new User("finovago_service_account@finovago.com", passwordEncoder.encode("client123"), Role.MERCHANT, demoMerchant, true, false));
+            userRepository.save(new User("finovago_service_account+" + demoMerchant.getId() + "@service.finovago.com",
+                    passwordEncoder.encode("client123"), Role.MERCHANT, demoMerchant, true, false));
         }
     }
 }

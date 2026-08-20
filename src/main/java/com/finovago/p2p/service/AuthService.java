@@ -120,7 +120,7 @@ public class AuthService {
 
         // A service account (for the merchant's own backend integration) is created alongside it,
         // so the merchant isn't stuck with only an owner account for API-key-style automated calls.
-        String serviceAccountEmail = serviceAccountEmailFor(request.email(), merchant.getId());
+        String serviceAccountEmail = serviceAccountEmailFor(merchant.getId());
         String serviceAccountPassword = generateServiceAccountPassword();
         User serviceAccount = new User(serviceAccountEmail, passwordEncoder.encode(serviceAccountPassword), Role.MERCHANT, merchant, true, false);
         userRepository.save(serviceAccount);
@@ -176,9 +176,10 @@ public class AuthService {
         return caller;
     }
 
-    private String serviceAccountEmailFor(String ownerEmail, Long merchantId) {
-        String domain = ownerEmail.substring(ownerEmail.indexOf('@') + 1);
-        return "finovago_service_account+" + merchantId + "@" + domain;
+    private String serviceAccountEmailFor(Long merchantId) {
+        // Hosted under our own domain, not the merchant's - it's our credential to manage, not a
+        // mailbox that should exist inside the merchant's own company namespace.
+        return "finovago_service_account+" + merchantId + "@service.finovago.com";
     }
 
     private String generateServiceAccountPassword() {
