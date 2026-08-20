@@ -40,7 +40,6 @@ public class SecurityConfig {
 
     private static final String[] ADMIN_ROUTES = {
             "/api/v1/auth/register",
-            "/api/v1/auth/merchants/*/users",
             "/api/v1/giftcards/list",
             "/api/v1/giftcards/list/**"
     };
@@ -53,7 +52,9 @@ public class SecurityConfig {
             "/api/v1/giftcards/holds/**",
             "/api/v1/giftcards/*/ledger",
             "/api/v1/giftcards/refund/**",
-            "/api/v1/giftcards/credit/**"
+            "/api/v1/giftcards/credit/**",
+            "/api/v1/auth/me/users",
+            "/api/v1/auth/me/users/**"
     };
 
     private final JwtAuthenticationFilter jwtAuthFilter;

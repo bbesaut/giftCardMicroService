@@ -36,8 +36,10 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
     private static final String EMAIL = "controller-test@example.com";
     private static final String PASSWORD = "securePassword123";
     private static final String VALID_EMAIL = "valid@example.com";
+    private static final String OWNER_EMAIL = "owner-test@example.com";
 
     private Long merchantId;
+    private Long ownerId;
 
     @Autowired
     private MockMvc mockMvc;
@@ -74,6 +76,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         merchantId = merchant.getId();
         userRepository.save(new User(EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant));
         userRepository.save(new User(VALID_EMAIL, passwordEncoder.encode(PASSWORD), Role.ADMIN, null));
+        ownerId = userRepository.save(new User(OWNER_EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant, false, true)).getId();
     }
 
     @Test
@@ -320,8 +323,10 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
                         .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"New Merchant\"}"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.accessToken", notNullValue()))
-                .andExpect(jsonPath("$.refreshToken", notNullValue()));
+                .andExpect(jsonPath("$.owner.accessToken", notNullValue()))
+                .andExpect(jsonPath("$.owner.refreshToken", notNullValue()))
+                .andExpect(jsonPath("$.serviceAccountEmail", notNullValue()))
+                .andExpect(jsonPath("$.serviceAccountPassword", notNullValue()));
 
         // Verify user was created
         assertNotNull(userRepository.findByEmail(newEmail));
@@ -405,74 +410,151 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
                         .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"New Merchant\"}"))
                 .andExpect(status().isOk());
 
-        User createdUser = userRepository.findByEmail(newEmail).orElseThrow();
-        assertEquals(Role.MERCHANT, createdUser.getRole());
-        assertNotNull(createdUser.getMerchant());
-        assertEquals("New Merchant", createdUser.getMerchant().getName());
+        User createdOwner = userRepository.findByEmail(newEmail).orElseThrow();
+        assertEquals(Role.MERCHANT, createdOwner.getRole());
+        assertNotNull(createdOwner.getMerchant());
+        assertEquals("New Merchant", createdOwner.getMerchant().getName());
+        assertEquals(true, createdOwner.isOwner());
+        assertEquals(false, createdOwner.isServiceAccount());
+
+        // A service account is created alongside the owner, under the same new merchant.
+        long serviceAccountCount = userRepository.findAll().stream()
+                .filter(u -> createdOwner.getMerchant().getId().equals(u.getMerchant() != null ? u.getMerchant().getId() : null))
+                .filter(User::isServiceAccount)
+                .count();
+        assertEquals(1L, serviceAccountCount);
     }
 
     @Test
-    void should_addUserToExistingMerchant_and_returnAccessAndRefreshTokens() throws Exception {
-        String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
-        String newEmail = "employee@example.com";
+    void should_selfServiceAddUser_and_returnAccessAndRefreshTokens_when_callerIsOwner() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+        String newEmail = "self-service-employee@example.com";
 
-        mockMvc.perform(post("/api/v1/auth/merchants/" + merchantId + "/users")
-                        .header(AUTHORIZATION, "Bearer " + adminAccessToken)
+        mockMvc.perform(post("/api/v1/auth/me/users")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\",\"serviceAccount\":false}"))
+                        .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isOk())
-                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.accessToken", notNullValue()))
                 .andExpect(jsonPath("$.refreshToken", notNullValue()));
 
         User createdUser = userRepository.findByEmail(newEmail).orElseThrow();
-        assertEquals(Role.MERCHANT, createdUser.getRole());
         assertEquals(merchantId, createdUser.getMerchant().getId());
+        assertEquals(false, createdUser.isOwner());
         assertEquals(false, createdUser.isServiceAccount());
-
-        // The existing user for this merchant is still there too - now two users share the same merchant.
-        User existingUser = userRepository.findByEmail(EMAIL).orElseThrow();
-        assertEquals(merchantId, existingUser.getMerchant().getId());
     }
 
     @Test
-    void should_returnForbidden_when_addingMerchantUserAsMerchantRole() throws Exception {
+    void should_returnForbidden_when_selfServiceAddUser_callerIsNotOwner() throws Exception {
         String clientAccessToken = loginAndGetAccessToken(EMAIL, PASSWORD);
 
-        mockMvc.perform(post("/api/v1/auth/merchants/" + merchantId + "/users")
+        mockMvc.perform(post("/api/v1/auth/me/users")
                         .header(AUTHORIZATION, "Bearer " + clientAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"blocked@example.com\",\"password\":\"" + PASSWORD + "\",\"serviceAccount\":false}"))
+                        .content("{\"email\":\"blocked@example.com\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isForbidden());
     }
 
     @Test
-    void should_returnUnauthorized_when_addingMerchantUserWithoutToken() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/merchants/" + merchantId + "/users")
+    void should_returnUnauthorized_when_selfServiceAddUserWithoutToken() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/me/users")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"anonymous@example.com\",\"password\":\"" + PASSWORD + "\",\"serviceAccount\":false}"))
+                        .content("{\"email\":\"anonymous@example.com\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
-    void should_returnNotFound_when_addingUserToNonExistentMerchant() throws Exception {
-        String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
+    void should_deactivateUserAndRevokeTokens_when_callerIsOwner() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+        Long targetUserId = userRepository.findByEmail(EMAIL).orElseThrow().getId();
 
-        mockMvc.perform(post("/api/v1/auth/merchants/999999/users")
+        mockMvc.perform(post("/api/v1/auth/me/users/" + targetUserId + "/deactivate")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(false));
+
+        User deactivated = userRepository.findByEmail(EMAIL).orElseThrow();
+        assertEquals(false, deactivated.isActive());
+
+        // Deactivated user can no longer log in.
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_reactivateUser_when_callerIsOwner() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+        Long targetUserId = userRepository.findByEmail(EMAIL).orElseThrow().getId();
+
+        mockMvc.perform(post("/api/v1/auth/me/users/" + targetUserId + "/deactivate")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/auth/me/users/" + targetUserId + "/activate")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(true));
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void should_returnConflict_when_ownerDeactivatesSelf() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/me/users/" + ownerId + "/deactivate")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void should_deactivateServiceAccount_when_ownerNeedsToCutLeakedCredentials() throws Exception {
+        String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
+        String newOwnerEmail = "svc-deactivate-owner@example.com";
+
+        mockMvc.perform(post("/api/v1/auth/register")
                         .header(AUTHORIZATION, "Bearer " + adminAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"noone@example.com\",\"password\":\"" + PASSWORD + "\",\"serviceAccount\":false}"))
+                        .content("{\"email\":\"" + newOwnerEmail + "\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"Svc Deactivate Merchant\"}"))
+                .andExpect(status().isOk());
+
+        User newOwner = userRepository.findByEmail(newOwnerEmail).orElseThrow();
+        User serviceAccount = userRepository.findAll().stream()
+                .filter(u -> newOwner.getMerchant().getId().equals(u.getMerchant() != null ? u.getMerchant().getId() : null))
+                .filter(User::isServiceAccount)
+                .findFirst()
+                .orElseThrow();
+
+        String newOwnerAccessToken = loginAndGetAccessToken(newOwnerEmail, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/me/users/" + serviceAccount.getId() + "/deactivate")
+                        .header(AUTHORIZATION, "Bearer " + newOwnerAccessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(false));
+
+        assertEquals(false, userRepository.findById(serviceAccount.getId()).orElseThrow().isActive());
+    }
+
+    @Test
+    void should_returnNotFound_when_deactivatingUserNotInCallersMerchant() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/me/users/999999/deactivate")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    void should_returnConflict_when_addingMerchantUserWithExistingEmail() throws Exception {
-        String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
+    void should_returnForbidden_when_deactivatingUser_callerIsNotOwner() throws Exception {
+        String clientAccessToken = loginAndGetAccessToken(EMAIL, PASSWORD);
 
-        mockMvc.perform(post("/api/v1/auth/merchants/" + merchantId + "/users")
-                        .header(AUTHORIZATION, "Bearer " + adminAccessToken)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\",\"serviceAccount\":false}"))
-                .andExpect(status().isConflict());
+        mockMvc.perform(post("/api/v1/auth/me/users/" + ownerId + "/deactivate")
+                        .header(AUTHORIZATION, "Bearer " + clientAccessToken))
+                .andExpect(status().isForbidden());
     }
 }

@@ -242,18 +242,6 @@ public class GlobalExceptionHandler {
                 ));
     }
 
-    @ExceptionHandler(MerchantNotFoundException.class)
-    public ResponseEntity<Object> handleMerchantNotFoundException(MerchantNotFoundException ex) {
-        log.warn(ex.getMessage());
-
-        return ResponseEntity
-                .status(HttpStatus.NOT_FOUND)
-                .body(Map.of(
-                    "error", "Not Found",
-                    "message", ex.getMessage()
-                ));
-    }
-
     @ExceptionHandler(UserAlreadyExistsException.class)
     public ResponseEntity<Object> handleUserAlreadyExistsException(UserAlreadyExistsException ex) {
         log.warn(ex.getMessage());
@@ -262,6 +250,42 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.CONFLICT)
                 .body(Map.of(
                     "error", "Conflict",
+                    "message", ex.getMessage()
+                ));
+    }
+
+    @ExceptionHandler(OwnerPrivilegeRequiredException.class)
+    public ResponseEntity<Object> handleOwnerPrivilegeRequiredException(OwnerPrivilegeRequiredException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(Map.of(
+                    "error", "Forbidden",
+                    "message", ex.getMessage()
+                ));
+    }
+
+    @ExceptionHandler(SelfDeactivationException.class)
+    public ResponseEntity<Object> handleSelfDeactivationException(SelfDeactivationException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(Map.of(
+                    "error", "Conflict",
+                    "message", ex.getMessage()
+                ));
+    }
+
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<Object> handleUserNotFoundException(UserNotFoundException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(Map.of(
+                    "error", "Not Found",
                     "message", ex.getMessage()
                 ));
     }

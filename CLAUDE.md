@@ -47,6 +47,7 @@ Two ways to see it without running Maven yourself:
 
 ## 🏗️ Architecture Summary
 - **Multi-tenancy**: every gift card belongs to exactly one `Merchant`. `ADMIN` is the platform owner (manages merchants, sees all cards via `/list`); `MERCHANT` is a merchant account, scoped to its own cards only. Tenant scoping is derived server-side from the JWT (`merchantId` claim), never from client input.
+- **Merchant users**: a `Merchant` has N `User`s (all role MERCHANT), distinguished by two independent flags — `serviceAccount` (automated integration vs. human) and `owner` (can manage the merchant's other users: create via `POST /auth/me/users`, activate/deactivate via `POST /auth/me/users/{userId}/(de)activate`). `/register` creates exactly one owner + one service account per new merchant — both are structural singletons: no endpoint can create a second owner (`owner` is never client-settable outside `/register`) or a second service account (`POST /auth/me/users` always creates a human employee). Every other user is added afterwards via the owner's self-service routes — there is no admin-side equivalent. Deactivated users are blocked at login/refresh and their refresh tokens are revoked, but an access token already issued before deactivation stays valid until its own ~15 min expiry (stateless JWT, no per-request DB check by design).
 - **JWT auth**: JJWT-based, stateless, roles (ADMIN/MERCHANT), JWT carries a `merchantId` claim (null for ADMIN)
 - **Service layer**: GiftCardService with async redemption (CompletableFuture)
 - **Observability**: Correlation IDs in MDC, Loki logging in prod
@@ -80,7 +81,7 @@ Content-Type: application/json
 ## 🔐 Authentication Endpoints
 
 ### POST /api/v1/auth/register
-**Description**: Create a new merchant. A merchant is exactly one email account: this endpoint creates both the `Merchant` record (business name) and its single MERCHANT-role user account together, in one transaction. Requires authentication (ADMIN role) — merchant onboarding is admin-gated, not public self-signup.
+**Description**: Create a new merchant. Creates the `Merchant` record (business name) together with **two** MERCHANT-role users in one transaction: a human **owner** account (the submitted email/password — logs in, and will be the only account that can manage the merchant's other users) and an automated **service account** (server-generated credentials, for the merchant's own backend integration). Requires authentication (ADMIN role) — merchant onboarding is admin-gated, not public self-signup.
 
 **Request** (RegisterRequest):
 ```json
@@ -91,13 +92,18 @@ Content-Type: application/json
 }
 ```
 
-**Response** (AuthResponse - HTTP 200):
+**Response** (RegisterResponse - HTTP 200):
 ```json
 {
-  "accessToken": "eyJhbGc...",
-  "refreshToken": "550e8400-e29b-41d4-a716-446655440000"
+  "owner": {
+    "accessToken": "eyJhbGc...",
+    "refreshToken": "550e8400-e29b-41d4-a716-446655440000"
+  },
+  "serviceAccountEmail": "finovago_service_account+42@service.finovago.com",
+  "serviceAccountPassword": "kQ2f...-generated-once"
 }
 ```
+`serviceAccountPassword` is shown **only in this response** — there is no retrieval endpoint, so hand it to the merchant immediately or have them rotate it via a future credential-rotation flow (not implemented yet). `serviceAccountEmail` is always `finovago_service_account+<merchantId>@service.finovago.com` — hosted under our own domain rather than the merchant's (it's our credential to manage, not a mailbox that should exist inside the merchant's company namespace), deterministic and easy to grep for, and the `merchantId` suffix guarantees uniqueness without a DB lookup.
 
 **Error Responses**:
 - `400 Bad Request`: Invalid email format or blank/missing fields (including blank `merchantName`)
@@ -108,15 +114,48 @@ Content-Type: application/json
 
 **Logging**:
 - `INFO`: "Registration attempt for email: u***@example.com"
-- `INFO`: "User registered successfully: user@example.com (role: MERCHANT, merchantId: 1)"
+- `INFO`: "Merchant registered successfully: merchantId: 1, owner: user@example.com, serviceAccount: finovago_service_account+1@service.finovago.com"
 - `WARN`: "Registration failed - email already exists: u***@example.com"
 
 **Field Validation**:
-- `email`: Required, must be valid email format, must be unique in database
-- `password`: Required, non-blank
+- `email`: Required, must be valid email format, must be unique in database — becomes the owner's login
+- `password`: Required, non-blank — the owner's password
 - `merchantName`: Required, non-blank — becomes the new Merchant's business name
 
-**Note**: There is currently no way to attach a *second* user to an existing merchant (register always creates a brand-new Merchant). `Merchant` and `User` are still modeled as separate entities (1 Merchant → N Users) so that capability can be added later without a schema change — but no such endpoint exists today.
+### POST /api/v1/auth/me/users
+**Description**: The caller's own merchant **owner** attaches a human employee account to their own merchant, self-service, no admin involved. Always creates a human account — each merchant has exactly one service account, created once at `/register`; this route cannot create another one. `merchantId` is derived from the caller's JWT, never from the request. Requires authentication (MERCHANT role) **and** the caller must be that merchant's owner (not an employee, not a service account) — otherwise `403`. There is no admin-side equivalent: if a merchant's owner account is ever unusable, restoring access requires direct DB intervention (not implemented as an endpoint).
+
+**Request** (AddMerchantUserRequest):
+```json
+{
+  "email": "employee@example.com",
+  "password": "securePassword123"
+}
+```
+
+**Response** (AuthResponse - HTTP 200): tokens for the newly created user.
+
+**Error Responses**:
+- `400 Bad Request`: Invalid request body
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Caller is not the merchant's owner account
+- `409 Conflict`: Email already registered
+- `500 Internal Server Error`: Server error
+
+### POST /api/v1/auth/me/users/{userId}/deactivate
+### POST /api/v1/auth/me/users/{userId}/activate
+**Description**: Disable/re-enable a user under the caller's own merchant — including the merchant's own service account, e.g. as an emergency response to leaked credentials (there's no credential-rotation endpoint yet, so cutting access is the only immediate lever; re-enabling doesn't restore a new password, the old one still applies once reactivated). Caller must be that merchant's owner; deactivating requires target user to belong to the caller's merchant (`404` otherwise, tenant existence never leaked), and the owner cannot deactivate their own account (`409`). Deactivating a user also revokes all of its active refresh tokens (immediate logout on next refresh/login attempt).
+
+**Known limitation**: access tokens are stateless JWTs — `JwtAuthenticationFilter` checks signature/expiry only, no DB lookup per request. A token already issued before deactivation stays valid on any endpoint until it naturally expires (`application.security.jwt.access-token-expiration`, 15 min by default). Login and refresh are cut off immediately; an already-issued access token is not revoked early. Deliberate trade-off to avoid a DB/cache lookup on every authenticated request.
+
+**Response** (UserStatusResponse - HTTP 200): `{ "userId": 5, "email": "employee@example.com", "active": false }`
+
+**Error Responses**:
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Caller is not the merchant's owner account
+- `404 Not Found`: User does not belong to the caller's merchant
+- `409 Conflict`: Caller attempted to deactivate their own account
+- `500 Internal Server Error`: Server error
 
 ### POST /api/v1/auth/login
 **Description**: Authenticate user with credentials and obtain JWT tokens.
@@ -406,10 +445,27 @@ Header: `Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000`
 ## 📦 DTOs
 
 ### RegisterRequest
-Used for merchant registration (POST /api/v1/auth/register)
-- `email` (String): User's email, must be unique, validated with @Email
-- `password` (String): User's password, non-blank
+Used for merchant registration (POST /api/v1/auth/register) — describes the new merchant's **owner** account
+- `email` (String): Owner's email, must be unique, validated with @Email
+- `password` (String): Owner's password, non-blank
 - `merchantName` (String): Business name for the new Merchant created alongside this user, non-blank
+
+### RegisterResponse
+Response for merchant registration
+- `owner` (AuthResponse): Tokens for the newly created owner account
+- `serviceAccountEmail` (String): Email of the auto-generated service account
+- `serviceAccountPassword` (String): Plaintext password of the service account — shown only in this response, never retrievable again
+
+### AddMerchantUserRequest
+Used to attach a human employee to a merchant, self-service by that merchant's owner (POST /api/v1/auth/me/users) — always creates a human account, never a service account
+- `email` (String): New employee's email, must be unique
+- `password` (String): New employee's password, non-blank
+
+### UserStatusResponse
+Response for POST /api/v1/auth/me/users/{userId}/activate and .../deactivate
+- `userId` (Long): Id of the affected user
+- `email` (String): Email of the affected user
+- `active` (boolean): The user's active status after this call
 
 ### LoginRequest
 Used for authentication (POST /api/v1/auth/login)
@@ -536,7 +592,8 @@ The correlation ID is **not** duplicated in the body — it is already returned 
 
 **Development**: Admin + Merchant users created by DataInitializer on startup:
 - `admin@finovago.com` / `admin123` (role: ADMIN, no merchant)
-- `client@finovago.com` / `client123` (role: MERCHANT, attached to the seeded "Finovago Demo Merchant")
+- `client@finovago.com` / `client123` (role: MERCHANT, owner of the seeded "Finovago Demo Merchant" — can call `/credit` and manage other users via `/me/users/**`)
+- `finovago_service_account+<demoMerchantId>@service.finovago.com` / `client123` (role: MERCHANT, service account of the same merchant — the exact address depends on the demo merchant's generated id, check `DataInitializer` logs or the DB; used for exercising the service-account-restricted paths like `/credit`'s 403)
 
 ## 📝 Git Commits
 - Write commit messages like a human, not a report: short sentences, no filler.

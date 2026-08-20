@@ -1,5 +1,7 @@
 package com.finovago.p2p.service;
 
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.List;
 
 import org.springframework.security.authentication.BadCredentialsException;
@@ -11,9 +13,13 @@ import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
+import com.finovago.p2p.dto.RegisterResponse;
+import com.finovago.p2p.dto.UserStatusResponse;
 import com.finovago.p2p.exception.InvalidRefreshTokenException;
-import com.finovago.p2p.exception.MerchantNotFoundException;
+import com.finovago.p2p.exception.OwnerPrivilegeRequiredException;
+import com.finovago.p2p.exception.SelfDeactivationException;
 import com.finovago.p2p.exception.UserAlreadyExistsException;
+import com.finovago.p2p.exception.UserNotFoundException;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.model.Role;
 import com.finovago.p2p.model.User;
@@ -26,6 +32,8 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @Service
 public class AuthService {
+
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final UserRepository userRepository;
     private final MerchantRepository merchantRepository;
@@ -62,6 +70,11 @@ public class AuthService {
             throw new BadCredentialsException("Invalid credentials");
         }
 
+        if (!user.isActive()) {
+            log.warn("Login failed - account deactivated for user: {}", user.getEmail());
+            throw new BadCredentialsException("Invalid credentials");
+        }
+
         AuthResponse response = issueTokens(user);
         log.info("Tokens issued for user: {} (role: {})", user.getEmail(), user.getRole());
         return response;
@@ -70,6 +83,10 @@ public class AuthService {
     public AuthResponse refresh(RefreshTokenRequest request) {
         try {
             User user = refreshTokenService.validateAndRotate(request.refreshToken());
+            if (!user.isActive()) {
+                log.warn("Token rotation failed - account deactivated for user: {}", user.getEmail());
+                throw new InvalidRefreshTokenException("Account has been deactivated");
+            }
             log.info("Token rotation successful for user: {}", user.getEmail());
             return issueTokens(user);
         } catch (InvalidRefreshTokenException e) {
@@ -88,7 +105,7 @@ public class AuthService {
         }
     }
 
-    public AuthResponse register(RegisterRequest request) {
+    public RegisterResponse register(RegisterRequest request) {
         if (userRepository.findByEmail(request.email()).isPresent()) {
             log.warn("Registration failed - email already exists: {}", request.email());
             throw new UserAlreadyExistsException("Email already registered");
@@ -96,27 +113,79 @@ public class AuthService {
 
         Merchant merchant = merchantRepository.save(new Merchant(request.merchantName(), request.email()));
 
-        // First account for a newly created merchant defaults to being its service account
-        // (the credentials its automated integration authenticates with).
-        User user = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, merchant, true);
-        userRepository.save(user);
-        log.info("User registered successfully: {} (role: MERCHANT, merchantId: {})", user.getEmail(), merchant.getId());
-        return issueTokens(user);
+        // The submitted credentials belong to the human owner: the account that can log in,
+        // manage the merchant's other users, and use owner-only endpoints like /credit.
+        User owner = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, merchant, false, true);
+        userRepository.save(owner);
+
+        // A service account (for the merchant's own backend integration) is created alongside it,
+        // so the merchant isn't stuck with only an owner account for API-key-style automated calls.
+        String serviceAccountEmail = serviceAccountEmailFor(merchant.getId());
+        String serviceAccountPassword = generateServiceAccountPassword();
+        User serviceAccount = new User(serviceAccountEmail, passwordEncoder.encode(serviceAccountPassword), Role.MERCHANT, merchant, true, false);
+        userRepository.save(serviceAccount);
+
+        log.info("Merchant registered successfully: merchantId: {}, owner: {}, serviceAccount: {}",
+                merchant.getId(), owner.getEmail(), serviceAccountEmail);
+
+        return new RegisterResponse(issueTokens(owner), serviceAccountEmail, serviceAccountPassword);
     }
 
-    public AuthResponse addUserToMerchant(Long merchantId, AddMerchantUserRequest request) {
+    public AuthResponse addUserToOwnMerchant(Long callerId, AddMerchantUserRequest request) {
+        User caller = requireOwner(callerId);
+
         if (userRepository.findByEmail(request.email()).isPresent()) {
             log.warn("Adding merchant user failed - email already exists: {}", request.email());
             throw new UserAlreadyExistsException("Email already registered");
         }
 
-        Merchant merchant = merchantRepository.findById(merchantId)
-                .orElseThrow(() -> new MerchantNotFoundException("Merchant not found: " + merchantId));
-
-        User user = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, merchant, request.serviceAccount());
+        User user = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, caller.getMerchant());
         userRepository.save(user);
-        log.info("User added to merchant: {} (merchantId: {}, serviceAccount: {})", user.getEmail(), merchantId, request.serviceAccount());
+        log.info("Employee self-added by owner {} to merchantId: {}", caller.getEmail(), caller.getMerchant().getId());
         return issueTokens(user);
+    }
+
+    public UserStatusResponse setUserActive(Long callerId, Long userId, boolean active) {
+        User caller = requireOwner(callerId);
+
+        if (!active && userId.equals(caller.getId())) {
+            throw new SelfDeactivationException("An owner cannot deactivate their own account");
+        }
+
+        User target = userRepository.findByIdAndMerchant_Id(userId, caller.getMerchant().getId())
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + userId));
+
+        target.setActive(active);
+        userRepository.save(target);
+
+        if (!active) {
+            refreshTokenService.revokeAllForUser(target);
+        }
+
+        log.info("User {} (id: {}) {} by owner {}", target.getEmail(), target.getId(),
+                active ? "reactivated" : "deactivated", caller.getEmail());
+
+        return new UserStatusResponse(target.getId(), target.getEmail(), target.isActive());
+    }
+
+    private User requireOwner(Long callerId) {
+        User caller = callerId == null ? null : userRepository.findById(callerId).orElse(null);
+        if (caller == null || !caller.isOwner() || caller.isServiceAccount() || !caller.isActive()) {
+            throw new OwnerPrivilegeRequiredException("Only the merchant's owner account can manage other users");
+        }
+        return caller;
+    }
+
+    private String serviceAccountEmailFor(Long merchantId) {
+        // Hosted under our own domain, not the merchant's - it's our credential to manage, not a
+        // mailbox that should exist inside the merchant's own company namespace.
+        return "finovago_service_account+" + merchantId + "@service.finovago.com";
+    }
+
+    private String generateServiceAccountPassword() {
+        byte[] randomBytes = new byte[24];
+        SECURE_RANDOM.nextBytes(randomBytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
     }
 
     private AuthResponse issueTokens(User user) {

@@ -6,8 +6,10 @@ import jakarta.validation.constraints.NotBlank;
 
 @Schema(
     name = "AddMerchantUserRequest",
-    description = "Request object to attach an additional user account to an existing Merchant.",
-    example = "{\"email\": \"employee@example.com\", \"password\": \"securePassword123\", \"serviceAccount\": false}"
+    description = "Request object for a merchant owner to add a human employee account to their own Merchant. "
+                + "Always creates a human account, never a service account - each merchant has exactly one "
+                + "service account, created once at registration.",
+    example = "{\"email\": \"employee@example.com\", \"password\": \"securePassword123\"}"
 )
 public record AddMerchantUserRequest(
     @Schema(
@@ -25,12 +27,5 @@ public record AddMerchantUserRequest(
         requiredMode = Schema.RequiredMode.REQUIRED
     )
     @NotBlank(message = "Password cannot be blank")
-    String password,
-
-    @Schema(
-        description = "Whether this account represents the merchant's automated integration (e.g. checkout backend) "
-                    + "rather than a human employee. Defaults to false.",
-        example = "false"
-    )
-    boolean serviceAccount
+    String password
 ) {}
