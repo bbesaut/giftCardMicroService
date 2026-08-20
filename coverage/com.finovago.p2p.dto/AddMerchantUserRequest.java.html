@@ -6,10 +6,12 @@ import jakarta.validation.constraints.NotBlank;
 
 @Schema(
     name = &quot;AddMerchantUserRequest&quot;,
-    description = &quot;Request object to attach an additional user account to an existing Merchant.&quot;,
-    example = &quot;{\&quot;email\&quot;: \&quot;employee@example.com\&quot;, \&quot;password\&quot;: \&quot;securePassword123\&quot;, \&quot;serviceAccount\&quot;: false}&quot;
+    description = &quot;Request object for a merchant owner to add a human employee account to their own Merchant. &quot;
+                + &quot;Always creates a human account, never a service account - each merchant has exactly one &quot;
+                + &quot;service account, created once at registration.&quot;,
+    example = &quot;{\&quot;email\&quot;: \&quot;employee@example.com\&quot;, \&quot;password\&quot;: \&quot;securePassword123\&quot;}&quot;
 )
-<span class="fc" id="L12">public record AddMerchantUserRequest(</span>
+<span class="fc" id="L14">public record AddMerchantUserRequest(</span>
     @Schema(
         description = &quot;User's email address (must be unique)&quot;,
         example = &quot;employee@example.com&quot;,
@@ -25,13 +27,6 @@ import jakarta.validation.constraints.NotBlank;
         requiredMode = Schema.RequiredMode.REQUIRED
     )
     @NotBlank(message = &quot;Password cannot be blank&quot;)
-    String password,
-
-    @Schema(
-        description = &quot;Whether this account represents the merchant's automated integration (e.g. checkout backend) &quot;
-                    + &quot;rather than a human employee. Defaults to false.&quot;,
-        example = &quot;false&quot;
-    )
-    boolean serviceAccount
+    String password
 ) {}
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -32,8 +32,10 @@ public class DataInitializer {
 <span class="nc" id="L32">            Merchant demoMerchant = merchantRepository.save(new Merchant(&quot;Finovago Demo Merchant&quot;, &quot;client@finovago.com&quot;));</span>
 
 <span class="nc" id="L34">            userRepository.save(new User(&quot;admin@finovago.com&quot;, passwordEncoder.encode(&quot;admin123&quot;), Role.ADMIN, null));</span>
-<span class="nc" id="L35">            userRepository.save(new User(&quot;client@finovago.com&quot;, passwordEncoder.encode(&quot;client123&quot;), Role.MERCHANT, demoMerchant, true));</span>
+<span class="nc" id="L35">            userRepository.save(new User(&quot;client@finovago.com&quot;, passwordEncoder.encode(&quot;client123&quot;), Role.MERCHANT, demoMerchant, false, true));</span>
+<span class="nc" id="L36">            userRepository.save(new User(&quot;finovago_service_account+&quot; + demoMerchant.getId() + &quot;@service.finovago.com&quot;,</span>
+<span class="nc" id="L37">                    passwordEncoder.encode(&quot;client123&quot;), Role.MERCHANT, demoMerchant, true, false));</span>
         }
-<span class="nc" id="L37">    }</span>
+<span class="nc" id="L39">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

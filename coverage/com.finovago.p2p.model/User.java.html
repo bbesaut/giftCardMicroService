@@ -13,6 +13,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @NoArgsConstructor
@@ -39,17 +40,30 @@ public class User {
     @Column(name = &quot;is_service_account&quot;, nullable = false)
     private boolean serviceAccount;
 
-    public User(String email, String password, Role role, @Nullable Merchant merchant) {
-<span class="fc" id="L43">        this(email, password, role, merchant, false);</span>
-<span class="fc" id="L44">    }</span>
+    @Column(name = &quot;is_owner&quot;, nullable = false)
+    private boolean owner;
 
-<span class="fc" id="L46">    public User(String email, String password, Role role, @Nullable Merchant merchant, boolean serviceAccount) {</span>
-<span class="fc" id="L47">        this.email = email;</span>
-<span class="fc" id="L48">        this.password = password;</span>
-<span class="fc" id="L49">        this.role = role;</span>
-<span class="fc" id="L50">        this.merchant = merchant;</span>
-<span class="fc" id="L51">        this.serviceAccount = serviceAccount;</span>
+    @Setter
+    @Column(nullable = false)
+    private boolean active;
+
+    public User(String email, String password, Role role, @Nullable Merchant merchant) {
+<span class="fc" id="L51">        this(email, password, role, merchant, false);</span>
 <span class="fc" id="L52">    }</span>
+
+    public User(String email, String password, Role role, @Nullable Merchant merchant, boolean serviceAccount) {
+<span class="fc" id="L55">        this(email, password, role, merchant, serviceAccount, false);</span>
+<span class="fc" id="L56">    }</span>
+
+<span class="fc" id="L58">    public User(String email, String password, Role role, @Nullable Merchant merchant, boolean serviceAccount, boolean owner) {</span>
+<span class="fc" id="L59">        this.email = email;</span>
+<span class="fc" id="L60">        this.password = password;</span>
+<span class="fc" id="L61">        this.role = role;</span>
+<span class="fc" id="L62">        this.merchant = merchant;</span>
+<span class="fc" id="L63">        this.serviceAccount = serviceAccount;</span>
+<span class="fc" id="L64">        this.owner = owner;</span>
+<span class="fc" id="L65">        this.active = true;</span>
+<span class="fc" id="L66">    }</span>
 }
 
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

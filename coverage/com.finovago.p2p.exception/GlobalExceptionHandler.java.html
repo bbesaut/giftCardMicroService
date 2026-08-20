@@ -242,37 +242,61 @@ import io.jsonwebtoken.security.SignatureException;
                 ));
     }
 
-    @ExceptionHandler(MerchantNotFoundException.class)
-    public ResponseEntity&lt;Object&gt; handleMerchantNotFoundException(MerchantNotFoundException ex) {
+    @ExceptionHandler(UserAlreadyExistsException.class)
+    public ResponseEntity&lt;Object&gt; handleUserAlreadyExistsException(UserAlreadyExistsException ex) {
 <span class="fc" id="L247">        log.warn(ex.getMessage());</span>
 
 <span class="fc" id="L249">        return ResponseEntity</span>
-<span class="fc" id="L250">                .status(HttpStatus.NOT_FOUND)</span>
+<span class="fc" id="L250">                .status(HttpStatus.CONFLICT)</span>
 <span class="fc" id="L251">                .body(Map.of(</span>
-                    &quot;error&quot;, &quot;Not Found&quot;,
+                    &quot;error&quot;, &quot;Conflict&quot;,
 <span class="fc" id="L253">                    &quot;message&quot;, ex.getMessage()</span>
                 ));
     }
 
-    @ExceptionHandler(UserAlreadyExistsException.class)
-    public ResponseEntity&lt;Object&gt; handleUserAlreadyExistsException(UserAlreadyExistsException ex) {
+    @ExceptionHandler(OwnerPrivilegeRequiredException.class)
+    public ResponseEntity&lt;Object&gt; handleOwnerPrivilegeRequiredException(OwnerPrivilegeRequiredException ex) {
 <span class="fc" id="L259">        log.warn(ex.getMessage());</span>
 
 <span class="fc" id="L261">        return ResponseEntity</span>
-<span class="fc" id="L262">                .status(HttpStatus.CONFLICT)</span>
+<span class="fc" id="L262">                .status(HttpStatus.FORBIDDEN)</span>
 <span class="fc" id="L263">                .body(Map.of(</span>
-                    &quot;error&quot;, &quot;Conflict&quot;,
+                    &quot;error&quot;, &quot;Forbidden&quot;,
 <span class="fc" id="L265">                    &quot;message&quot;, ex.getMessage()</span>
+                ));
+    }
+
+    @ExceptionHandler(SelfDeactivationException.class)
+    public ResponseEntity&lt;Object&gt; handleSelfDeactivationException(SelfDeactivationException ex) {
+<span class="fc" id="L271">        log.warn(ex.getMessage());</span>
+
+<span class="fc" id="L273">        return ResponseEntity</span>
+<span class="fc" id="L274">                .status(HttpStatus.CONFLICT)</span>
+<span class="fc" id="L275">                .body(Map.of(</span>
+                    &quot;error&quot;, &quot;Conflict&quot;,
+<span class="fc" id="L277">                    &quot;message&quot;, ex.getMessage()</span>
+                ));
+    }
+
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity&lt;Object&gt; handleUserNotFoundException(UserNotFoundException ex) {
+<span class="fc" id="L283">        log.warn(ex.getMessage());</span>
+
+<span class="fc" id="L285">        return ResponseEntity</span>
+<span class="fc" id="L286">                .status(HttpStatus.NOT_FOUND)</span>
+<span class="fc" id="L287">                .body(Map.of(</span>
+                    &quot;error&quot;, &quot;Not Found&quot;,
+<span class="fc" id="L289">                    &quot;message&quot;, ex.getMessage()</span>
                 ));
     }
 
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity&lt;Object&gt; handleBadCredentialsException(BadCredentialsException ex) {
-<span class="fc" id="L271">        log.warn(&quot;Authentication failed - invalid credentials&quot;);</span>
+<span class="fc" id="L295">        log.warn(&quot;Authentication failed - invalid credentials&quot;);</span>
 
-<span class="fc" id="L273">        return ResponseEntity</span>
-<span class="fc" id="L274">                .status(HttpStatus.UNAUTHORIZED)</span>
-<span class="fc" id="L275">                .body(Map.of(</span>
+<span class="fc" id="L297">        return ResponseEntity</span>
+<span class="fc" id="L298">                .status(HttpStatus.UNAUTHORIZED)</span>
+<span class="fc" id="L299">                .body(Map.of(</span>
                     &quot;error&quot;, &quot;Unauthorized&quot;,
                     &quot;message&quot;, &quot;Invalid email or password&quot;
                 ));

@@ -82,19 +82,28 @@ public class RefreshTokenService {
 <span class="fc" id="L82">    }</span>
 
     @Transactional
+    public void revokeAllForUser(User user) {
+<span class="fc" id="L86">        List&lt;RefreshToken&gt; tokens = refreshTokenRepository.findByUserAndRevokedFalse(user);</span>
+<span class="fc" id="L87">        tokens.forEach(RefreshToken::revoke);</span>
+<span class="fc" id="L88">        refreshTokenRepository.saveAll(tokens);</span>
+
+<span class="fc" id="L90">        log.info(&quot;Revoked {} active refresh token(s) for user: {}&quot;, tokens.size(), user.getEmail());</span>
+<span class="fc" id="L91">    }</span>
+
+    @Transactional
     public int deleteExpired(Instant cutoff) {
-<span class="fc" id="L86">        List&lt;RefreshToken&gt; expired = refreshTokenRepository.findByExpiryDateBefore(cutoff);</span>
-<span class="fc" id="L87">        refreshTokenRepository.deleteAll(expired);</span>
-<span class="fc" id="L88">        return expired.size();</span>
+<span class="fc" id="L95">        List&lt;RefreshToken&gt; expired = refreshTokenRepository.findByExpiryDateBefore(cutoff);</span>
+<span class="fc" id="L96">        refreshTokenRepository.deleteAll(expired);</span>
+<span class="fc" id="L97">        return expired.size();</span>
     }
 
     private String hash(String rawToken) {
         try {
-<span class="fc" id="L93">            MessageDigest digest = MessageDigest.getInstance(&quot;SHA-256&quot;);</span>
-<span class="fc" id="L94">            byte[] hashBytes = digest.digest(rawToken.getBytes(StandardCharsets.UTF_8));</span>
-<span class="fc" id="L95">            return HexFormat.of().formatHex(hashBytes);</span>
-<span class="nc" id="L96">        } catch (NoSuchAlgorithmException e) {</span>
-<span class="nc" id="L97">            throw new IllegalStateException(&quot;SHA-256 algorithm not available&quot;, e);</span>
+<span class="fc" id="L102">            MessageDigest digest = MessageDigest.getInstance(&quot;SHA-256&quot;);</span>
+<span class="fc" id="L103">            byte[] hashBytes = digest.digest(rawToken.getBytes(StandardCharsets.UTF_8));</span>
+<span class="fc" id="L104">            return HexFormat.of().formatHex(hashBytes);</span>
+<span class="nc" id="L105">        } catch (NoSuchAlgorithmException e) {</span>
+<span class="nc" id="L106">            throw new IllegalStateException(&quot;SHA-256 algorithm not available&quot;, e);</span>
         }
     }
 }
