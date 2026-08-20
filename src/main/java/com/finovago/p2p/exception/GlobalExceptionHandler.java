@@ -278,6 +278,18 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(ServiceAccountDeactivationNotAllowedException.class)
+    public ResponseEntity<Object> handleServiceAccountDeactivationNotAllowedException(ServiceAccountDeactivationNotAllowedException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(Map.of(
+                    "error", "Conflict",
+                    "message", ex.getMessage()
+                ));
+    }
+
     @ExceptionHandler(UserNotFoundException.class)
     public ResponseEntity<Object> handleUserNotFoundException(UserNotFoundException ex) {
         log.warn(ex.getMessage());

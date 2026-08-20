@@ -99,11 +99,11 @@ Content-Type: application/json
     "accessToken": "eyJhbGc...",
     "refreshToken": "550e8400-e29b-41d4-a716-446655440000"
   },
-  "serviceAccountEmail": "user+service-42@example.com",
+  "serviceAccountEmail": "finovago_service_account@example.com",
   "serviceAccountPassword": "kQ2f...-generated-once"
 }
 ```
-`serviceAccountPassword` is shown **only in this response** — there is no retrieval endpoint, so hand it to the merchant immediately or have them rotate it via a future credential-rotation flow (not implemented yet).
+`serviceAccountPassword` is shown **only in this response** — there is no retrieval endpoint, so hand it to the merchant immediately or have them rotate it via a future credential-rotation flow (not implemented yet). `serviceAccountEmail` is `finovago_service_account@<owner's email domain>` — deterministic, not random. If that address is already taken (two different merchants' owners sharing the same email domain, e.g. both on `gmail.com`), it falls back to `finovago_service_account+<merchantId>@<domain>` instead.
 
 **Error Responses**:
 - `400 Bad Request`: Invalid email format or blank/missing fields (including blank `merchantName`)
@@ -114,7 +114,7 @@ Content-Type: application/json
 
 **Logging**:
 - `INFO`: "Registration attempt for email: u***@example.com"
-- `INFO`: "Merchant registered successfully: merchantId: 1, owner: user@example.com, serviceAccount: user+service-1@example.com"
+- `INFO`: "Merchant registered successfully: merchantId: 1, owner: user@example.com, serviceAccount: finovago_service_account@example.com"
 - `WARN`: "Registration failed - email already exists: u***@example.com"
 
 **Field Validation**:
@@ -144,7 +144,7 @@ Content-Type: application/json
 
 ### POST /api/v1/auth/me/users/{userId}/deactivate
 ### POST /api/v1/auth/me/users/{userId}/activate
-**Description**: Disable/re-enable a user under the caller's own merchant. Caller must be that merchant's owner; deactivating requires target user to belong to the caller's merchant (`404` otherwise, tenant existence never leaked) and the owner cannot deactivate their own account (`409`). Deactivating a user also revokes all of its active refresh tokens (immediate logout on next refresh/login attempt).
+**Description**: Disable/re-enable a user under the caller's own merchant. Caller must be that merchant's owner; deactivating requires target user to belong to the caller's merchant (`404` otherwise, tenant existence never leaked), the owner cannot deactivate their own account (`409`), and the merchant's service account can never be deactivated (`409`) — it's the one and only account powering the merchant's live integration, so disabling it would silently break production; there's no way to create a replacement, only the one from `/register`. Deactivating a user also revokes all of its active refresh tokens (immediate logout on next refresh/login attempt).
 
 **Known limitation**: access tokens are stateless JWTs — `JwtAuthenticationFilter` checks signature/expiry only, no DB lookup per request. A token already issued before deactivation stays valid on any endpoint until it naturally expires (`application.security.jwt.access-token-expiration`, 15 min by default). Login and refresh are cut off immediately; an already-issued access token is not revoked early. Deliberate trade-off to avoid a DB/cache lookup on every authenticated request.
 
@@ -154,7 +154,7 @@ Content-Type: application/json
 - `401 Unauthorized`: Missing or invalid JWT token
 - `403 Forbidden`: Caller is not the merchant's owner account
 - `404 Not Found`: User does not belong to the caller's merchant
-- `409 Conflict`: Caller attempted to deactivate their own account
+- `409 Conflict`: Caller attempted to deactivate their own account, or the merchant's service account
 - `500 Internal Server Error`: Server error
 
 ### POST /api/v1/auth/login
@@ -593,7 +593,7 @@ The correlation ID is **not** duplicated in the body — it is already returned 
 **Development**: Admin + Merchant users created by DataInitializer on startup:
 - `admin@finovago.com` / `admin123` (role: ADMIN, no merchant)
 - `client@finovago.com` / `client123` (role: MERCHANT, owner of the seeded "Finovago Demo Merchant" — can call `/credit` and manage other users via `/me/users/**`)
-- `client-service@finovago.com` / `client123` (role: MERCHANT, service account of the same merchant — for exercising the service-account-restricted paths like `/credit`'s 403 and self-service user management's 403)
+- `finovago_service_account@finovago.com` / `client123` (role: MERCHANT, service account of the same merchant — for exercising the service-account-restricted paths like `/credit`'s 403 and self-service user management's 403)
 
 ## 📝 Git Commits
 - Write commit messages like a human, not a report: short sentences, no filler.

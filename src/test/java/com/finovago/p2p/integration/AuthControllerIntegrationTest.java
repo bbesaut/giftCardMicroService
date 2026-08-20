@@ -513,6 +513,31 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void should_returnConflict_when_deactivatingServiceAccount() throws Exception {
+        String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
+        String newOwnerEmail = "svc-block-owner@example.com";
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .header(AUTHORIZATION, "Bearer " + adminAccessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + newOwnerEmail + "\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"Svc Block Merchant\"}"))
+                .andExpect(status().isOk());
+
+        User newOwner = userRepository.findByEmail(newOwnerEmail).orElseThrow();
+        User serviceAccount = userRepository.findAll().stream()
+                .filter(u -> newOwner.getMerchant().getId().equals(u.getMerchant() != null ? u.getMerchant().getId() : null))
+                .filter(User::isServiceAccount)
+                .findFirst()
+                .orElseThrow();
+
+        String newOwnerAccessToken = loginAndGetAccessToken(newOwnerEmail, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/me/users/" + serviceAccount.getId() + "/deactivate")
+                        .header(AUTHORIZATION, "Bearer " + newOwnerAccessToken))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
     void should_returnNotFound_when_deactivatingUserNotInCallersMerchant() throws Exception {
         String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
 

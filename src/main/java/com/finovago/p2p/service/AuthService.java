@@ -18,6 +18,7 @@ import com.finovago.p2p.dto.UserStatusResponse;
 import com.finovago.p2p.exception.InvalidRefreshTokenException;
 import com.finovago.p2p.exception.OwnerPrivilegeRequiredException;
 import com.finovago.p2p.exception.SelfDeactivationException;
+import com.finovago.p2p.exception.ServiceAccountDeactivationNotAllowedException;
 import com.finovago.p2p.exception.UserAlreadyExistsException;
 import com.finovago.p2p.exception.UserNotFoundException;
 import com.finovago.p2p.model.Merchant;
@@ -155,6 +156,11 @@ public class AuthService {
         User target = userRepository.findByIdAndMerchant_Id(userId, caller.getMerchant().getId())
                 .orElseThrow(() -> new UserNotFoundException("User not found: " + userId));
 
+        if (!active && target.isServiceAccount()) {
+            throw new ServiceAccountDeactivationNotAllowedException(
+                    "The merchant's service account cannot be deactivated - it powers the live integration");
+        }
+
         target.setActive(active);
         userRepository.save(target);
 
@@ -177,10 +183,15 @@ public class AuthService {
     }
 
     private String serviceAccountEmailFor(String ownerEmail, Long merchantId) {
-        int at = ownerEmail.indexOf('@');
-        String localPart = ownerEmail.substring(0, at);
-        String domain = ownerEmail.substring(at + 1);
-        return localPart + "+service-" + merchantId + "@" + domain;
+        String domain = ownerEmail.substring(ownerEmail.indexOf('@') + 1);
+        String defaultEmail = "finovago_service_account@" + domain;
+        if (userRepository.findByEmail(defaultEmail).isEmpty()) {
+            return defaultEmail;
+        }
+
+        // Two merchants whose owners share the same email domain (e.g. both on gmail.com) would
+        // otherwise collide on the default address - fall back to a merchant-scoped one instead.
+        return "finovago_service_account+" + merchantId + "@" + domain;
     }
 
     private String generateServiceAccountPassword() {
