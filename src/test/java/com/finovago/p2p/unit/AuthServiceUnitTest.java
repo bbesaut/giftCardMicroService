@@ -178,7 +178,7 @@ class AuthServiceUnitTest {
     void should_returnAuthResponse_when_ownerAddsUserToOwnMerchant() {
         Merchant merchant = merchant();
         User owner = owner(1L, merchant);
-        AddMerchantUserRequest request = new AddMerchantUserRequest("employee@example.com", "password123", false);
+        AddMerchantUserRequest request = new AddMerchantUserRequest("employee@example.com", "password123");
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
         when(userRepository.findByEmail("employee@example.com")).thenReturn(Optional.empty());
@@ -189,7 +189,7 @@ class AuthServiceUnitTest {
         AuthResponse response = authService.addUserToOwnMerchant(1L, request);
 
         assertEquals("access-token", response.accessToken());
-        verify(userRepository).save(argThat(saved -> saved.getMerchant() == merchant && !saved.isOwner()));
+        verify(userRepository).save(argThat(saved -> saved.getMerchant() == merchant && !saved.isOwner() && !saved.isServiceAccount()));
     }
 
     @Test
@@ -197,7 +197,7 @@ class AuthServiceUnitTest {
         Merchant merchant = merchant();
         User employee = new User("employee@example.com", "hashed", Role.MERCHANT, merchant, false, false);
         org.springframework.test.util.ReflectionTestUtils.setField(employee, "id", 2L);
-        AddMerchantUserRequest request = new AddMerchantUserRequest("newguy@example.com", "password123", false);
+        AddMerchantUserRequest request = new AddMerchantUserRequest("newguy@example.com", "password123");
 
         when(userRepository.findById(2L)).thenReturn(Optional.of(employee));
 
@@ -209,7 +209,7 @@ class AuthServiceUnitTest {
         Merchant merchant = merchant();
         User serviceAccount = new User("svc@example.com", "hashed", Role.MERCHANT, merchant, true, false);
         org.springframework.test.util.ReflectionTestUtils.setField(serviceAccount, "id", 3L);
-        AddMerchantUserRequest request = new AddMerchantUserRequest("newguy@example.com", "password123", false);
+        AddMerchantUserRequest request = new AddMerchantUserRequest("newguy@example.com", "password123");
 
         when(userRepository.findById(3L)).thenReturn(Optional.of(serviceAccount));
 

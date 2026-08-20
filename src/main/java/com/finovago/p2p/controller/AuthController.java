@@ -107,11 +107,12 @@ public class AuthController {
     }
 
     @Operation(
-        summary = "Add a user to my own merchant",
-        description = "Lets the caller's own merchant owner attach an additional user (human employee or another "
-                    + "service account) to their own merchant, self-service, no admin involved. Requires "
-                    + "authentication (JWT token), MERCHANT role, and the caller must be that merchant's owner "
-                    + "account (not an employee, not a service account)."
+        summary = "Add an employee to my own merchant",
+        description = "Lets the caller's own merchant owner attach a human employee account to their own merchant, "
+                    + "self-service, no admin involved. Always creates a human account - each merchant has exactly "
+                    + "one service account, created once at registration. Requires authentication (JWT token), "
+                    + "MERCHANT role, and the caller must be that merchant's owner account (not an employee, not "
+                    + "a service account)."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "User added successfully",

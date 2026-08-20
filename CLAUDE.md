@@ -47,7 +47,7 @@ Two ways to see it without running Maven yourself:
 
 ## 🏗️ Architecture Summary
 - **Multi-tenancy**: every gift card belongs to exactly one `Merchant`. `ADMIN` is the platform owner (manages merchants, sees all cards via `/list`); `MERCHANT` is a merchant account, scoped to its own cards only. Tenant scoping is derived server-side from the JWT (`merchantId` claim), never from client input.
-- **Merchant users**: a `Merchant` has N `User`s (all role MERCHANT), distinguished by two independent flags — `serviceAccount` (automated integration vs. human) and `owner` (can manage the merchant's other users: create via `POST /auth/me/users`, activate/deactivate via `POST /auth/me/users/{userId}/(de)activate`). `/register` creates exactly one owner + one service account per new merchant; every other user is added afterwards via the owner's self-service routes — there is no admin-side equivalent. Deactivated users are blocked at login/refresh and their refresh tokens are revoked, but an access token already issued before deactivation stays valid until its own ~15 min expiry (stateless JWT, no per-request DB check by design).
+- **Merchant users**: a `Merchant` has N `User`s (all role MERCHANT), distinguished by two independent flags — `serviceAccount` (automated integration vs. human) and `owner` (can manage the merchant's other users: create via `POST /auth/me/users`, activate/deactivate via `POST /auth/me/users/{userId}/(de)activate`). `/register` creates exactly one owner + one service account per new merchant — both are structural singletons: no endpoint can create a second owner (`owner` is never client-settable outside `/register`) or a second service account (`POST /auth/me/users` always creates a human employee). Every other user is added afterwards via the owner's self-service routes — there is no admin-side equivalent. Deactivated users are blocked at login/refresh and their refresh tokens are revoked, but an access token already issued before deactivation stays valid until its own ~15 min expiry (stateless JWT, no per-request DB check by design).
 - **JWT auth**: JJWT-based, stateless, roles (ADMIN/MERCHANT), JWT carries a `merchantId` claim (null for ADMIN)
 - **Service layer**: GiftCardService with async redemption (CompletableFuture)
 - **Observability**: Correlation IDs in MDC, Loki logging in prod
@@ -123,14 +123,13 @@ Content-Type: application/json
 - `merchantName`: Required, non-blank — becomes the new Merchant's business name
 
 ### POST /api/v1/auth/me/users
-**Description**: The caller's own merchant **owner** attaches an additional user (human employee, or another service account) to their own merchant, self-service, no admin involved. `merchantId` is derived from the caller's JWT, never from the request. Requires authentication (MERCHANT role) **and** the caller must be that merchant's owner (not an employee, not a service account) — otherwise `403`. There is no admin-side equivalent: if a merchant's owner account is ever unusable, restoring access requires direct DB intervention (not implemented as an endpoint).
+**Description**: The caller's own merchant **owner** attaches a human employee account to their own merchant, self-service, no admin involved. Always creates a human account — each merchant has exactly one service account, created once at `/register`; this route cannot create another one. `merchantId` is derived from the caller's JWT, never from the request. Requires authentication (MERCHANT role) **and** the caller must be that merchant's owner (not an employee, not a service account) — otherwise `403`. There is no admin-side equivalent: if a merchant's owner account is ever unusable, restoring access requires direct DB intervention (not implemented as an endpoint).
 
 **Request** (AddMerchantUserRequest):
 ```json
 {
   "email": "employee@example.com",
-  "password": "securePassword123",
-  "serviceAccount": false
+  "password": "securePassword123"
 }
 ```
 
@@ -458,10 +457,9 @@ Response for merchant registration
 - `serviceAccountPassword` (String): Plaintext password of the service account — shown only in this response, never retrievable again
 
 ### AddMerchantUserRequest
-Used to attach an additional user to a merchant, self-service by that merchant's owner (POST /api/v1/auth/me/users)
-- `email` (String): New user's email, must be unique
-- `password` (String): New user's password, non-blank
-- `serviceAccount` (boolean): Whether this is an automated-integration account rather than a human employee. Defaults to false.
+Used to attach a human employee to a merchant, self-service by that merchant's owner (POST /api/v1/auth/me/users) — always creates a human account, never a service account
+- `email` (String): New employee's email, must be unique
+- `password` (String): New employee's password, non-blank
 
 ### UserStatusResponse
 Response for POST /api/v1/auth/me/users/{userId}/activate and .../deactivate

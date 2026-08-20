@@ -139,10 +139,9 @@ public class AuthService {
             throw new UserAlreadyExistsException("Email already registered");
         }
 
-        User user = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, caller.getMerchant(), request.serviceAccount());
+        User user = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, caller.getMerchant());
         userRepository.save(user);
-        log.info("User self-added by owner {} to merchantId: {} (serviceAccount: {})",
-                caller.getEmail(), caller.getMerchant().getId(), request.serviceAccount());
+        log.info("Employee self-added by owner {} to merchantId: {}", caller.getEmail(), caller.getMerchant().getId());
         return issueTokens(user);
     }
 

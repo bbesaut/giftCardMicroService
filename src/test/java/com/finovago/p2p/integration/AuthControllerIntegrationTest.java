@@ -433,7 +433,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/v1/auth/me/users")
                         .header(AUTHORIZATION, "Bearer " + ownerAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\",\"serviceAccount\":false}"))
+                        .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken", notNullValue()))
                 .andExpect(jsonPath("$.refreshToken", notNullValue()));
@@ -441,6 +441,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         User createdUser = userRepository.findByEmail(newEmail).orElseThrow();
         assertEquals(merchantId, createdUser.getMerchant().getId());
         assertEquals(false, createdUser.isOwner());
+        assertEquals(false, createdUser.isServiceAccount());
     }
 
     @Test
@@ -450,7 +451,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/v1/auth/me/users")
                         .header(AUTHORIZATION, "Bearer " + clientAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"blocked@example.com\",\"password\":\"" + PASSWORD + "\",\"serviceAccount\":false}"))
+                        .content("{\"email\":\"blocked@example.com\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isForbidden());
     }
 
@@ -458,7 +459,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
     void should_returnUnauthorized_when_selfServiceAddUserWithoutToken() throws Exception {
         mockMvc.perform(post("/api/v1/auth/me/users")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"anonymous@example.com\",\"password\":\"" + PASSWORD + "\",\"serviceAccount\":false}"))
+                        .content("{\"email\":\"anonymous@example.com\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isUnauthorized());
     }
 
