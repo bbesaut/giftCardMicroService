@@ -9,7 +9,6 @@ import com.finovago.p2p.dto.RegisterResponse;
 import com.finovago.p2p.dto.UserStatusResponse;
 import com.finovago.p2p.exception.OwnerPrivilegeRequiredException;
 import com.finovago.p2p.exception.SelfDeactivationException;
-import com.finovago.p2p.exception.ServiceAccountDeactivationNotAllowedException;
 import com.finovago.p2p.exception.UserAlreadyExistsException;
 import com.finovago.p2p.exception.UserNotFoundException;
 import com.finovago.p2p.security.CurrentUserContext;
@@ -146,9 +145,9 @@ public class AuthController {
     @Operation(
         summary = "Deactivate a user in my own merchant",
         description = "Disables a user account under the caller's own merchant and revokes its active refresh tokens, "
-                    + "logging it out. The caller must be that merchant's owner, cannot deactivate their own account, "
-                    + "and cannot deactivate the merchant's service account (it powers the live integration). "
-                    + "Requires authentication (JWT token) and MERCHANT role."
+                    + "logging it out - including the merchant's own service account, e.g. as an emergency response "
+                    + "to leaked credentials. The caller must be that merchant's owner and cannot deactivate their "
+                    + "own account. Requires authentication (JWT token) and MERCHANT role."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "User deactivated",
@@ -156,7 +155,7 @@ public class AuthController {
         @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token"),
         @ApiResponse(responseCode = "403", description = "Insufficient permissions (caller must be the merchant's owner)"),
         @ApiResponse(responseCode = "404", description = "User not found for the caller's merchant"),
-        @ApiResponse(responseCode = "409", description = "Caller attempted to deactivate their own account, or the merchant's service account"),
+        @ApiResponse(responseCode = "409", description = "Caller attempted to deactivate their own account"),
         @ApiResponse(responseCode = "500", description = "Internal server error")
     })
     @PostMapping("/me/users/{userId}/deactivate")
@@ -187,7 +186,7 @@ public class AuthController {
             UserStatusResponse response = authService.setUserActive(currentUserContext.currentUserIdOrNull(), userId, active);
             log.info("User {} {} via self-service", userId, active ? "reactivated" : "deactivated");
             return ResponseEntity.ok(response);
-        } catch (OwnerPrivilegeRequiredException | SelfDeactivationException | ServiceAccountDeactivationNotAllowedException | UserNotFoundException e) {
+        } catch (OwnerPrivilegeRequiredException | SelfDeactivationException | UserNotFoundException e) {
             log.warn("Self-service set-active failed for userId {}: {}", userId, e.getMessage());
             throw e;
         }

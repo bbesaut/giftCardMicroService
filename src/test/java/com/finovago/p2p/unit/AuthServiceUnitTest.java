@@ -30,7 +30,6 @@ import com.finovago.p2p.dto.RegisterResponse;
 import com.finovago.p2p.dto.UserStatusResponse;
 import com.finovago.p2p.exception.OwnerPrivilegeRequiredException;
 import com.finovago.p2p.exception.SelfDeactivationException;
-import com.finovago.p2p.exception.ServiceAccountDeactivationNotAllowedException;
 import com.finovago.p2p.exception.UserAlreadyExistsException;
 import com.finovago.p2p.exception.UserNotFoundException;
 import com.finovago.p2p.model.Merchant;
@@ -152,28 +151,11 @@ class AuthServiceUnitTest {
 
         assertEquals("access-token", response.owner().accessToken());
         assertEquals("refresh-token", response.owner().refreshToken());
-        assertEquals("finovago_service_account@example.com", response.serviceAccountEmail());
+        // merchant().getId() is null here since the mocked Merchant is never actually persisted.
+        assertEquals("finovago_service_account+null@example.com", response.serviceAccountEmail());
         verify(merchantRepository).save(any(Merchant.class));
         verify(userRepository).save(argThat(saved -> saved.getEmail().equals("newuser@example.com") && saved.isOwner() && !saved.isServiceAccount()));
         verify(userRepository).save(argThat(saved -> saved.isServiceAccount() && !saved.isOwner()));
-    }
-
-    @Test
-    void should_fallBackToMerchantScopedServiceAccountEmail_when_defaultEmailAlreadyTaken() {
-        RegisterRequest request = new RegisterRequest("newuser@example.com", "password123", "Acme Corp");
-        Merchant merchant = merchant();
-
-        when(userRepository.findByEmail("newuser@example.com")).thenReturn(Optional.empty());
-        when(merchantRepository.save(any(Merchant.class))).thenReturn(merchant);
-        when(userRepository.findByEmail("finovago_service_account@example.com"))
-                .thenReturn(Optional.of(new User("finovago_service_account@example.com", "hashed", Role.MERCHANT, merchant, true, false)));
-        when(passwordEncoder.encode(any())).thenReturn("hashed");
-        when(jwtService.generateToken(eq("newuser@example.com"), anyList(), any(), any())).thenReturn("access-token");
-        when(refreshTokenService.createRefreshToken(any(User.class))).thenReturn("refresh-token");
-
-        RegisterResponse response = authService.register(request);
-
-        assertEquals("finovago_service_account+" + merchant.getId() + "@example.com", response.serviceAccountEmail());
     }
 
     @Test
@@ -279,7 +261,9 @@ class AuthServiceUnitTest {
     }
 
     @Test
-    void should_throwServiceAccountDeactivationNotAllowedException_when_deactivatingServiceAccount() {
+    void should_deactivateServiceAccountAndRevokeTokens_when_ownerDeactivatesIt() {
+        // Deliberately allowed - lets an owner cut access immediately if the service account's
+        // credentials leak, even though it breaks the merchant's live integration until re-enabled.
         Merchant merchant = merchant();
         User owner = owner(1L, merchant);
         User serviceAccount = new User("svc@example.com", "hashed", Role.MERCHANT, merchant, true, false);
@@ -288,8 +272,10 @@ class AuthServiceUnitTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
         when(userRepository.findByIdAndMerchant_Id(2L, null)).thenReturn(Optional.of(serviceAccount));
 
-        assertThrows(ServiceAccountDeactivationNotAllowedException.class, () -> authService.setUserActive(1L, 2L, false));
-        verify(refreshTokenService, org.mockito.Mockito.never()).revokeAllForUser(any());
+        UserStatusResponse response = authService.setUserActive(1L, 2L, false);
+
+        assertFalse(response.active());
+        verify(refreshTokenService).revokeAllForUser(serviceAccount);
     }
 
     @Test

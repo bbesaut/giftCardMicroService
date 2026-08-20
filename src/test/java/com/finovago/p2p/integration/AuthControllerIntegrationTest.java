@@ -513,14 +513,14 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void should_returnConflict_when_deactivatingServiceAccount() throws Exception {
+    void should_deactivateServiceAccount_when_ownerNeedsToCutLeakedCredentials() throws Exception {
         String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
-        String newOwnerEmail = "svc-block-owner@example.com";
+        String newOwnerEmail = "svc-deactivate-owner@example.com";
 
         mockMvc.perform(post("/api/v1/auth/register")
                         .header(AUTHORIZATION, "Bearer " + adminAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + newOwnerEmail + "\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"Svc Block Merchant\"}"))
+                        .content("{\"email\":\"" + newOwnerEmail + "\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"Svc Deactivate Merchant\"}"))
                 .andExpect(status().isOk());
 
         User newOwner = userRepository.findByEmail(newOwnerEmail).orElseThrow();
@@ -534,7 +534,10 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(post("/api/v1/auth/me/users/" + serviceAccount.getId() + "/deactivate")
                         .header(AUTHORIZATION, "Bearer " + newOwnerAccessToken))
-                .andExpect(status().isConflict());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(false));
+
+        assertEquals(false, userRepository.findById(serviceAccount.getId()).orElseThrow().isActive());
     }
 
     @Test
