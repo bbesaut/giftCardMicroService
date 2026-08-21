@@ -232,13 +232,13 @@ import io.jsonwebtoken.security.SignatureException;
 
     @ExceptionHandler(ServiceAccountNotAllowedException.class)
     public ResponseEntity&lt;Object&gt; handleServiceAccountNotAllowedException(ServiceAccountNotAllowedException ex) {
-<span class="nc" id="L235">        log.warn(ex.getMessage());</span>
+<span class="fc" id="L235">        log.warn(ex.getMessage());</span>
 
-<span class="nc" id="L237">        return ResponseEntity</span>
-<span class="nc" id="L238">                .status(HttpStatus.FORBIDDEN)</span>
-<span class="nc" id="L239">                .body(Map.of(</span>
+<span class="fc" id="L237">        return ResponseEntity</span>
+<span class="fc" id="L238">                .status(HttpStatus.FORBIDDEN)</span>
+<span class="fc" id="L239">                .body(Map.of(</span>
                     &quot;error&quot;, &quot;Forbidden&quot;,
-<span class="nc" id="L241">                    &quot;message&quot;, ex.getMessage()</span>
+<span class="fc" id="L241">                    &quot;message&quot;, ex.getMessage()</span>
                 ));
     }
 
@@ -290,13 +290,25 @@ import io.jsonwebtoken.security.SignatureException;
                 ));
     }
 
-    @ExceptionHandler(BadCredentialsException.class)
-    public ResponseEntity&lt;Object&gt; handleBadCredentialsException(BadCredentialsException ex) {
-<span class="fc" id="L295">        log.warn(&quot;Authentication failed - invalid credentials&quot;);</span>
+    @ExceptionHandler(SamePasswordException.class)
+    public ResponseEntity&lt;Object&gt; handleSamePasswordException(SamePasswordException ex) {
+<span class="fc" id="L295">        log.warn(ex.getMessage());</span>
 
 <span class="fc" id="L297">        return ResponseEntity</span>
-<span class="fc" id="L298">                .status(HttpStatus.UNAUTHORIZED)</span>
+<span class="fc" id="L298">                .status(HttpStatus.UNPROCESSABLE_ENTITY)</span>
 <span class="fc" id="L299">                .body(Map.of(</span>
+                    &quot;error&quot;, &quot;Unprocessable Entity&quot;,
+<span class="fc" id="L301">                    &quot;message&quot;, ex.getMessage()</span>
+                ));
+    }
+
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity&lt;Object&gt; handleBadCredentialsException(BadCredentialsException ex) {
+<span class="fc" id="L307">        log.warn(&quot;Authentication failed - invalid credentials&quot;);</span>
+
+<span class="fc" id="L309">        return ResponseEntity</span>
+<span class="fc" id="L310">                .status(HttpStatus.UNAUTHORIZED)</span>
+<span class="fc" id="L311">                .body(Map.of(</span>
                     &quot;error&quot;, &quot;Unauthorized&quot;,
                     &quot;message&quot;, &quot;Invalid email or password&quot;
                 ));

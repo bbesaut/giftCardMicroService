@@ -27,6 +27,7 @@ public class User {
     @Column(unique = true, nullable = false)
     private String email;
 
+    @Setter
     @Column(nullable = false)
     private String password;
 
@@ -45,17 +46,17 @@ public class User {
     private boolean active;
 
     public User(String email, String password, Role role, @Nullable Merchant merchant) {
-<span class="fc" id="L48">        this(email, password, role, merchant, false);</span>
-<span class="fc" id="L49">    }</span>
+<span class="fc" id="L49">        this(email, password, role, merchant, false);</span>
+<span class="fc" id="L50">    }</span>
 
-<span class="fc" id="L51">    public User(String email, String password, Role role, @Nullable Merchant merchant, boolean owner) {</span>
-<span class="fc" id="L52">        this.email = email;</span>
-<span class="fc" id="L53">        this.password = password;</span>
-<span class="fc" id="L54">        this.role = role;</span>
-<span class="fc" id="L55">        this.merchant = merchant;</span>
-<span class="fc" id="L56">        this.owner = owner;</span>
-<span class="fc" id="L57">        this.active = true;</span>
-<span class="fc" id="L58">    }</span>
+<span class="fc" id="L52">    public User(String email, String password, Role role, @Nullable Merchant merchant, boolean owner) {</span>
+<span class="fc" id="L53">        this.email = email;</span>
+<span class="fc" id="L54">        this.password = password;</span>
+<span class="fc" id="L55">        this.role = role;</span>
+<span class="fc" id="L56">        this.merchant = merchant;</span>
+<span class="fc" id="L57">        this.owner = owner;</span>
+<span class="fc" id="L58">        this.active = true;</span>
+<span class="fc" id="L59">    }</span>
 }
 
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
