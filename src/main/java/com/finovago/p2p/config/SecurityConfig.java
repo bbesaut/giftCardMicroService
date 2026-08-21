@@ -1,5 +1,6 @@
 package com.finovago.p2p.config;
 
+import com.finovago.p2p.security.ApiKeyAuthenticationFilter;
 import com.finovago.p2p.security.JwtAccessDeniedHandler;
 import com.finovago.p2p.security.JwtAuthenticationEntryPoint;
 import com.finovago.p2p.security.JwtAuthenticationFilter;
@@ -54,15 +55,23 @@ public class SecurityConfig {
             "/api/v1/giftcards/refund/**",
             "/api/v1/giftcards/credit/**",
             "/api/v1/auth/me/users",
-            "/api/v1/auth/me/users/**"
+            "/api/v1/auth/me/users/**",
+            "/api/v1/auth/me/api-key",
+            "/api/v1/auth/me/api-key/**"
     };
 
     private final JwtAuthenticationFilter jwtAuthFilter;
+    private final ApiKeyAuthenticationFilter apiKeyAuthFilter;
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
     private final JwtAccessDeniedHandler accessDeniedHandler;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter, JwtAuthenticationEntryPoint authenticationEntryPoint, JwtAccessDeniedHandler accessDeniedHandler) {
+    public SecurityConfig(
+            JwtAuthenticationFilter jwtAuthFilter,
+            ApiKeyAuthenticationFilter apiKeyAuthFilter,
+            JwtAuthenticationEntryPoint authenticationEntryPoint,
+            JwtAccessDeniedHandler accessDeniedHandler) {
         this.jwtAuthFilter = jwtAuthFilter;
+        this.apiKeyAuthFilter = apiKeyAuthFilter;
         this.authenticationEntryPoint = authenticationEntryPoint;
         this.accessDeniedHandler = accessDeniedHandler;
     }
@@ -96,7 +105,8 @@ public class SecurityConfig {
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(apiKeyAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

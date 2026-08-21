@@ -23,8 +23,9 @@ import com.finovago.p2p.security.CurrentUserContext;
 /**
  * Free-form manual credit, not tied to any prior transaction - no structural cap, so unlike
  * GiftCardRefundService this requires a written reason and can only be triggered by a human
- * merchant account, never the merchant's own automated integration (service account). That's the
- * last safety net against a bug or runaway script silently inflating a card's balance.
+ * merchant account, never the merchant's own automated integration (an API-key-authenticated
+ * call has no backing User, so currentUserIdOrNull() is always null for it). That's the last
+ * safety net against a bug or runaway script silently inflating a card's balance.
  */
 @Service
 public class GiftCardCreditService {
@@ -82,8 +83,8 @@ public class GiftCardCreditService {
     private void requireHumanActor() {
         Long userId = currentUserContext.currentUserIdOrNull();
         User user = userId == null ? null : userRepository.findById(userId).orElse(null);
-        if (user == null || user.isServiceAccount()) {
-            throw new ServiceAccountNotAllowedException("Manual credits must be performed by a human account, not a service account");
+        if (user == null) {
+            throw new ServiceAccountNotAllowedException("Manual credits must be performed by a human account, not an API key");
         }
     }
 
@@ -101,7 +102,7 @@ public class GiftCardCreditService {
         giftCardRepository.save(giftCard);
 
         ledgerService.record(giftCard, merchantId, LedgerEntryType.ADJUSTMENT, amount, giftCard.getBalance(), null,
-                currentUserContext.currentUserIdOrNull(), null, request.reason());
+                currentUserContext.currentUserIdOrNull(), currentUserContext.isApiKeyAuthenticated(), null, request.reason());
 
         log.info("Credited {} to card [{}], new balance {}", amount, request.giftCardCode(), giftCard.getBalance());
 

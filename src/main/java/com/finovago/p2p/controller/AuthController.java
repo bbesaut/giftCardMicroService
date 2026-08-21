@@ -1,11 +1,12 @@
 package com.finovago.p2p.controller;
 
 import com.finovago.p2p.dto.AddMerchantUserRequest;
+import com.finovago.p2p.dto.ApiKeyResponse;
+import com.finovago.p2p.dto.ApiKeyStatusResponse;
 import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
-import com.finovago.p2p.dto.RegisterResponse;
 import com.finovago.p2p.dto.UserStatusResponse;
 import com.finovago.p2p.exception.OwnerPrivilegeRequiredException;
 import com.finovago.p2p.exception.SelfDeactivationException;
@@ -73,14 +74,14 @@ public class AuthController {
 
     @Operation(
         summary = "Merchant registration",
-        description = "Creates a new Merchant along with two accounts: a human owner account (the submitted email/password, "
-                    + "which can log in and manage the merchant's other users) and an automated service account "
-                    + "(generated credentials, returned once in this response, for the merchant's own backend integration). "
-                    + "Requires authentication (JWT token) and ADMIN role."
+        description = "Creates a new Merchant along with its human owner account (the submitted email/password, "
+                    + "which can log in and manage the merchant's other users). No automated/integration account "
+                    + "is created here - the owner requests an API key explicitly later via POST /me/api-key, "
+                    + "whenever they actually need one. Requires authentication (JWT token) and ADMIN role."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Registration successful",
-            content = @Content(schema = @Schema(implementation = RegisterResponse.class))),
+            content = @Content(schema = @Schema(implementation = AuthResponse.class))),
         @ApiResponse(responseCode = "400", description = "Invalid request body (missing or invalid fields)",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"Email should be valid\"}"))),
         @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token",
@@ -93,11 +94,11 @@ public class AuthController {
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
     })
     @PostMapping("/register")
-    public ResponseEntity<RegisterResponse> register(@Valid @RequestBody RegisterRequest request) {
+    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
         log.info("Registration attempt for email: {}", sanitizeEmail(request.email()));
 
         try {
-            RegisterResponse response = authService.register(request);
+            AuthResponse response = authService.register(request);
             log.info("Registration successful for email: {}", sanitizeEmail(request.email()));
             return ResponseEntity.ok(response);
         } catch (UserAlreadyExistsException e) {
@@ -107,12 +108,56 @@ public class AuthController {
     }
 
     @Operation(
+        summary = "Generate or rotate my merchant's API key",
+        description = "Lets the caller's own merchant owner create the merchant's API key for automated/backend "
+                    + "integration use, or rotate it if one already exists - the previous secret stops working "
+                    + "immediately. The key belongs directly to the merchant (no backing user account - ledger "
+                    + "entries it produces are attributed to \"SYSTEM\"). The secret is shown only in this response "
+                    + "and cannot be retrieved again; present it on subsequent requests as an "
+                    + "\"X-Api-Key: {keyPrefix}.{secret}\" header instead of a Bearer JWT. Requires authentication "
+                    + "(JWT token), MERCHANT role, and the caller must be that merchant's owner."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "API key generated or rotated",
+            content = @Content(schema = @Schema(implementation = ApiKeyResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token"),
+        @ApiResponse(responseCode = "403", description = "Insufficient permissions (caller must be the merchant's owner)"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @PostMapping("/me/api-key")
+    public ResponseEntity<ApiKeyResponse> generateApiKey() {
+        ApiKeyResponse response = authService.generateApiKey(currentUserContext.currentUserIdOrNull());
+        log.info("API key generated/rotated via self-service");
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+        summary = "Revoke my merchant's API key",
+        description = "Disables the caller's own merchant's API key immediately, e.g. as an emergency response to "
+                    + "a leaked secret. Idempotent - calling it with no active key is a no-op. Requires "
+                    + "authentication (JWT token), MERCHANT role, and the caller must be that merchant's owner."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "API key revoked (or already inactive)",
+            content = @Content(schema = @Schema(implementation = ApiKeyStatusResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token"),
+        @ApiResponse(responseCode = "403", description = "Insufficient permissions (caller must be the merchant's owner)"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @PostMapping("/me/api-key/revoke")
+    public ResponseEntity<ApiKeyStatusResponse> revokeApiKey() {
+        ApiKeyStatusResponse response = authService.revokeApiKey(currentUserContext.currentUserIdOrNull());
+        log.info("API key revoked via self-service");
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
         summary = "Add an employee to my own merchant",
         description = "Lets the caller's own merchant owner attach a human employee account to their own merchant, "
-                    + "self-service, no admin involved. Always creates a human account - each merchant has exactly "
-                    + "one service account, created once at registration. Requires authentication (JWT token), "
-                    + "MERCHANT role, and the caller must be that merchant's owner account (not an employee, not "
-                    + "a service account)."
+                    + "self-service, no admin involved. Always creates a human account - the merchant's automated "
+                    + "service account (if any) is managed separately via POST /me/api-key. Requires authentication "
+                    + "(JWT token), MERCHANT role, and the caller must be that merchant's owner account (not an "
+                    + "employee, not a service account)."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "User added successfully",

@@ -95,7 +95,7 @@ class GiftCardRefundServiceUnitTest {
         assertEquals("SUCCESS", response.status());
         assertMoneyEquals(new BigDecimal("30.00"), response.refundedAmount());
         assertMoneyEquals(new BigDecimal("100.00"), response.newBalance());
-        verify(ledgerService).record(eq(card), eq(MERCHANT_ID), eq(LedgerEntryType.REFUND), eq(new BigDecimal("30.00")), eq(new BigDecimal("100.00")), eq(null), eq(null), eq(42L), eq(null));
+        verify(ledgerService).record(eq(card), eq(MERCHANT_ID), eq(LedgerEntryType.REFUND), eq(new BigDecimal("30.00")), eq(new BigDecimal("100.00")), eq(null), eq(null), eq(false), eq(42L), eq(null));
     }
 
     @Test
@@ -111,7 +111,7 @@ class GiftCardRefundServiceUnitTest {
         RefundRequest request = new RefundRequest(cardCode, BigDecimal.valueOf(15.0), 42L, null);
 
         assertThrows(RefundExceedsOriginalAmountException.class, () -> giftCardRefundService.refund(request, IDEMPOTENCY_KEY));
-        verify(ledgerService, never()).record(any(), any(), any(), any(BigDecimal.class), any(BigDecimal.class), any(), any(), any(), any());
+        verify(ledgerService, never()).record(any(), any(), any(), any(BigDecimal.class), any(BigDecimal.class), any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), any(), any());
     }
 
     @Test

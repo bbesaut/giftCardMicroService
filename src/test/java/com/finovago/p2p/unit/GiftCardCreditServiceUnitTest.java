@@ -83,10 +83,6 @@ class GiftCardCreditServiceUnitTest {
         return new User("employee@example.com", "hashed", Role.MERCHANT, merchant, false);
     }
 
-    private User serviceAccountUser() {
-        return new User("integration@example.com", "hashed", Role.MERCHANT, merchant, true);
-    }
-
     @Test
     void should_credit_when_adjustment_has_a_reason() {
         String cardCode = "GC-2";
@@ -99,27 +95,19 @@ class GiftCardCreditServiceUnitTest {
 
         assertEquals("SUCCESS", response.status());
         assertMoneyEquals(new BigDecimal("70.00"), response.newBalance());
-        verify(ledgerService).record(eq(card), eq(MERCHANT_ID), eq(LedgerEntryType.ADJUSTMENT), eq(new BigDecimal("20.00")), eq(new BigDecimal("70.00")), eq(null), eq(USER_ID), eq(null), eq("Goodwill gesture - support ticket #123"));
+        verify(ledgerService).record(eq(card), eq(MERCHANT_ID), eq(LedgerEntryType.ADJUSTMENT), eq(new BigDecimal("20.00")), eq(new BigDecimal("70.00")), eq(null), eq(USER_ID), eq(false), eq(null), eq("Goodwill gesture - support ticket #123"));
     }
 
     @Test
-    void should_throw_exception_when_caller_is_a_service_account() {
-        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(serviceAccountUser()));
+    void should_throw_exception_when_caller_has_no_resolvable_user() {
+        // An API-key-authenticated call has no backing User at all - currentUserIdOrNull() is null.
+        when(currentUserContext.currentUserIdOrNull()).thenReturn(null);
 
         CreditRequest request = new CreditRequest("GC-2", BigDecimal.valueOf(20.0), "Some reason");
 
         assertThrows(ServiceAccountNotAllowedException.class, () -> giftCardCreditService.credit(request, IDEMPOTENCY_KEY));
         verify(giftCardRepository, never()).findByMerchantIdAndCardCodeForUpdate(any(), any());
         verify(idempotencyKeyService, never()).claim(any(), any(), any(), any());
-    }
-
-    @Test
-    void should_throw_exception_when_caller_has_no_resolvable_user() {
-        when(currentUserContext.currentUserIdOrNull()).thenReturn(null);
-
-        CreditRequest request = new CreditRequest("GC-2", BigDecimal.valueOf(20.0), "Some reason");
-
-        assertThrows(ServiceAccountNotAllowedException.class, () -> giftCardCreditService.credit(request, IDEMPOTENCY_KEY));
     }
 
     @Test

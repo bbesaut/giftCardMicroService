@@ -118,7 +118,7 @@ class GiftCardServiceUnitTest
         when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, fakeGiftCardCode)).thenReturn(Optional.of(inactiveGiftCard));
 
         assertThrows(InactiveGiftCardException.class, () -> giftCardService.executeRedemptionSync(MERCHANT_ID, fakeGiftCardCode, BigDecimal.valueOf(50.0)));
-        verify(ledgerService, never()).record(any(), any(), any(), any(BigDecimal.class), any(BigDecimal.class), any(), any());
+        verify(ledgerService, never()).record(any(), any(), any(), any(BigDecimal.class), any(BigDecimal.class), any(), any(), org.mockito.ArgumentMatchers.anyBoolean());
     }
 
     @Test
@@ -147,7 +147,7 @@ class GiftCardServiceUnitTest
         assertMoneyEquals(BigDecimal.ZERO, response.remainingToPay());
         // executeRedemptionSync normalizes the incoming amount to scale 2, so the ledger record
         // reflects "30.00"/"70.00", not the scale-1 literals the request/entity were built with.
-        verify(ledgerService).record(eq(activeCard), eq(MERCHANT_ID), eq(LedgerEntryType.REDEMPTION), eq(new BigDecimal("30.00")), eq(new BigDecimal("70.00")), eq(null), eq(null));
+        verify(ledgerService).record(eq(activeCard), eq(MERCHANT_ID), eq(LedgerEntryType.REDEMPTION), eq(new BigDecimal("30.00")), eq(new BigDecimal("70.00")), eq(null), eq(null), eq(false));
     }
 
     @Test
@@ -206,7 +206,7 @@ class GiftCardServiceUnitTest
         assertThrows(IllegalArgumentException.class, () ->
             giftCardService.createGiftCard(new GiftCardCreateRequest(existingCode, BigDecimal.ZERO, false, LocalDate.now().plusDays(30)))
         );
-        verify(ledgerService, never()).record(any(), any(), any(), any(BigDecimal.class), any(BigDecimal.class), any(), any());
+        verify(ledgerService, never()).record(any(), any(), any(), any(BigDecimal.class), any(BigDecimal.class), any(), any(), org.mockito.ArgumentMatchers.anyBoolean());
     }
 
     @Test
@@ -221,7 +221,7 @@ class GiftCardServiceUnitTest
         var response = giftCardService.createGiftCard(new GiftCardCreateRequest(cardCode, BigDecimal.valueOf(100.0), true, null));
 
         assertEquals(expectedDate, response.expirationDate());
-        verify(ledgerService).record(eq(savedCard), eq(MERCHANT_ID), eq(LedgerEntryType.CREATION), eq(BigDecimal.valueOf(100.0)), eq(BigDecimal.valueOf(100.0)), eq(null), eq(null));
+        verify(ledgerService).record(eq(savedCard), eq(MERCHANT_ID), eq(LedgerEntryType.CREATION), eq(BigDecimal.valueOf(100.0)), eq(BigDecimal.valueOf(100.0)), eq(null), eq(null), eq(false));
     }
 
     @Test
@@ -239,7 +239,7 @@ class GiftCardServiceUnitTest
         assertMoneyEquals(BigDecimal.ZERO, response.remainingBalance());
         assertMoneyEquals(BigDecimal.valueOf(30.0), response.remainingToPay());
         // drainCard() zeroes the balance as "0.00" (scale 2), not the bare BigDecimal.ZERO (scale 0).
-        verify(ledgerService).record(eq(activeCard), eq(MERCHANT_ID), eq(LedgerEntryType.REDEMPTION), eq(BigDecimal.valueOf(20.0)), eq(BigDecimal.ZERO.setScale(2)), eq(null), eq(null));
+        verify(ledgerService).record(eq(activeCard), eq(MERCHANT_ID), eq(LedgerEntryType.REDEMPTION), eq(BigDecimal.valueOf(20.0)), eq(BigDecimal.ZERO.setScale(2)), eq(null), eq(null), eq(false));
     }
 
     @Test

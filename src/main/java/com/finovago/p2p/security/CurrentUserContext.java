@@ -23,6 +23,11 @@ public class CurrentUserContext {
         return currentUser().userId();
     }
 
+    /** Whether the current request authenticated via an API key rather than a JWT. */
+    public boolean isApiKeyAuthenticated() {
+        return currentUser().apiKey();
+    }
+
     private AuthenticatedUser currentUser() {
         Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         if (!(principal instanceof AuthenticatedUser authenticatedUser)) {

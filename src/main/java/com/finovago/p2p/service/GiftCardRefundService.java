@@ -108,7 +108,7 @@ public class GiftCardRefundService {
         giftCardRepository.save(giftCard);
 
         ledgerService.record(giftCard, merchantId, LedgerEntryType.REFUND, amount, giftCard.getBalance(), null,
-                currentUserContext.currentUserIdOrNull(), request.redemptionLedgerEntryId(), request.reason());
+                currentUserContext.currentUserIdOrNull(), currentUserContext.isApiKeyAuthenticated(), request.redemptionLedgerEntryId(), request.reason());
 
         log.info("Refunded {} to card [{}] against ledger entry [{}], new balance {}", amount, request.giftCardCode(), request.redemptionLedgerEntryId(), giftCard.getBalance());
 

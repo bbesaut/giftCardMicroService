@@ -97,7 +97,7 @@ class GiftCardHoldServiceUnitTest {
         assertMoneyEquals(BigDecimal.valueOf(30.0), response.remainingAvailableBalance());
         // reserve() normalizes the incoming amount to scale 2, so the ledger record reflects
         // "50.00", not the scale-1 literal the request was built with.
-        verify(ledgerService).record(card, MERCHANT_ID, LedgerEntryType.HOLD_PLACED, new BigDecimal("50.00"), BigDecimal.valueOf(100.0), null, null);
+        verify(ledgerService).record(card, MERCHANT_ID, LedgerEntryType.HOLD_PLACED, new BigDecimal("50.00"), BigDecimal.valueOf(100.0), null, null, false);
     }
 
     @Test
@@ -134,7 +134,7 @@ class GiftCardHoldServiceUnitTest {
         assertThrows(InsufficientAvailableBalanceException.class,
                 () -> giftCardHoldService.reserve(new ReserveRequest(cardCode, BigDecimal.valueOf(50.0)), IDEMPOTENCY_KEY));
         verify(ledgerService, never()).record(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean());
     }
 
     @Test
@@ -180,7 +180,7 @@ class GiftCardHoldServiceUnitTest {
 
         assertEquals("CAPTURED", response.status());
         assertMoneyEquals(BigDecimal.valueOf(70.0), card.getBalance());
-        verify(ledgerService).record(card, MERCHANT_ID, LedgerEntryType.HOLD_CAPTURED, BigDecimal.valueOf(30.0), BigDecimal.valueOf(70.0), hold.getId(), null);
+        verify(ledgerService).record(card, MERCHANT_ID, LedgerEntryType.HOLD_CAPTURED, BigDecimal.valueOf(30.0), BigDecimal.valueOf(70.0), hold.getId(), null, false);
     }
 
     @Test
@@ -197,7 +197,7 @@ class GiftCardHoldServiceUnitTest {
         assertEquals("CAPTURED", response.status());
         verify(giftCardRepository, never()).findByMerchantIdAndCardCodeForUpdate(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         verify(ledgerService, never()).record(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean());
     }
 
     @Test
@@ -243,7 +243,7 @@ class GiftCardHoldServiceUnitTest {
 
         assertEquals("RELEASED", response.status());
         assertMoneyEquals(BigDecimal.valueOf(100.0), card.getBalance());
-        verify(ledgerService).record(card, MERCHANT_ID, LedgerEntryType.HOLD_RELEASED, BigDecimal.valueOf(30.0), BigDecimal.valueOf(100.0), hold.getId(), null);
+        verify(ledgerService).record(card, MERCHANT_ID, LedgerEntryType.HOLD_RELEASED, BigDecimal.valueOf(30.0), BigDecimal.valueOf(100.0), hold.getId(), null, false);
     }
 
     @Test
@@ -259,7 +259,7 @@ class GiftCardHoldServiceUnitTest {
 
         assertEquals("RELEASED", response.status());
         verify(ledgerService, never()).record(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean());
     }
 
     @Test

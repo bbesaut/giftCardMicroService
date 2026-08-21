@@ -52,7 +52,7 @@ class LedgerServiceUnitTest {
 
     @Test
     void record_savesLedgerEntry_withAllFieldsPopulated() {
-        ledgerService.record(giftCard, 1L, LedgerEntryType.REDEMPTION, BigDecimal.valueOf(30.0), BigDecimal.valueOf(70.0), 42L, 7L);
+        ledgerService.record(giftCard, 1L, LedgerEntryType.REDEMPTION, BigDecimal.valueOf(30.0), BigDecimal.valueOf(70.0), 42L, 7L, false);
 
         ArgumentCaptor<LedgerEntry> captor = ArgumentCaptor.forClass(LedgerEntry.class);
         verify(ledgerEntryRepository).save(captor.capture());
@@ -65,16 +65,28 @@ class LedgerServiceUnitTest {
         assertEquals(0, BigDecimal.valueOf(70.0).compareTo(saved.getBalanceAfter()));
         assertEquals(42L, saved.getHoldId());
         assertEquals(7L, saved.getActorUserId());
+        assertEquals(false, saved.isActorViaApiKey());
     }
 
     @Test
     void record_savesLedgerEntry_withNullHoldId() {
-        ledgerService.record(giftCard, 1L, LedgerEntryType.CREATION, BigDecimal.valueOf(100.0), BigDecimal.valueOf(100.0), null, null);
+        ledgerService.record(giftCard, 1L, LedgerEntryType.CREATION, BigDecimal.valueOf(100.0), BigDecimal.valueOf(100.0), null, null, false);
 
         ArgumentCaptor<LedgerEntry> captor = ArgumentCaptor.forClass(LedgerEntry.class);
         verify(ledgerEntryRepository).save(captor.capture());
 
         assertNull(captor.getValue().getHoldId());
+        assertNull(captor.getValue().getActorUserId());
+    }
+
+    @Test
+    void record_flagsEntryAsViaApiKey_whenCallerPassesApiKeyFlag() {
+        ledgerService.record(giftCard, 1L, LedgerEntryType.REDEMPTION, BigDecimal.valueOf(30.0), BigDecimal.valueOf(70.0), null, null, true);
+
+        ArgumentCaptor<LedgerEntry> captor = ArgumentCaptor.forClass(LedgerEntry.class);
+        verify(ledgerEntryRepository).save(captor.capture());
+
+        assertEquals(true, captor.getValue().isActorViaApiKey());
         assertNull(captor.getValue().getActorUserId());
     }
 
@@ -91,27 +103,12 @@ class LedgerServiceUnitTest {
         User regularUser = mock(User.class);
         when(regularUser.getId()).thenReturn(7L);
         when(regularUser.getEmail()).thenReturn("employee@example.com");
-        when(regularUser.isServiceAccount()).thenReturn(false);
         LedgerEntry entry = new LedgerEntry(giftCard, 1L, LedgerEntryType.REDEMPTION, BigDecimal.valueOf(30.0), BigDecimal.valueOf(70.0), null, 7L);
         when(userRepository.findAllById(java.util.Set.of(7L))).thenReturn(List.of(regularUser));
 
         Map<Long, String> actors = ledgerService.resolveActors(List.of(entry));
 
         assertEquals("employee@example.com", actors.get(7L));
-    }
-
-    @Test
-    void resolveActors_prefixesWithSYSTEM_forServiceAccount() {
-        User serviceAccount = mock(User.class);
-        when(serviceAccount.getId()).thenReturn(9L);
-        when(serviceAccount.getEmail()).thenReturn("integration@example.com");
-        when(serviceAccount.isServiceAccount()).thenReturn(true);
-        LedgerEntry entry = new LedgerEntry(giftCard, 1L, LedgerEntryType.CREATION, BigDecimal.valueOf(100.0), BigDecimal.valueOf(100.0), null, 9L);
-        when(userRepository.findAllById(java.util.Set.of(9L))).thenReturn(List.of(serviceAccount));
-
-        Map<Long, String> actors = ledgerService.resolveActors(List.of(entry));
-
-        assertEquals("SYSTEM / integration@example.com", actors.get(9L));
     }
 
     @Test

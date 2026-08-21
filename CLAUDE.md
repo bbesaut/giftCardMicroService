@@ -46,9 +46,10 @@ Two ways to see it without running Maven yourself:
 - **Always current for `develop`/`main`**: `.github/workflows/coverage-report.yml` runs on every push to those branches and publishes the HTML report to GitHub Pages: https://bbesaut.github.io/giftCardMicroService/coverage/ (same one-time Pages setup as the schema diagram above; `keep_files: true` so the two publishers don't clobber each other's `gh-pages` content).
 
 ## 🏗️ Architecture Summary
-- **Multi-tenancy**: every gift card belongs to exactly one `Merchant`. `ADMIN` is the platform owner (manages merchants, sees all cards via `/list`); `MERCHANT` is a merchant account, scoped to its own cards only. Tenant scoping is derived server-side from the JWT (`merchantId` claim), never from client input.
-- **Merchant users**: a `Merchant` has N `User`s (all role MERCHANT), distinguished by two independent flags — `serviceAccount` (automated integration vs. human) and `owner` (can manage the merchant's other users: create via `POST /auth/me/users`, activate/deactivate via `POST /auth/me/users/{userId}/(de)activate`). `/register` creates exactly one owner + one service account per new merchant — both are structural singletons: no endpoint can create a second owner (`owner` is never client-settable outside `/register`) or a second service account (`POST /auth/me/users` always creates a human employee). Every other user is added afterwards via the owner's self-service routes — there is no admin-side equivalent. Deactivated users are blocked at login/refresh and their refresh tokens are revoked, but an access token already issued before deactivation stays valid until its own ~15 min expiry (stateless JWT, no per-request DB check by design).
-- **JWT auth**: JJWT-based, stateless, roles (ADMIN/MERCHANT), JWT carries a `merchantId` claim (null for ADMIN)
+- **Multi-tenancy**: every gift card belongs to exactly one `Merchant`. `ADMIN` is the platform owner (manages merchants, sees all cards via `/list`); `MERCHANT` is a merchant account, scoped to its own cards only. Tenant scoping is derived server-side from the JWT/API key (`merchantId` claim), never from client input.
+- **Merchant users**: a `Merchant` has N `User`s (all role MERCHANT, all human), distinguished by an `owner` flag (can manage the merchant's other users: create via `POST /auth/me/users`, activate/deactivate via `POST /auth/me/users/{userId}/(de)activate`). `/register` creates exactly one owner per new merchant — `owner` is never client-settable outside `/register`, so no endpoint can create a second one. Every other user is added via the owner's self-service routes — there is no admin-side equivalent. Deactivated users are blocked at login/refresh and their refresh tokens are revoked, but an access token already issued before deactivation stays valid until its own ~15 min expiry (stateless JWT, no per-request DB check by design).
+- **JWT auth**: JJWT-based, stateless, roles (ADMIN/MERCHANT), JWT carries a `merchantId` claim (null for ADMIN). Always a human `User` — a merchant's automated/integration access goes through an API key instead (see below), never a JWT.
+- **API key auth**: a merchant's automated/backend integration authenticates with a `X-Api-Key: {keyPrefix}.{secret}` header instead of a Bearer JWT (`ApiKeyAuthenticationFilter`, wired alongside `JwtAuthenticationFilter` in `SecurityConfig`). An API key is its own identity directly on `api_keys.merchant_id` — **not** a stand-in "service account" `User` (no fake email/password to manage) — so the resulting `AuthenticatedUser` principal has `merchantId` and `role=MERCHANT` but no `userId`. Tenant scoping and rate limiting work identically either way (both key off `merchantId`); anything that needs a real human (`/credit`, `/me/users/**`, `/me/api-key` itself) naturally rejects a null `userId`. Ledger entries written by an API-key-authenticated call are attributed to `"SYSTEM"` (`LedgerEntry.actorViaApiKey`), not an email. `ApiKeyService` stores only a bcrypt hash of the secret (`api_keys.hashed_secret`) plus a non-secret `key_prefix` used for lookup; the plaintext secret is shown exactly once, at generation/rotation time, and cannot be retrieved again. One key per merchant (`api_keys.merchant_id` is `UNIQUE`) — generating again rotates (invalidates the previous secret) rather than creating a second one.
 - **Service layer**: GiftCardService with async redemption (CompletableFuture)
 - **Observability**: Correlation IDs in MDC, Loki logging in prod
 - **Async**: Custom TaskExecutor with MdcTaskDecorator for MDC propagation
@@ -81,7 +82,7 @@ Content-Type: application/json
 ## 🔐 Authentication Endpoints
 
 ### POST /api/v1/auth/register
-**Description**: Create a new merchant. Creates the `Merchant` record (business name) together with **two** MERCHANT-role users in one transaction: a human **owner** account (the submitted email/password — logs in, and will be the only account that can manage the merchant's other users) and an automated **service account** (server-generated credentials, for the merchant's own backend integration). Requires authentication (ADMIN role) — merchant onboarding is admin-gated, not public self-signup.
+**Description**: Create a new merchant. Creates the `Merchant` record (business name) together with a single MERCHANT-role **owner** account (the submitted email/password — logs in, and will be the only account that can manage the merchant's other users). No service account or API key is created here — the owner requests one explicitly, later, via `POST /me/api-key`, only if/when they actually need automated/integration access. Requires authentication (ADMIN role) — merchant onboarding is admin-gated, not public self-signup.
 
 **Request** (RegisterRequest):
 ```json
@@ -92,18 +93,7 @@ Content-Type: application/json
 }
 ```
 
-**Response** (RegisterResponse - HTTP 200):
-```json
-{
-  "owner": {
-    "accessToken": "eyJhbGc...",
-    "refreshToken": "550e8400-e29b-41d4-a716-446655440000"
-  },
-  "serviceAccountEmail": "finovago_service_account+42@service.finovago.com",
-  "serviceAccountPassword": "kQ2f...-generated-once"
-}
-```
-`serviceAccountPassword` is shown **only in this response** — there is no retrieval endpoint, so hand it to the merchant immediately or have them rotate it via a future credential-rotation flow (not implemented yet). `serviceAccountEmail` is always `finovago_service_account+<merchantId>@service.finovago.com` — hosted under our own domain rather than the merchant's (it's our credential to manage, not a mailbox that should exist inside the merchant's company namespace), deterministic and easy to grep for, and the `merchantId` suffix guarantees uniqueness without a DB lookup.
+**Response** (AuthResponse - HTTP 200): tokens for the newly created owner account.
 
 **Error Responses**:
 - `400 Bad Request`: Invalid email format or blank/missing fields (including blank `merchantName`)
@@ -114,7 +104,7 @@ Content-Type: application/json
 
 **Logging**:
 - `INFO`: "Registration attempt for email: u***@example.com"
-- `INFO`: "Merchant registered successfully: merchantId: 1, owner: user@example.com, serviceAccount: finovago_service_account+1@service.finovago.com"
+- `INFO`: "Merchant registered successfully: merchantId: 1, owner: user@example.com"
 - `WARN`: "Registration failed - email already exists: u***@example.com"
 
 **Field Validation**:
@@ -122,8 +112,35 @@ Content-Type: application/json
 - `password`: Required, non-blank — the owner's password
 - `merchantName`: Required, non-blank — becomes the new Merchant's business name
 
+### POST /api/v1/auth/me/api-key
+**Description**: Generates the caller's own merchant's API key for automated/backend integration use, or **rotates** it (previous secret stops working immediately) if one already exists. The key attaches directly to the merchant (`api_keys.merchant_id`) — no user account is created for it. Requires authentication (MERCHANT role) and the caller must be that merchant's owner — otherwise `403`.
+
+**Response** (ApiKeyResponse - HTTP 200):
+```json
+{
+  "keyPrefix": "fovak_7f3d9c2b1a4e",
+  "apiKeySecret": "fovak_7f3d9c2b1a4e.kQ2f...-generated-once"
+}
+```
+`apiKeySecret` is shown **only in this response** — there is no retrieval endpoint, so store it immediately or rotate again to get a new one. Present it on subsequent requests as `X-Api-Key: <apiKeySecret>` instead of a Bearer JWT.
+
+**Error Responses**:
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Caller is not the merchant's owner account
+- `500 Internal Server Error`: Server error
+
+### POST /api/v1/auth/me/api-key/revoke
+**Description**: Disables the caller's own merchant's API key immediately, e.g. as an emergency response to a leaked secret — deliberately no separate credential-rotation endpoint, so cutting access is the fastest lever; call `POST /me/api-key` again afterwards to issue a fresh one. Idempotent: calling it with no active key is a no-op, not an error. Requires authentication (MERCHANT role) and the caller must be that merchant's owner.
+
+**Response** (ApiKeyStatusResponse - HTTP 200): `{ "keyPrefix": "fovak_7f3d9c2b1a4e", "active": false }` (or `{ "keyPrefix": null, "active": false }` if no key existed).
+
+**Error Responses**:
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Caller is not the merchant's owner account
+- `500 Internal Server Error`: Server error
+
 ### POST /api/v1/auth/me/users
-**Description**: The caller's own merchant **owner** attaches a human employee account to their own merchant, self-service, no admin involved. Always creates a human account — each merchant has exactly one service account, created once at `/register`; this route cannot create another one. `merchantId` is derived from the caller's JWT, never from the request. Requires authentication (MERCHANT role) **and** the caller must be that merchant's owner (not an employee, not a service account) — otherwise `403`. There is no admin-side equivalent: if a merchant's owner account is ever unusable, restoring access requires direct DB intervention (not implemented as an endpoint).
+**Description**: The caller's own merchant **owner** attaches a human employee account to their own merchant, self-service, no admin involved. `merchantId` is derived from the caller's JWT, never from the request. Requires authentication (MERCHANT role) **and** the caller must be that merchant's owner (not an employee, and not authenticated via API key) — otherwise `403`. There is no admin-side equivalent: if a merchant's owner account is ever unusable, restoring access requires direct DB intervention (not implemented as an endpoint).
 
 **Request** (AddMerchantUserRequest):
 ```json
@@ -144,7 +161,7 @@ Content-Type: application/json
 
 ### POST /api/v1/auth/me/users/{userId}/deactivate
 ### POST /api/v1/auth/me/users/{userId}/activate
-**Description**: Disable/re-enable a user under the caller's own merchant — including the merchant's own service account, e.g. as an emergency response to leaked credentials (there's no credential-rotation endpoint yet, so cutting access is the only immediate lever; re-enabling doesn't restore a new password, the old one still applies once reactivated). Caller must be that merchant's owner; deactivating requires target user to belong to the caller's merchant (`404` otherwise, tenant existence never leaked), and the owner cannot deactivate their own account (`409`). Deactivating a user also revokes all of its active refresh tokens (immediate logout on next refresh/login attempt).
+**Description**: Disable/re-enable a human employee account under the caller's own merchant, e.g. as an emergency response to leaked credentials (re-enabling doesn't restore a new password, the old one still applies once reactivated). Not used for cutting API key access - that's `POST /me/api-key/revoke` instead. Caller must be that merchant's owner; deactivating requires target user to belong to the caller's merchant (`404` otherwise, tenant existence never leaked), and the owner cannot deactivate their own account (`409`). Deactivating a user also revokes all of its active refresh tokens (immediate logout on next refresh/login attempt).
 
 **Known limitation**: access tokens are stateless JWTs — `JwtAuthenticationFilter` checks signature/expiry only, no DB lookup per request. A token already issued before deactivation stays valid on any endpoint until it naturally expires (`application.security.jwt.access-token-expiration`, 15 min by default). Login and refresh are cut off immediately; an already-issued access token is not revoked early. Deliberate trade-off to avoid a DB/cache lookup on every authenticated request.
 
@@ -316,7 +333,7 @@ Header: `Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000`
 - `500 Internal Server Error`: Server error
 
 ### POST /api/v1/giftcards/refund
-**Description**: Reverses a specific prior `REDEMPTION` entry, scoped to the caller's merchant, exclusively through a new `REFUND` ledger entry (never a direct balance edit). Identified by `redemptionLedgerEntryId` (from `GET /{code}/ledger`). Capped at what's left to refund on that entry (its original amount minus any prior refunds against it). Callable by any authenticated merchant account — human or the merchant's own service/integration account (e.g. their checkout backend auto-triggering a refund when it registers a customer return) — since a refund is structurally bounded by a real prior transaction, unlike `/credit` below.
+**Description**: Reverses a specific prior `REDEMPTION` entry, scoped to the caller's merchant, exclusively through a new `REFUND` ledger entry (never a direct balance edit). Identified by `redemptionLedgerEntryId` (from `GET /{code}/ledger`). Capped at what's left to refund on that entry (its original amount minus any prior refunds against it). Callable by a human merchant account or the merchant's own API key (e.g. their checkout backend auto-triggering a refund when it registers a customer return) — since a refund is structurally bounded by a real prior transaction, unlike `/credit` below.
 
 Deliberately allowed on an inactive/expired card — refunding exists specifically to fix a problem, so blocking on that same problem's status would defeat the purpose. Requires authentication (MERCHANT role).
 
@@ -352,7 +369,7 @@ Header: `Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000`
 - `500 Internal Server Error`: Server error
 
 ### POST /api/v1/giftcards/credit
-**Description**: Adds a free-form manual credit onto a gift card, scoped to the caller's merchant, not tied to any prior redemption, exclusively through a new `ADJUSTMENT` ledger entry (never a direct balance edit). Requires a `reason` (audit trail for support/finance) — unlike `/refund`, there's no structural cap on this amount, so **only a human merchant account may call it**: rejected with `403` if the caller is the merchant's own service/integration account, since a free-form credit must be asserted by a person, not an automated script.
+**Description**: Adds a free-form manual credit onto a gift card, scoped to the caller's merchant, not tied to any prior redemption, exclusively through a new `ADJUSTMENT` ledger entry (never a direct balance edit). Requires a `reason` (audit trail for support/finance) — unlike `/refund`, there's no structural cap on this amount, so **only a human merchant account may call it**: rejected with `403` if the caller authenticated via the merchant's API key, since a free-form credit must be asserted by a person, not an automated script.
 
 Deliberately allowed on an inactive/expired card — crediting exists specifically to fix a problem, so blocking on that same problem's status would defeat the purpose. Requires authentication (MERCHANT role).
 
@@ -380,7 +397,7 @@ Header: `Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000`
 **Error Responses**:
 - `400 Bad Request`: Invalid request body (missing or invalid fields, or missing `reason`), or missing `Idempotency-Key` header
 - `401 Unauthorized`: Missing or invalid JWT token
-- `403 Forbidden`: Caller is a service/integration account, not a human merchant account
+- `403 Forbidden`: Caller authenticated via API key, not a human merchant account
 - `404 Not Found`: Gift card does not exist for the caller's merchant
 - `409 Conflict`: `Idempotency-Key` reused with a different request payload, or a request with this key is still being processed
 - `429 Too Many Requests`: Rate limit exceeded (max 300 requests/minute per merchant)
@@ -450,14 +467,18 @@ Used for merchant registration (POST /api/v1/auth/register) — describes the ne
 - `password` (String): Owner's password, non-blank
 - `merchantName` (String): Business name for the new Merchant created alongside this user, non-blank
 
-### RegisterResponse
-Response for merchant registration
-- `owner` (AuthResponse): Tokens for the newly created owner account
-- `serviceAccountEmail` (String): Email of the auto-generated service account
-- `serviceAccountPassword` (String): Plaintext password of the service account — shown only in this response, never retrievable again
+### ApiKeyResponse
+Response for generating/rotating the merchant's API key (POST /api/v1/auth/me/api-key)
+- `keyPrefix` (String): Non-secret prefix identifying this key, safe to log or display
+- `apiKeySecret` (String): Plaintext API key (`{keyPrefix}.{secret}`) — shown only in this response, never retrievable again
+
+### ApiKeyStatusResponse
+Response for revoking the merchant's API key (POST /api/v1/auth/me/api-key/revoke)
+- `keyPrefix` (String, nullable): Prefix of the affected key, null if none existed
+- `active` (boolean): Always false after this call
 
 ### AddMerchantUserRequest
-Used to attach a human employee to a merchant, self-service by that merchant's owner (POST /api/v1/auth/me/users) — always creates a human account, never a service account
+Used to attach a human employee to a merchant, self-service by that merchant's owner (POST /api/v1/auth/me/users) — always creates a human account; API-key-style automated access is managed separately via POST /me/api-key
 - `email` (String): New employee's email, must be unique
 - `password` (String): New employee's password, non-blank
 
@@ -514,7 +535,7 @@ Response for a single gift card ledger entry (GET /api/v1/giftcards/{code}/ledge
 - `balanceAfter` (BigDecimal): Gift card balance immediately after this operation
 - `holdId` (Long, nullable): Identifier of the related hold, if any
 - `createdAt` (LocalDateTime): Timestamp at which this entry was recorded
-- `actor` (String, nullable): Who triggered this operation — the user's email (`"SYSTEM / email"` for a service account), `"Deleted user"` if the account no longer exists, or `"Unknown"` for entries recorded before this field existed
+- `actor` (String, nullable): Who triggered this operation — the user's email, `"SYSTEM"` if it was an API-key-authenticated call, `"Deleted user"` if the account no longer exists, or `"Unknown"` for entries recorded before this field existed
 - `reason` (String, nullable): Operator-supplied justification — set for ADJUSTMENT (mandatory when created) and optionally for REFUND, null otherwise
 
 ### RefundRequest
@@ -531,7 +552,7 @@ Response for a successful refund operation
 - `newBalance` (BigDecimal): Balance after this refund
 
 ### CreditRequest
-Used for free-form manual credits, not tied to any redemption (POST /api/v1/giftcards/credit) — only callable by a human merchant account, not a service account
+Used for free-form manual credits, not tied to any redemption (POST /api/v1/giftcards/credit) — only callable by a human merchant account, not an API key
 - `giftCardCode` (String): Gift card code to credit
 - `amount` (BigDecimal): Amount to credit (must be > 0)
 - `reason` (String): Mandatory justification, max 500 chars
@@ -581,7 +602,7 @@ The correlation ID is **not** duplicated in the body — it is already returned 
 - Profiles: dev (PostgreSQL via docker-compose, DEBUG), prod (PostgreSQL, INFO), test (PostgreSQL via Testcontainers, random port)
 - **Response timing**: All responses include `X-Response-Time` header (milliseconds). This is HTTP metadata only—never add timing to DTOs.
 - **Correlation id & response timing filters run before Spring Security** (`@Order(Ordered.HIGHEST_PRECEDENCE)` on `MdcFilter`/`ResponseTimeFilter`) so that even 401/403 responses rejected by Security itself carry `X-Correlation-Id`/`X-Response-Time` — don't remove that ordering.
-- **Tenant scoping**: never trust a client-supplied `merchantId` for gift card operations — it always comes from the authenticated principal's JWT (`CurrentUserContext`).
+- **Tenant scoping**: never trust a client-supplied `merchantId` for gift card operations — it always comes from the authenticated principal's JWT/API key (`CurrentUserContext`).
 
 ## 👥 Admin User Setup
 
@@ -593,7 +614,7 @@ The correlation ID is **not** duplicated in the body — it is already returned 
 **Development**: Admin + Merchant users created by DataInitializer on startup:
 - `admin@finovago.com` / `admin123` (role: ADMIN, no merchant)
 - `client@finovago.com` / `client123` (role: MERCHANT, owner of the seeded "Finovago Demo Merchant" — can call `/credit` and manage other users via `/me/users/**`)
-- `finovago_service_account+<demoMerchantId>@service.finovago.com` / `client123` (role: MERCHANT, service account of the same merchant — the exact address depends on the demo merchant's generated id, check `DataInitializer` logs or the DB; used for exercising the service-account-restricted paths like `/credit`'s 403)
+- An API key for the demo merchant (no user account involved) — generated on startup and printed to the `DataInitializer` logs (`Demo merchant API key (dev only): ...`), used for exercising API-key-restricted paths like `/credit`'s 403 via the `X-Api-Key` header
 
 ## 📝 Git Commits
 - Write commit messages like a human, not a report: short sentences, no filler.
