@@ -28,7 +28,6 @@ import com.finovago.p2p.exception.IdempotencyKeyInProgressException;
 import com.finovago.p2p.exception.InactiveGiftCardException;
 import com.finovago.p2p.exception.InsufficientAvailableBalanceException;
 import com.finovago.p2p.exception.InvalidRefreshTokenException;
-import com.finovago.p2p.exception.MerchantNotFoundException;
 import com.finovago.p2p.exception.UnknownGiftCardException;
 import com.finovago.p2p.exception.UserAlreadyExistsException;
 
@@ -145,12 +144,6 @@ class GlobalExceptionHandlerUnitTest {
     void handleIllegalArgumentException_returns409() {
         ResponseEntity<Object> response = handler.handleIllegalArgumentException(new IllegalArgumentException("bad amount"));
         assertErrorBody(response, HttpStatus.CONFLICT, "Conflict", "bad amount");
-    }
-
-    @Test
-    void handleMerchantNotFoundException_returns404() {
-        ResponseEntity<Object> response = handler.handleMerchantNotFoundException(new MerchantNotFoundException("merchant not found"));
-        assertErrorBody(response, HttpStatus.NOT_FOUND, "Not Found", "merchant not found");
     }
 
     @Test

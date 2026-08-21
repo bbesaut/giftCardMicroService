@@ -82,6 +82,15 @@ public class RefreshTokenService {
     }
 
     @Transactional
+    public void revokeAllForUser(User user) {
+        List<RefreshToken> tokens = refreshTokenRepository.findByUserAndRevokedFalse(user);
+        tokens.forEach(RefreshToken::revoke);
+        refreshTokenRepository.saveAll(tokens);
+
+        log.info("Revoked {} active refresh token(s) for user: {}", tokens.size(), user.getEmail());
+    }
+
+    @Transactional
     public int deleteExpired(Instant cutoff) {
         List<RefreshToken> expired = refreshTokenRepository.findByExpiryDateBefore(cutoff);
         refreshTokenRepository.deleteAll(expired);

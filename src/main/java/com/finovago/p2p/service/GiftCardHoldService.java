@@ -62,7 +62,7 @@ public class GiftCardHoldService {
         Long merchantId = currentUserContext.currentMerchantId();
         String requestHash = idempotencyKeyService.hashRequest(request.giftCardCode(), request.amount().setScale(2, RoundingMode.HALF_UP).toPlainString());
 
-        Optional<HoldResponse> cached = idempotencyKeyService.claim(merchantId, idempotencyKey, requestHash, HoldResponse.class);
+        Optional<HoldResponse> cached = idempotencyKeyService.claim(merchantId, "reserve", idempotencyKey, requestHash, HoldResponse.class);
         if (cached.isPresent()) {
             log.info("Idempotency-Key {} already completed, returning cached result", idempotencyKey);
             return cached.get();
@@ -70,10 +70,10 @@ public class GiftCardHoldService {
 
         try {
             HoldResponse response = reserveWithoutIdempotency(merchantId, request);
-            idempotencyKeyService.complete(merchantId, idempotencyKey, response);
+            idempotencyKeyService.complete(merchantId, "reserve", idempotencyKey, response);
             return response;
         } catch (RuntimeException e) {
-            idempotencyKeyService.discard(merchantId, idempotencyKey);
+            idempotencyKeyService.discard(merchantId, "reserve", idempotencyKey);
             throw e;
         }
     }
@@ -102,7 +102,7 @@ public class GiftCardHoldService {
         GiftCardHold hold = new GiftCardHold(giftCard, merchantId, amount, expiresAt);
         GiftCardHold saved = giftCardHoldRepository.save(hold);
 
-        ledgerService.record(giftCard, merchantId, LedgerEntryType.HOLD_PLACED, amount, giftCard.getBalance(), saved.getId(), currentUserContext.currentUserIdOrNull());
+        ledgerService.record(giftCard, merchantId, LedgerEntryType.HOLD_PLACED, amount, giftCard.getBalance(), saved.getId(), currentUserContext.currentUserIdOrNull(), currentUserContext.isApiKeyAuthenticated());
 
         log.info("Reserved hold [{}] for {} on card [{}]", saved.getId(), amount, request.giftCardCode());
 
@@ -142,7 +142,7 @@ public class GiftCardHoldService {
         hold.capture();
         giftCardHoldRepository.save(hold);
 
-        ledgerService.record(giftCard, merchantId, LedgerEntryType.HOLD_CAPTURED, hold.getAmount(), giftCard.getBalance(), hold.getId(), currentUserContext.currentUserIdOrNull());
+        ledgerService.record(giftCard, merchantId, LedgerEntryType.HOLD_CAPTURED, hold.getAmount(), giftCard.getBalance(), hold.getId(), currentUserContext.currentUserIdOrNull(), currentUserContext.isApiKeyAuthenticated());
 
         log.info("Captured hold [{}], deducted {} from card [{}]", hold.getId(), hold.getAmount(), giftCard.getCardCode());
 
@@ -169,7 +169,7 @@ public class GiftCardHoldService {
         hold.release();
         giftCardHoldRepository.save(hold);
 
-        ledgerService.record(hold.getGiftCard(), merchantId, LedgerEntryType.HOLD_RELEASED, hold.getAmount(), hold.getGiftCard().getBalance(), hold.getId(), currentUserContext.currentUserIdOrNull());
+        ledgerService.record(hold.getGiftCard(), merchantId, LedgerEntryType.HOLD_RELEASED, hold.getAmount(), hold.getGiftCard().getBalance(), hold.getId(), currentUserContext.currentUserIdOrNull(), currentUserContext.isApiKeyAuthenticated());
 
         log.info("Released hold [{}]", hold.getId());
 

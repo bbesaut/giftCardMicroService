@@ -97,6 +97,12 @@ class GiftCardCreditServiceIntegrationTest extends AbstractIntegrationTest {
                 new UsernamePasswordAuthenticationToken(authenticatedUser, null, List.of()));
     }
 
+    private void authenticateViaApiKey() {
+        AuthenticatedUser authenticatedUser = new AuthenticatedUser("api-key:fovak_test", "MERCHANT", merchantId, null, true);
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(authenticatedUser, null, List.of()));
+    }
+
     @Test
     void should_credit_an_adjustment_with_reason_persisted_when_caller_is_human() {
         User human = userRepository.save(new User("employee-credit-test@example.com", "hashed", Role.MERCHANT, merchant, false));
@@ -119,13 +125,12 @@ class GiftCardCreditServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void should_reject_credit_when_caller_is_a_service_account() {
+    void should_reject_credit_when_caller_is_authenticated_via_api_key() {
         User human = userRepository.save(new User("employee-credit-test-2@example.com", "hashed", Role.MERCHANT, merchant, false));
         authenticateAs(human);
         giftCardService.createGiftCard(new GiftCardCreateRequest(CARD_CODE, BigDecimal.valueOf(50.0), true, LocalDate.now().plusYears(1)));
 
-        User serviceAccount = userRepository.save(new User("integration-credit-test@example.com", "hashed", Role.MERCHANT, merchant, true));
-        authenticateAs(serviceAccount);
+        authenticateViaApiKey();
 
         CreditRequest request = new CreditRequest(CARD_CODE, BigDecimal.valueOf(15.0), "Should be rejected");
 

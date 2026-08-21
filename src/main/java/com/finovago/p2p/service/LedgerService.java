@@ -32,15 +32,18 @@ public class LedgerService {
 
     /**
      * Appends a ledger row. Never call this outside the same transaction as the balance
-     * mutation it records - the two must commit or roll back together.
+     * mutation it records - the two must commit or roll back together. actorViaApiKey must be
+     * read from CurrentUserContext on the same thread that received the request - redeem's async
+     * path resolves it upfront and threads it through for exactly that reason (see
+     * GiftCardService#redeemGiftCardAsync).
      */
-    public void record(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, Long holdId, Long actorUserId) {
-        ledgerEntryRepository.save(new LedgerEntry(giftCard, merchantId, entryType, amount, balanceAfter, holdId, actorUserId));
+    public void record(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, Long holdId, Long actorUserId, boolean actorViaApiKey) {
+        ledgerEntryRepository.save(new LedgerEntry(giftCard, merchantId, entryType, amount, balanceAfter, holdId, actorUserId, null, null, actorViaApiKey));
     }
 
     /** Same as {@link #record}, but also carries a REFUND's link back to the redemption it reverses and/or an operator-supplied reason. */
-    public void record(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, Long holdId, Long actorUserId, Long relatedEntryId, String reason) {
-        ledgerEntryRepository.save(new LedgerEntry(giftCard, merchantId, entryType, amount, balanceAfter, holdId, actorUserId, relatedEntryId, reason));
+    public void record(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, Long holdId, Long actorUserId, boolean actorViaApiKey, Long relatedEntryId, String reason) {
+        ledgerEntryRepository.save(new LedgerEntry(giftCard, merchantId, entryType, amount, balanceAfter, holdId, actorUserId, relatedEntryId, reason, actorViaApiKey));
     }
 
     /** Gift cards whose stored balance disagrees with what their own ledger says it should be. */
@@ -54,10 +57,10 @@ public class LedgerService {
     }
 
     /**
-     * Batch-resolves entries' actorUserId to a display string ("SYSTEM / email" for service
-     * accounts, plain email otherwise), one query for the whole list instead of N+1.
-     * Entries whose actorUserId is missing from the result have no row in the map - callers
+     * Batch-resolves entries' actorUserId to their email, one query for the whole list instead of
+     * N+1. Entries whose actorUserId is missing from the result have no row in the map - callers
      * distinguish "no actor recorded" (null actorUserId) from "actor since deleted" that way.
+     * Entries with no actorUserId at all are resolved separately, via LedgerEntry#isActorViaApiKey.
      */
     public Map<Long, String> resolveActors(List<LedgerEntry> entries) {
         Set<Long> actorUserIds = entries.stream()
@@ -68,11 +71,7 @@ public class LedgerService {
             return Map.of();
         }
         return userRepository.findAllById(actorUserIds).stream()
-                .collect(Collectors.toMap(User::getId, LedgerService::formatActor));
-    }
-
-    private static String formatActor(User user) {
-        return user.isServiceAccount() ? "SYSTEM / " + user.getEmail() : user.getEmail();
+                .collect(Collectors.toMap(User::getId, User::getEmail));
     }
 
     /** January 1st of the furthest-out dated partition already created for gift_card_ledger. */

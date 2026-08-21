@@ -13,6 +13,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @NoArgsConstructor
@@ -36,19 +37,24 @@ public class User {
     @JoinColumn(name = "merchant_id")
     private Merchant merchant;
 
-    @Column(name = "is_service_account", nullable = false)
-    private boolean serviceAccount;
+    @Column(name = "is_owner", nullable = false)
+    private boolean owner;
+
+    @Setter
+    @Column(nullable = false)
+    private boolean active;
 
     public User(String email, String password, Role role, @Nullable Merchant merchant) {
         this(email, password, role, merchant, false);
     }
 
-    public User(String email, String password, Role role, @Nullable Merchant merchant, boolean serviceAccount) {
+    public User(String email, String password, Role role, @Nullable Merchant merchant, boolean owner) {
         this.email = email;
         this.password = password;
         this.role = role;
         this.merchant = merchant;
-        this.serviceAccount = serviceAccount;
+        this.owner = owner;
+        this.active = true;
     }
 }
 

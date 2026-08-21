@@ -2,6 +2,7 @@ package com.finovago.p2p.integration;
 
 import com.finovago.p2p.AbstractIntegrationTest;
 import com.finovago.p2p.config.PostgresTestcontainerInitializer;
+import com.finovago.p2p.dto.ApiKeyResponse;
 import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.model.Role;
@@ -36,8 +37,10 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
     private static final String EMAIL = "controller-test@example.com";
     private static final String PASSWORD = "securePassword123";
     private static final String VALID_EMAIL = "valid@example.com";
+    private static final String OWNER_EMAIL = "owner-test@example.com";
 
     private Long merchantId;
+    private Long ownerId;
 
     @Autowired
     private MockMvc mockMvc;
@@ -74,6 +77,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         merchantId = merchant.getId();
         userRepository.save(new User(EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant));
         userRepository.save(new User(VALID_EMAIL, passwordEncoder.encode(PASSWORD), Role.ADMIN, null));
+        ownerId = userRepository.save(new User(OWNER_EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant, true)).getId();
     }
 
     @Test
@@ -403,76 +407,244 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
                         .header(AUTHORIZATION, "Bearer " + adminAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"New Merchant\"}"))
-                .andExpect(status().isOk());
-
-        User createdUser = userRepository.findByEmail(newEmail).orElseThrow();
-        assertEquals(Role.MERCHANT, createdUser.getRole());
-        assertNotNull(createdUser.getMerchant());
-        assertEquals("New Merchant", createdUser.getMerchant().getName());
-    }
-
-    @Test
-    void should_addUserToExistingMerchant_and_returnAccessAndRefreshTokens() throws Exception {
-        String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
-        String newEmail = "employee@example.com";
-
-        mockMvc.perform(post("/api/v1/auth/merchants/" + merchantId + "/users")
-                        .header(AUTHORIZATION, "Bearer " + adminAccessToken)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\",\"serviceAccount\":false}"))
                 .andExpect(status().isOk())
-                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.accessToken", notNullValue()))
                 .andExpect(jsonPath("$.refreshToken", notNullValue()));
 
-        User createdUser = userRepository.findByEmail(newEmail).orElseThrow();
-        assertEquals(Role.MERCHANT, createdUser.getRole());
-        assertEquals(merchantId, createdUser.getMerchant().getId());
-        assertEquals(false, createdUser.isServiceAccount());
+        User createdOwner = userRepository.findByEmail(newEmail).orElseThrow();
+        assertEquals(Role.MERCHANT, createdOwner.getRole());
+        assertNotNull(createdOwner.getMerchant());
+        assertEquals("New Merchant", createdOwner.getMerchant().getName());
+        assertEquals(true, createdOwner.isOwner());
 
-        // The existing user for this merchant is still there too - now two users share the same merchant.
-        User existingUser = userRepository.findByEmail(EMAIL).orElseThrow();
-        assertEquals(merchantId, existingUser.getMerchant().getId());
+        // No other user is created upfront - only the owner.
+        long usersForMerchant = userRepository.findAll().stream()
+                .filter(u -> createdOwner.getMerchant().getId().equals(u.getMerchant() != null ? u.getMerchant().getId() : null))
+                .count();
+        assertEquals(1L, usersForMerchant);
     }
 
     @Test
-    void should_returnForbidden_when_addingMerchantUserAsMerchantRole() throws Exception {
-        String clientAccessToken = loginAndGetAccessToken(EMAIL, PASSWORD);
+    void should_generateApiKeyForMerchant_withoutCreatingAnyUser_when_ownerRequestsOne() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+        long usersBefore = userRepository.count();
 
-        mockMvc.perform(post("/api/v1/auth/merchants/" + merchantId + "/users")
-                        .header(AUTHORIZATION, "Bearer " + clientAccessToken)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"blocked@example.com\",\"password\":\"" + PASSWORD + "\",\"serviceAccount\":false}"))
-                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/auth/me/api-key")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.keyPrefix", notNullValue()))
+                .andExpect(jsonPath("$.apiKeySecret", notNullValue()));
+
+        assertEquals(usersBefore, userRepository.count());
     }
 
     @Test
-    void should_returnUnauthorized_when_addingMerchantUserWithoutToken() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/merchants/" + merchantId + "/users")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"anonymous@example.com\",\"password\":\"" + PASSWORD + "\",\"serviceAccount\":false}"))
-                .andExpect(status().isUnauthorized());
-    }
+    void should_authenticateWithApiKey_when_usedOnAMerchantEndpoint() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
 
-    @Test
-    void should_returnNotFound_when_addingUserToNonExistentMerchant() throws Exception {
-        String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
+        MvcResult keyResult = mockMvc.perform(post("/api/v1/auth/me/api-key")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk())
+                .andReturn();
 
-        mockMvc.perform(post("/api/v1/auth/merchants/999999/users")
-                        .header(AUTHORIZATION, "Bearer " + adminAccessToken)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"noone@example.com\",\"password\":\"" + PASSWORD + "\",\"serviceAccount\":false}"))
+        String apiKeySecret = objectMapper.readValue(keyResult.getResponse().getContentAsString(), ApiKeyResponse.class)
+                .apiKeySecret();
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/giftcards/lookup/NON-EXISTENT-CODE")
+                        .header("X-Api-Key", apiKeySecret))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    void should_returnConflict_when_addingMerchantUserWithExistingEmail() throws Exception {
-        String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
+    void should_rotateApiKey_invalidatingThePreviousSecret_when_ownerGeneratesAgain() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
 
-        mockMvc.perform(post("/api/v1/auth/merchants/" + merchantId + "/users")
+        MvcResult firstResult = mockMvc.perform(post("/api/v1/auth/me/api-key")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        String firstSecret = objectMapper.readValue(firstResult.getResponse().getContentAsString(), ApiKeyResponse.class)
+                .apiKeySecret();
+
+        mockMvc.perform(post("/api/v1/auth/me/api-key")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/giftcards/lookup/NON-EXISTENT-CODE")
+                        .header("X-Api-Key", firstSecret))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_revokeApiKey_when_ownerCallsRevoke() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+
+        MvcResult keyResult = mockMvc.perform(post("/api/v1/auth/me/api-key")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        String apiKeySecret = objectMapper.readValue(keyResult.getResponse().getContentAsString(), ApiKeyResponse.class)
+                .apiKeySecret();
+
+        mockMvc.perform(post("/api/v1/auth/me/api-key/revoke")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(false));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/giftcards/lookup/NON-EXISTENT-CODE")
+                        .header("X-Api-Key", apiKeySecret))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_returnInactiveStatus_when_revokingApiKeyThatDoesNotExist() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/me/api-key/revoke")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(false));
+    }
+
+    @Test
+    void should_returnForbidden_when_nonOwnerRequestsApiKey() throws Exception {
+        String clientAccessToken = loginAndGetAccessToken(EMAIL, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/me/api-key")
+                        .header(AUTHORIZATION, "Bearer " + clientAccessToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void should_selfServiceAddUser_and_returnAccessAndRefreshTokens_when_callerIsOwner() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+        String newEmail = "self-service-employee@example.com";
+
+        mockMvc.perform(post("/api/v1/auth/me/users")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken", notNullValue()))
+                .andExpect(jsonPath("$.refreshToken", notNullValue()));
+
+        User createdUser = userRepository.findByEmail(newEmail).orElseThrow();
+        assertEquals(merchantId, createdUser.getMerchant().getId());
+        assertEquals(false, createdUser.isOwner());
+    }
+
+    @Test
+    void should_returnForbidden_when_selfServiceAddUser_callerIsNotOwner() throws Exception {
+        String clientAccessToken = loginAndGetAccessToken(EMAIL, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/me/users")
+                        .header(AUTHORIZATION, "Bearer " + clientAccessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"blocked@example.com\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void should_returnUnauthorized_when_selfServiceAddUserWithoutToken() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/me/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"anonymous@example.com\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_deactivateUserAndRevokeTokens_when_callerIsOwner() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+        Long targetUserId = userRepository.findByEmail(EMAIL).orElseThrow().getId();
+
+        mockMvc.perform(post("/api/v1/auth/me/users/" + targetUserId + "/deactivate")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(false));
+
+        User deactivated = userRepository.findByEmail(EMAIL).orElseThrow();
+        assertEquals(false, deactivated.isActive());
+
+        // Deactivated user can no longer log in.
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_reactivateUser_when_callerIsOwner() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+        Long targetUserId = userRepository.findByEmail(EMAIL).orElseThrow().getId();
+
+        mockMvc.perform(post("/api/v1/auth/me/users/" + targetUserId + "/deactivate")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/auth/me/users/" + targetUserId + "/activate")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(true));
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void should_returnConflict_when_ownerDeactivatesSelf() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/me/users/" + ownerId + "/deactivate")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void should_revokeApiKey_when_ownerNeedsToCutLeakedCredentials() throws Exception {
+        String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
+        String newOwnerEmail = "svc-deactivate-owner@example.com";
+
+        mockMvc.perform(post("/api/v1/auth/register")
                         .header(AUTHORIZATION, "Bearer " + adminAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\",\"serviceAccount\":false}"))
-                .andExpect(status().isConflict());
+                        .content("{\"email\":\"" + newOwnerEmail + "\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"Svc Deactivate Merchant\"}"))
+                .andExpect(status().isOk());
+
+        String newOwnerAccessToken = loginAndGetAccessToken(newOwnerEmail, PASSWORD);
+        MvcResult keyResult = mockMvc.perform(post("/api/v1/auth/me/api-key")
+                        .header(AUTHORIZATION, "Bearer " + newOwnerAccessToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        String apiKeySecret = objectMapper.readValue(keyResult.getResponse().getContentAsString(), ApiKeyResponse.class)
+                .apiKeySecret();
+
+        mockMvc.perform(post("/api/v1/auth/me/api-key/revoke")
+                        .header(AUTHORIZATION, "Bearer " + newOwnerAccessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(false));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/giftcards/lookup/NON-EXISTENT-CODE")
+                        .header("X-Api-Key", apiKeySecret))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_returnNotFound_when_deactivatingUserNotInCallersMerchant() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/me/users/999999/deactivate")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void should_returnForbidden_when_deactivatingUser_callerIsNotOwner() throws Exception {
+        String clientAccessToken = loginAndGetAccessToken(EMAIL, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/me/users/" + ownerId + "/deactivate")
+                        .header(AUTHORIZATION, "Bearer " + clientAccessToken))
+                .andExpect(status().isForbidden());
     }
 }
