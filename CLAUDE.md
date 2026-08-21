@@ -620,6 +620,12 @@ The correlation ID is **not** duplicated in the body — it is already returned 
 - Write commit messages like a human, not a report: short sentences, no filler.
 - Use clear, terse bullet points (dashes) for multi-line messages.
 - No long prose, no restating the diff line by line.
+- **Keep history atomic and logical** — one commit per independent concern, not one commit per work session. Before committing multi-part work, split it: each commit should be independently revertible and independently reviewable. Concretely, put in **separate commits**:
+  - An additive/reversible change vs. a destructive/irreversible one (e.g. adding a new table vs. `DROP COLUMN`) — reverting the feature must never require fighting a dropped column too.
+  - A backwards-compatible change vs. a breaking one (e.g. a new endpoint vs. an existing endpoint's response shape changing) — breaking changes should be easy to spot in the log, not buried inside a bigger feature commit.
+  - Unrelated fixes found along the way (a copy-paste error message, a missing Swagger route, an actual bug with a migration) — each should be revertible/bisectable on its own; a real bug fix with a schema migration especially should never share a commit with cosmetic tweaks.
+  - A schema/migration change vs. the application code that merely uses it, when the migration is conditioned on external state (e.g. "only once prod has no real data") — keep it separable so it isn't accidentally shipped early.
+  - When you're not sure whether two changes belong together, explain the reasoning (convention/practice being applied, e.g. "destructive migrations get their own commit so they're independently revertible") before committing, so the user can weigh in — don't just silently bundle everything into one commit at the end of a session.
 
 ## ⛔ DO NOT
 - Modify files in `src/main/resources/db/migration/` directly
