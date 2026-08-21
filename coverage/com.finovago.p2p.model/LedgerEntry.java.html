@@ -59,28 +59,39 @@ public class LedgerEntry {
     @Column(name = &quot;reason&quot;, length = 500)
     private String reason;
 
+    // True when an API key (not a specific User) made this call - actorUserId is then always null.
+    // Kept apart from &quot;actorUserId == null&quot; alone so LedgerService can tell &quot;SYSTEM&quot; (this flag)
+    // from a genuinely unattributed legacy row (&quot;Unknown&quot;, predates this field entirely).
+    @Column(name = &quot;actor_via_api_key&quot;, nullable = false)
+    private boolean actorViaApiKey;
+
     @Column(name = &quot;created_at&quot;, nullable = false)
     private LocalDateTime createdAt;
 
     public LedgerEntry(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, @Nullable Long holdId) {
-<span class="fc" id="L66">        this(giftCard, merchantId, entryType, amount, balanceAfter, holdId, null);</span>
-<span class="fc" id="L67">    }</span>
+<span class="fc" id="L72">        this(giftCard, merchantId, entryType, amount, balanceAfter, holdId, null);</span>
+<span class="fc" id="L73">    }</span>
 
     public LedgerEntry(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, @Nullable Long holdId, @Nullable Long actorUserId) {
-<span class="fc" id="L70">        this(giftCard, merchantId, entryType, amount, balanceAfter, holdId, actorUserId, null, null);</span>
-<span class="fc" id="L71">    }</span>
+<span class="fc" id="L76">        this(giftCard, merchantId, entryType, amount, balanceAfter, holdId, actorUserId, null, null);</span>
+<span class="fc" id="L77">    }</span>
 
-<span class="fc" id="L73">    public LedgerEntry(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, @Nullable Long holdId, @Nullable Long actorUserId, @Nullable Long relatedEntryId, @Nullable String reason) {</span>
-<span class="fc" id="L74">        this.giftCard = giftCard;</span>
-<span class="fc" id="L75">        this.merchantId = merchantId;</span>
-<span class="fc" id="L76">        this.entryType = entryType;</span>
-<span class="fc" id="L77">        this.amount = amount;</span>
-<span class="fc" id="L78">        this.balanceAfter = balanceAfter;</span>
-<span class="fc" id="L79">        this.holdId = holdId;</span>
-<span class="fc" id="L80">        this.actorUserId = actorUserId;</span>
-<span class="fc" id="L81">        this.relatedEntryId = relatedEntryId;</span>
-<span class="fc" id="L82">        this.reason = reason;</span>
-<span class="fc" id="L83">        this.createdAt = LocalDateTime.now();</span>
-<span class="fc" id="L84">    }</span>
+    public LedgerEntry(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, @Nullable Long holdId, @Nullable Long actorUserId, @Nullable Long relatedEntryId, @Nullable String reason) {
+<span class="fc" id="L80">        this(giftCard, merchantId, entryType, amount, balanceAfter, holdId, actorUserId, relatedEntryId, reason, false);</span>
+<span class="fc" id="L81">    }</span>
+
+<span class="fc" id="L83">    public LedgerEntry(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, @Nullable Long holdId, @Nullable Long actorUserId, @Nullable Long relatedEntryId, @Nullable String reason, boolean actorViaApiKey) {</span>
+<span class="fc" id="L84">        this.giftCard = giftCard;</span>
+<span class="fc" id="L85">        this.merchantId = merchantId;</span>
+<span class="fc" id="L86">        this.entryType = entryType;</span>
+<span class="fc" id="L87">        this.amount = amount;</span>
+<span class="fc" id="L88">        this.balanceAfter = balanceAfter;</span>
+<span class="fc" id="L89">        this.holdId = holdId;</span>
+<span class="fc" id="L90">        this.actorUserId = actorUserId;</span>
+<span class="fc" id="L91">        this.relatedEntryId = relatedEntryId;</span>
+<span class="fc" id="L92">        this.reason = reason;</span>
+<span class="fc" id="L93">        this.actorViaApiKey = actorViaApiKey;</span>
+<span class="fc" id="L94">        this.createdAt = LocalDateTime.now();</span>
+<span class="fc" id="L95">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

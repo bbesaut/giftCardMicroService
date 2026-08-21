@@ -64,7 +64,7 @@ public class GiftCardRefundService {
 <span class="fc" id="L64">                request.amount().setScale(2, RoundingMode.HALF_UP).toPlainString(),</span>
 <span class="fc" id="L65">                String.valueOf(request.redemptionLedgerEntryId()));</span>
 
-<span class="fc" id="L67">        Optional&lt;RefundResponse&gt; cached = idempotencyKeyService.claim(merchantId, idempotencyKey, requestHash, RefundResponse.class);</span>
+<span class="fc" id="L67">        Optional&lt;RefundResponse&gt; cached = idempotencyKeyService.claim(merchantId, &quot;refund&quot;, idempotencyKey, requestHash, RefundResponse.class);</span>
 <span class="fc bfc" id="L68" title="All 2 branches covered.">        if (cached.isPresent()) {</span>
 <span class="fc" id="L69">            log.info(&quot;Idempotency-Key {} already completed, returning cached result&quot;, idempotencyKey);</span>
 <span class="fc" id="L70">            return cached.get();</span>
@@ -72,10 +72,10 @@ public class GiftCardRefundService {
 
         try {
 <span class="fc" id="L74">            RefundResponse response = refundWithoutIdempotency(merchantId, request);</span>
-<span class="fc" id="L75">            idempotencyKeyService.complete(merchantId, idempotencyKey, response);</span>
+<span class="fc" id="L75">            idempotencyKeyService.complete(merchantId, &quot;refund&quot;, idempotencyKey, response);</span>
 <span class="fc" id="L76">            return response;</span>
 <span class="fc" id="L77">        } catch (RuntimeException e) {</span>
-<span class="fc" id="L78">            idempotencyKeyService.discard(merchantId, idempotencyKey);</span>
+<span class="fc" id="L78">            idempotencyKeyService.discard(merchantId, &quot;refund&quot;, idempotencyKey);</span>
 <span class="fc" id="L79">            throw e;</span>
         }
     }
@@ -108,7 +108,7 @@ public class GiftCardRefundService {
 <span class="fc" id="L108">        giftCardRepository.save(giftCard);</span>
 
 <span class="fc" id="L110">        ledgerService.record(giftCard, merchantId, LedgerEntryType.REFUND, amount, giftCard.getBalance(), null,</span>
-<span class="fc" id="L111">                currentUserContext.currentUserIdOrNull(), request.redemptionLedgerEntryId(), request.reason());</span>
+<span class="fc" id="L111">                currentUserContext.currentUserIdOrNull(), currentUserContext.isApiKeyAuthenticated(), request.redemptionLedgerEntryId(), request.reason());</span>
 
 <span class="fc" id="L113">        log.info(&quot;Refunded {} to card [{}] against ledger entry [{}], new balance {}&quot;, amount, request.giftCardCode(), request.redemptionLedgerEntryId(), giftCard.getBalance());</span>
 

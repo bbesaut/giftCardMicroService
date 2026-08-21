@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AuthService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.service</a> &gt; <span class="el_source">AuthService.java</span></div><h1>AuthService.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.service;
 
-import java.security.SecureRandom;
-import java.util.Base64;
 import java.util.List;
 
 import org.springframework.security.authentication.BadCredentialsException;
@@ -9,11 +7,12 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.finovago.p2p.dto.AddMerchantUserRequest;
+import com.finovago.p2p.dto.ApiKeyResponse;
+import com.finovago.p2p.dto.ApiKeyStatusResponse;
 import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
-import com.finovago.p2p.dto.RegisterResponse;
 import com.finovago.p2p.dto.UserStatusResponse;
 import com.finovago.p2p.exception.InvalidRefreshTokenException;
 import com.finovago.p2p.exception.OwnerPrivilegeRequiredException;
@@ -29,29 +28,30 @@ import com.finovago.p2p.security.JwtService;
 
 import lombok.extern.slf4j.Slf4j;
 
-<span class="fc" id="L32">@Slf4j</span>
+<span class="fc" id="L31">@Slf4j</span>
 @Service
 public class AuthService {
-
-<span class="fc" id="L36">    private static final SecureRandom SECURE_RANDOM = new SecureRandom();</span>
 
     private final UserRepository userRepository;
     private final MerchantRepository merchantRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
+    private final ApiKeyService apiKeyService;
 
     public AuthService(
             UserRepository userRepository,
             MerchantRepository merchantRepository,
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
-<span class="fc" id="L49">            RefreshTokenService refreshTokenService) {</span>
-<span class="fc" id="L50">        this.userRepository = userRepository;</span>
-<span class="fc" id="L51">        this.merchantRepository = merchantRepository;</span>
-<span class="fc" id="L52">        this.passwordEncoder = passwordEncoder;</span>
-<span class="fc" id="L53">        this.jwtService = jwtService;</span>
-<span class="fc" id="L54">        this.refreshTokenService = refreshTokenService;</span>
+            RefreshTokenService refreshTokenService,
+<span class="fc" id="L48">            ApiKeyService apiKeyService) {</span>
+<span class="fc" id="L49">        this.userRepository = userRepository;</span>
+<span class="fc" id="L50">        this.merchantRepository = merchantRepository;</span>
+<span class="fc" id="L51">        this.passwordEncoder = passwordEncoder;</span>
+<span class="fc" id="L52">        this.jwtService = jwtService;</span>
+<span class="fc" id="L53">        this.refreshTokenService = refreshTokenService;</span>
+<span class="fc" id="L54">        this.apiKeyService = apiKeyService;</span>
 <span class="fc" id="L55">    }</span>
 
     public AuthResponse login(LoginRequest request) {
@@ -105,7 +105,7 @@ public class AuthService {
 <span class="fc" id="L105">        }</span>
 <span class="fc" id="L106">    }</span>
 
-    public RegisterResponse register(RegisterRequest request) {
+    public AuthResponse register(RegisterRequest request) {
 <span class="fc bfc" id="L109" title="All 2 branches covered.">        if (userRepository.findByEmail(request.email()).isPresent()) {</span>
 <span class="fc" id="L110">            log.warn(&quot;Registration failed - email already exists: {}&quot;, request.email());</span>
 <span class="fc" id="L111">            throw new UserAlreadyExistsException(&quot;Email already registered&quot;);</span>
@@ -114,87 +114,80 @@ public class AuthService {
 <span class="fc" id="L114">        Merchant merchant = merchantRepository.save(new Merchant(request.merchantName(), request.email()));</span>
 
         // The submitted credentials belong to the human owner: the account that can log in,
-        // manage the merchant's other users, and use owner-only endpoints like /credit.
-<span class="fc" id="L118">        User owner = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, merchant, false, true);</span>
-<span class="fc" id="L119">        userRepository.save(owner);</span>
+        // manage the merchant's other users, and use owner-only endpoints like /credit. Automated
+        // integration access is a separate concept entirely (API key, see ApiKeyService) - the
+        // owner requests one explicitly via POST /me/api-key whenever they actually need it.
+<span class="fc" id="L120">        User owner = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, merchant, true);</span>
+<span class="fc" id="L121">        userRepository.save(owner);</span>
 
-        // A service account (for the merchant's own backend integration) is created alongside it,
-        // so the merchant isn't stuck with only an owner account for API-key-style automated calls.
-<span class="fc" id="L123">        String serviceAccountEmail = serviceAccountEmailFor(merchant.getId());</span>
-<span class="fc" id="L124">        String serviceAccountPassword = generateServiceAccountPassword();</span>
-<span class="fc" id="L125">        User serviceAccount = new User(serviceAccountEmail, passwordEncoder.encode(serviceAccountPassword), Role.MERCHANT, merchant, true, false);</span>
-<span class="fc" id="L126">        userRepository.save(serviceAccount);</span>
+<span class="fc" id="L123">        log.info(&quot;Merchant registered successfully: merchantId: {}, owner: {}&quot;, merchant.getId(), owner.getEmail());</span>
 
-<span class="fc" id="L128">        log.info(&quot;Merchant registered successfully: merchantId: {}, owner: {}, serviceAccount: {}&quot;,</span>
-<span class="fc" id="L129">                merchant.getId(), owner.getEmail(), serviceAccountEmail);</span>
+<span class="fc" id="L125">        return issueTokens(owner);</span>
+    }
 
-<span class="fc" id="L131">        return new RegisterResponse(issueTokens(owner), serviceAccountEmail, serviceAccountPassword);</span>
+    /** Generates the merchant's first API key, or rotates it (invalidating the old one) if it already has one. */
+    public ApiKeyResponse generateApiKey(Long callerId) {
+<span class="fc" id="L130">        User caller = requireOwner(callerId);</span>
+<span class="fc" id="L131">        return apiKeyService.generateOrRotate(caller.getMerchant());</span>
+    }
+
+    public ApiKeyStatusResponse revokeApiKey(Long callerId) {
+<span class="fc" id="L135">        User caller = requireOwner(callerId);</span>
+<span class="fc" id="L136">        return apiKeyService.revoke(caller.getMerchant());</span>
     }
 
     public AuthResponse addUserToOwnMerchant(Long callerId, AddMerchantUserRequest request) {
-<span class="fc" id="L135">        User caller = requireOwner(callerId);</span>
+<span class="fc" id="L140">        User caller = requireOwner(callerId);</span>
 
-<span class="pc bpc" id="L137" title="1 of 2 branches missed.">        if (userRepository.findByEmail(request.email()).isPresent()) {</span>
-<span class="nc" id="L138">            log.warn(&quot;Adding merchant user failed - email already exists: {}&quot;, request.email());</span>
-<span class="nc" id="L139">            throw new UserAlreadyExistsException(&quot;Email already registered&quot;);</span>
+<span class="pc bpc" id="L142" title="1 of 2 branches missed.">        if (userRepository.findByEmail(request.email()).isPresent()) {</span>
+<span class="nc" id="L143">            log.warn(&quot;Adding merchant user failed - email already exists: {}&quot;, request.email());</span>
+<span class="nc" id="L144">            throw new UserAlreadyExistsException(&quot;Email already registered&quot;);</span>
         }
 
-<span class="fc" id="L142">        User user = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, caller.getMerchant());</span>
-<span class="fc" id="L143">        userRepository.save(user);</span>
-<span class="fc" id="L144">        log.info(&quot;Employee self-added by owner {} to merchantId: {}&quot;, caller.getEmail(), caller.getMerchant().getId());</span>
-<span class="fc" id="L145">        return issueTokens(user);</span>
+<span class="fc" id="L147">        User user = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, caller.getMerchant());</span>
+<span class="fc" id="L148">        userRepository.save(user);</span>
+<span class="fc" id="L149">        log.info(&quot;Employee self-added by owner {} to merchantId: {}&quot;, caller.getEmail(), caller.getMerchant().getId());</span>
+<span class="fc" id="L150">        return issueTokens(user);</span>
     }
 
     public UserStatusResponse setUserActive(Long callerId, Long userId, boolean active) {
-<span class="fc" id="L149">        User caller = requireOwner(callerId);</span>
+<span class="fc" id="L154">        User caller = requireOwner(callerId);</span>
 
-<span class="fc bfc" id="L151" title="All 4 branches covered.">        if (!active &amp;&amp; userId.equals(caller.getId())) {</span>
-<span class="fc" id="L152">            throw new SelfDeactivationException(&quot;An owner cannot deactivate their own account&quot;);</span>
+<span class="fc bfc" id="L156" title="All 4 branches covered.">        if (!active &amp;&amp; userId.equals(caller.getId())) {</span>
+<span class="fc" id="L157">            throw new SelfDeactivationException(&quot;An owner cannot deactivate their own account&quot;);</span>
         }
 
-<span class="fc" id="L155">        User target = userRepository.findByIdAndMerchant_Id(userId, caller.getMerchant().getId())</span>
-<span class="fc" id="L156">                .orElseThrow(() -&gt; new UserNotFoundException(&quot;User not found: &quot; + userId));</span>
+<span class="fc" id="L160">        User target = userRepository.findByIdAndMerchant_Id(userId, caller.getMerchant().getId())</span>
+<span class="fc" id="L161">                .orElseThrow(() -&gt; new UserNotFoundException(&quot;User not found: &quot; + userId));</span>
 
-<span class="fc" id="L158">        target.setActive(active);</span>
-<span class="fc" id="L159">        userRepository.save(target);</span>
+<span class="fc" id="L163">        target.setActive(active);</span>
+<span class="fc" id="L164">        userRepository.save(target);</span>
 
-<span class="fc bfc" id="L161" title="All 2 branches covered.">        if (!active) {</span>
-<span class="fc" id="L162">            refreshTokenService.revokeAllForUser(target);</span>
+<span class="fc bfc" id="L166" title="All 2 branches covered.">        if (!active) {</span>
+<span class="fc" id="L167">            refreshTokenService.revokeAllForUser(target);</span>
         }
 
-<span class="fc" id="L165">        log.info(&quot;User {} (id: {}) {} by owner {}&quot;, target.getEmail(), target.getId(),</span>
-<span class="fc bfc" id="L166" title="All 2 branches covered.">                active ? &quot;reactivated&quot; : &quot;deactivated&quot;, caller.getEmail());</span>
+<span class="fc" id="L170">        log.info(&quot;User {} (id: {}) {} by owner {}&quot;, target.getEmail(), target.getId(),</span>
+<span class="fc bfc" id="L171" title="All 2 branches covered.">                active ? &quot;reactivated&quot; : &quot;deactivated&quot;, caller.getEmail());</span>
 
-<span class="fc" id="L168">        return new UserStatusResponse(target.getId(), target.getEmail(), target.isActive());</span>
+<span class="fc" id="L173">        return new UserStatusResponse(target.getId(), target.getEmail(), target.isActive());</span>
     }
 
     private User requireOwner(Long callerId) {
-<span class="pc bpc" id="L172" title="1 of 2 branches missed.">        User caller = callerId == null ? null : userRepository.findById(callerId).orElse(null);</span>
-<span class="pc bpc" id="L173" title="3 of 8 branches missed.">        if (caller == null || !caller.isOwner() || caller.isServiceAccount() || !caller.isActive()) {</span>
-<span class="fc" id="L174">            throw new OwnerPrivilegeRequiredException(&quot;Only the merchant's owner account can manage other users&quot;);</span>
+<span class="pc bpc" id="L177" title="1 of 2 branches missed.">        User caller = callerId == null ? null : userRepository.findById(callerId).orElse(null);</span>
+<span class="pc bpc" id="L178" title="2 of 6 branches missed.">        if (caller == null || !caller.isOwner() || !caller.isActive()) {</span>
+<span class="fc" id="L179">            throw new OwnerPrivilegeRequiredException(&quot;Only the merchant's owner account can perform this action&quot;);</span>
         }
-<span class="fc" id="L176">        return caller;</span>
-    }
-
-    private String serviceAccountEmailFor(Long merchantId) {
-        // Hosted under our own domain, not the merchant's - it's our credential to manage, not a
-        // mailbox that should exist inside the merchant's own company namespace.
-<span class="fc" id="L182">        return &quot;finovago_service_account+&quot; + merchantId + &quot;@service.finovago.com&quot;;</span>
-    }
-
-    private String generateServiceAccountPassword() {
-<span class="fc" id="L186">        byte[] randomBytes = new byte[24];</span>
-<span class="fc" id="L187">        SECURE_RANDOM.nextBytes(randomBytes);</span>
-<span class="fc" id="L188">        return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);</span>
+<span class="fc" id="L181">        return caller;</span>
     }
 
     private AuthResponse issueTokens(User user) {
-<span class="fc" id="L192">        List&lt;String&gt; roles = List.of(user.getRole().name());</span>
-<span class="fc bfc" id="L193" title="All 2 branches covered.">        Long merchantId = user.getMerchant() != null ? user.getMerchant().getId() : null;</span>
-<span class="fc" id="L194">        String accessToken = jwtService.generateToken(user.getEmail(), roles, merchantId, user.getId());</span>
-<span class="fc" id="L195">        String refreshToken = refreshTokenService.createRefreshToken(user);</span>
-<span class="fc" id="L196">        log.debug(&quot;New access and refresh tokens generated for user: {}&quot;, user.getEmail());</span>
-<span class="fc" id="L197">        return new AuthResponse(accessToken, refreshToken);</span>
+<span class="fc" id="L185">        List&lt;String&gt; roles = List.of(user.getRole().name());</span>
+<span class="fc bfc" id="L186" title="All 2 branches covered.">        Long merchantId = user.getMerchant() != null ? user.getMerchant().getId() : null;</span>
+<span class="fc" id="L187">        String accessToken = jwtService.generateToken(user.getEmail(), roles, merchantId, user.getId());</span>
+<span class="fc" id="L188">        String refreshToken = refreshTokenService.createRefreshToken(user);</span>
+<span class="fc" id="L189">        log.debug(&quot;New access and refresh tokens generated for user: {}&quot;, user.getEmail());</span>
+<span class="fc" id="L190">        return new AuthResponse(accessToken, refreshToken);</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

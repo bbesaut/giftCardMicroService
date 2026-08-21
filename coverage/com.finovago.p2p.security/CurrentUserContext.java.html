@@ -23,12 +23,17 @@ import org.springframework.stereotype.Component;
 <span class="fc" id="L23">        return currentUser().userId();</span>
     }
 
+    /** Whether the current request authenticated via an API key rather than a JWT. */
+    public boolean isApiKeyAuthenticated() {
+<span class="fc" id="L28">        return currentUser().apiKey();</span>
+    }
+
     private AuthenticatedUser currentUser() {
-<span class="fc" id="L27">        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();</span>
-<span class="pc bpc" id="L28" title="1 of 2 branches missed.">        if (!(principal instanceof AuthenticatedUser authenticatedUser)) {</span>
-<span class="nc" id="L29">            throw new IllegalStateException(&quot;No authenticated user in security context&quot;);</span>
+<span class="fc" id="L32">        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();</span>
+<span class="pc bpc" id="L33" title="1 of 2 branches missed.">        if (!(principal instanceof AuthenticatedUser authenticatedUser)) {</span>
+<span class="nc" id="L34">            throw new IllegalStateException(&quot;No authenticated user in security context&quot;);</span>
         }
-<span class="fc" id="L31">        return authenticatedUser;</span>
+<span class="fc" id="L36">        return authenticatedUser;</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

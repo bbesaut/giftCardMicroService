@@ -62,7 +62,7 @@ public class GiftCardHoldService {
 <span class="fc" id="L62">        Long merchantId = currentUserContext.currentMerchantId();</span>
 <span class="fc" id="L63">        String requestHash = idempotencyKeyService.hashRequest(request.giftCardCode(), request.amount().setScale(2, RoundingMode.HALF_UP).toPlainString());</span>
 
-<span class="fc" id="L65">        Optional&lt;HoldResponse&gt; cached = idempotencyKeyService.claim(merchantId, idempotencyKey, requestHash, HoldResponse.class);</span>
+<span class="fc" id="L65">        Optional&lt;HoldResponse&gt; cached = idempotencyKeyService.claim(merchantId, &quot;reserve&quot;, idempotencyKey, requestHash, HoldResponse.class);</span>
 <span class="fc bfc" id="L66" title="All 2 branches covered.">        if (cached.isPresent()) {</span>
 <span class="fc" id="L67">            log.info(&quot;Idempotency-Key {} already completed, returning cached result&quot;, idempotencyKey);</span>
 <span class="fc" id="L68">            return cached.get();</span>
@@ -70,10 +70,10 @@ public class GiftCardHoldService {
 
         try {
 <span class="fc" id="L72">            HoldResponse response = reserveWithoutIdempotency(merchantId, request);</span>
-<span class="fc" id="L73">            idempotencyKeyService.complete(merchantId, idempotencyKey, response);</span>
+<span class="fc" id="L73">            idempotencyKeyService.complete(merchantId, &quot;reserve&quot;, idempotencyKey, response);</span>
 <span class="fc" id="L74">            return response;</span>
 <span class="fc" id="L75">        } catch (RuntimeException e) {</span>
-<span class="fc" id="L76">            idempotencyKeyService.discard(merchantId, idempotencyKey);</span>
+<span class="fc" id="L76">            idempotencyKeyService.discard(merchantId, &quot;reserve&quot;, idempotencyKey);</span>
 <span class="fc" id="L77">            throw e;</span>
         }
     }
@@ -102,7 +102,7 @@ public class GiftCardHoldService {
 <span class="fc" id="L102">        GiftCardHold hold = new GiftCardHold(giftCard, merchantId, amount, expiresAt);</span>
 <span class="fc" id="L103">        GiftCardHold saved = giftCardHoldRepository.save(hold);</span>
 
-<span class="fc" id="L105">        ledgerService.record(giftCard, merchantId, LedgerEntryType.HOLD_PLACED, amount, giftCard.getBalance(), saved.getId(), currentUserContext.currentUserIdOrNull());</span>
+<span class="fc" id="L105">        ledgerService.record(giftCard, merchantId, LedgerEntryType.HOLD_PLACED, amount, giftCard.getBalance(), saved.getId(), currentUserContext.currentUserIdOrNull(), currentUserContext.isApiKeyAuthenticated());</span>
 
 <span class="fc" id="L107">        log.info(&quot;Reserved hold [{}] for {} on card [{}]&quot;, saved.getId(), amount, request.giftCardCode());</span>
 
@@ -142,7 +142,7 @@ public class GiftCardHoldService {
 <span class="fc" id="L142">        hold.capture();</span>
 <span class="fc" id="L143">        giftCardHoldRepository.save(hold);</span>
 
-<span class="fc" id="L145">        ledgerService.record(giftCard, merchantId, LedgerEntryType.HOLD_CAPTURED, hold.getAmount(), giftCard.getBalance(), hold.getId(), currentUserContext.currentUserIdOrNull());</span>
+<span class="fc" id="L145">        ledgerService.record(giftCard, merchantId, LedgerEntryType.HOLD_CAPTURED, hold.getAmount(), giftCard.getBalance(), hold.getId(), currentUserContext.currentUserIdOrNull(), currentUserContext.isApiKeyAuthenticated());</span>
 
 <span class="fc" id="L147">        log.info(&quot;Captured hold [{}], deducted {} from card [{}]&quot;, hold.getId(), hold.getAmount(), giftCard.getCardCode());</span>
 
@@ -169,7 +169,7 @@ public class GiftCardHoldService {
 <span class="fc" id="L169">        hold.release();</span>
 <span class="fc" id="L170">        giftCardHoldRepository.save(hold);</span>
 
-<span class="fc" id="L172">        ledgerService.record(hold.getGiftCard(), merchantId, LedgerEntryType.HOLD_RELEASED, hold.getAmount(), hold.getGiftCard().getBalance(), hold.getId(), currentUserContext.currentUserIdOrNull());</span>
+<span class="fc" id="L172">        ledgerService.record(hold.getGiftCard(), merchantId, LedgerEntryType.HOLD_RELEASED, hold.getAmount(), hold.getGiftCard().getBalance(), hold.getId(), currentUserContext.currentUserIdOrNull(), currentUserContext.isApiKeyAuthenticated());</span>
 
 <span class="fc" id="L174">        log.info(&quot;Released hold [{}]&quot;, hold.getId());</span>
 

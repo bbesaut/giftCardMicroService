@@ -28,6 +28,9 @@ public class IdempotencyKey {
     @Column(name = &quot;idempotency_key&quot;, nullable = false)
     private String idempotencyKey;
 
+    @Column(nullable = false, length = 50)
+    private String endpoint;
+
     @Column(name = &quot;request_hash&quot;, nullable = false)
     private String requestHash;
 
@@ -44,26 +47,27 @@ public class IdempotencyKey {
     @Column(name = &quot;expires_at&quot;, nullable = false)
     private LocalDateTime expiresAt;
 
-<span class="fc" id="L47">    public IdempotencyKey(Long merchantId, String idempotencyKey, String requestHash, LocalDateTime expiresAt) {</span>
-<span class="fc" id="L48">        this.merchantId = merchantId;</span>
-<span class="fc" id="L49">        this.idempotencyKey = idempotencyKey;</span>
-<span class="fc" id="L50">        this.requestHash = requestHash;</span>
-<span class="fc" id="L51">        this.status = IdempotencyStatus.IN_PROGRESS;</span>
-<span class="fc" id="L52">        this.createdAt = LocalDateTime.now();</span>
-<span class="fc" id="L53">        this.expiresAt = expiresAt;</span>
-<span class="fc" id="L54">    }</span>
+<span class="fc" id="L50">    public IdempotencyKey(Long merchantId, String idempotencyKey, String endpoint, String requestHash, LocalDateTime expiresAt) {</span>
+<span class="fc" id="L51">        this.merchantId = merchantId;</span>
+<span class="fc" id="L52">        this.idempotencyKey = idempotencyKey;</span>
+<span class="fc" id="L53">        this.endpoint = endpoint;</span>
+<span class="fc" id="L54">        this.requestHash = requestHash;</span>
+<span class="fc" id="L55">        this.status = IdempotencyStatus.IN_PROGRESS;</span>
+<span class="fc" id="L56">        this.createdAt = LocalDateTime.now();</span>
+<span class="fc" id="L57">        this.expiresAt = expiresAt;</span>
+<span class="fc" id="L58">    }</span>
 
     public boolean matchesRequest(String requestHash) {
-<span class="fc" id="L57">        return this.requestHash.equals(requestHash);</span>
+<span class="fc" id="L61">        return this.requestHash.equals(requestHash);</span>
     }
 
     public boolean isInProgress() {
-<span class="fc bfc" id="L61" title="All 2 branches covered.">        return this.status == IdempotencyStatus.IN_PROGRESS;</span>
+<span class="fc bfc" id="L65" title="All 2 branches covered.">        return this.status == IdempotencyStatus.IN_PROGRESS;</span>
     }
 
     public void complete(String responseBody) {
-<span class="fc" id="L65">        this.status = IdempotencyStatus.COMPLETED;</span>
-<span class="fc" id="L66">        this.responseBody = responseBody;</span>
-<span class="fc" id="L67">    }</span>
+<span class="fc" id="L69">        this.status = IdempotencyStatus.COMPLETED;</span>
+<span class="fc" id="L70">        this.responseBody = responseBody;</span>
+<span class="fc" id="L71">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

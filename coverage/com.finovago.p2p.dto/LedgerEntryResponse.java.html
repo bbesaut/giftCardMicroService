@@ -22,7 +22,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
     @Schema(description = &quot;Timestamp at which this entry was recorded&quot;, example = &quot;2026-07-23T15:30:00&quot;)
     LocalDateTime createdAt,
 
-    @Schema(description = &quot;Who triggered this operation: the user's email (\&quot;SYSTEM / email\&quot; for a service account), \&quot;Deleted user\&quot; if the account no longer exists, or \&quot;Unknown\&quot; for entries recorded before this field existed.&quot;, example = &quot;user@example.com&quot;, nullable = true)
+    @Schema(description = &quot;Who triggered this operation: the user's email, \&quot;SYSTEM\&quot; if it was an API-key-authenticated call, \&quot;Deleted user\&quot; if the account no longer exists, or \&quot;Unknown\&quot; for entries recorded before this field existed.&quot;, example = &quot;user@example.com&quot;, nullable = true)
     String actor,
 
     @Schema(description = &quot;Operator-supplied justification. Set for ADJUSTMENT (mandatory when created) and optionally for REFUND; null for every other entry type.&quot;, example = &quot;Customer return - order #4521&quot;, nullable = true)

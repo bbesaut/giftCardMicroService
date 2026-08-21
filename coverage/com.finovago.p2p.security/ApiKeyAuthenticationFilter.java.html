@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ApiKeyAuthenticationFilter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.security</a> &gt; <span class="el_source">ApiKeyAuthenticationFilter.java</span></div><h1>ApiKeyAuthenticationFilter.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.security;
+
+import java.io.IOException;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+
+import org.springframework.context.annotation.Lazy;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import com.finovago.p2p.model.ApiKey;
+import com.finovago.p2p.service.ApiKeyService;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+
+/**
+ * Alternative to JwtAuthenticationFilter for a merchant's automated/backend integration: a
+ * rotatable &quot;X-Api-Key: {prefix}.{secret}&quot; header instead of a Bearer JWT. An API key is its own
+ * identity (no backing User row - see ApiKeyService), so the resulting principal has no userId:
+ * ledger writes attribute it to &quot;SYSTEM&quot; (CurrentUserContext#isApiKeyAuthenticated) instead of an
+ * email, and owner-only self-service routes reject it the same way they'd reject any anonymous
+ * caller (requireOwner needs a real userId).
+ */
+@Component
+public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
+
+    private static final String HEADER_NAME = &quot;X-Api-Key&quot;;
+
+    private final ApiKeyService apiKeyService;
+    private final RoleHierarchy roleHierarchy;
+
+<span class="fc" id="L41">    public ApiKeyAuthenticationFilter(@Lazy ApiKeyService apiKeyService, @Lazy RoleHierarchy roleHierarchy) {</span>
+<span class="fc" id="L42">        this.apiKeyService = apiKeyService;</span>
+<span class="fc" id="L43">        this.roleHierarchy = roleHierarchy;</span>
+<span class="fc" id="L44">    }</span>
+
+    @Override
+    protected boolean shouldNotFilterAsyncDispatch() {
+<span class="fc" id="L48">        return false;</span>
+    }
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
+
+<span class="fc" id="L55">        String presentedKey = request.getHeader(HEADER_NAME);</span>
+
+<span class="pc bpc" id="L57" title="1 of 4 branches missed.">        if (presentedKey == null || presentedKey.isBlank()</span>
+<span class="pc bpc" id="L58" title="1 of 2 branches missed.">                || SecurityContextHolder.getContext().getAuthentication() != null) {</span>
+<span class="fc" id="L59">            filterChain.doFilter(request, response);</span>
+<span class="fc" id="L60">            return;</span>
+        }
+
+<span class="fc" id="L63">        Optional&lt;ApiKey&gt; apiKey = apiKeyService.resolve(presentedKey);</span>
+
+<span class="fc bfc" id="L65" title="All 2 branches covered.">        if (apiKey.isPresent()) {</span>
+<span class="fc" id="L66">            ApiKey key = apiKey.get();</span>
+<span class="fc" id="L67">            List&lt;SimpleGrantedAuthority&gt; authorities = List.of(new SimpleGrantedAuthority(&quot;ROLE_MERCHANT&quot;));</span>
+<span class="fc" id="L68">            Collection&lt;? extends GrantedAuthority&gt; reachableRoles = roleHierarchy.getReachableGrantedAuthorities(authorities);</span>
+
+<span class="fc" id="L70">            AuthenticatedUser authenticatedUser = new AuthenticatedUser(</span>
+<span class="fc" id="L71">                    &quot;api-key:&quot; + key.getKeyPrefix(), &quot;MERCHANT&quot;, key.getMerchant().getId(), null, true);</span>
+<span class="fc" id="L72">            UsernamePasswordAuthenticationToken authToken =</span>
+                    new UsernamePasswordAuthenticationToken(authenticatedUser, null, reachableRoles);
+
+<span class="fc" id="L75">            SecurityContextHolder.getContext().setAuthentication(authToken);</span>
+        }
+
+<span class="fc" id="L78">        filterChain.doFilter(request, response);</span>
+<span class="fc" id="L79">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

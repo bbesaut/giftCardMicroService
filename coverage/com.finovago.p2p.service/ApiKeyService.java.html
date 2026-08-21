@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ApiKeyService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.service</a> &gt; <span class="el_source">ApiKeyService.java</span></div><h1>ApiKeyService.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.service;
+
+import java.security.SecureRandom;
+import java.time.LocalDateTime;
+import java.util.Base64;
+import java.util.Optional;
+
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.finovago.p2p.dto.ApiKeyResponse;
+import com.finovago.p2p.dto.ApiKeyStatusResponse;
+import com.finovago.p2p.model.ApiKey;
+import com.finovago.p2p.model.Merchant;
+import com.finovago.p2p.repository.ApiKeyRepository;
+
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * Owns the api_keys table: generation, rotation, revocation, and presented-key validation. A key
+ * belongs directly to a Merchant - it is its own identity, not a stand-in &quot;service account&quot; User
+ * with a fake email/password.
+ */
+<span class="fc" id="L25">@Slf4j</span>
+@Service
+public class ApiKeyService {
+
+<span class="fc" id="L29">    private static final SecureRandom SECURE_RANDOM = new SecureRandom();</span>
+    private static final String PREFIX_HEADER = &quot;fovak_&quot;;
+
+    private final ApiKeyRepository apiKeyRepository;
+    private final PasswordEncoder passwordEncoder;
+
+<span class="fc" id="L35">    public ApiKeyService(ApiKeyRepository apiKeyRepository, PasswordEncoder passwordEncoder) {</span>
+<span class="fc" id="L36">        this.apiKeyRepository = apiKeyRepository;</span>
+<span class="fc" id="L37">        this.passwordEncoder = passwordEncoder;</span>
+<span class="fc" id="L38">    }</span>
+
+    /** Creates the merchant's first key, or rotates it if one already exists - either way the old secret stops working. */
+    @Transactional
+    public ApiKeyResponse generateOrRotate(Merchant merchant) {
+<span class="fc" id="L43">        String keyPrefix = PREFIX_HEADER + randomUrlSafe(9);</span>
+<span class="fc" id="L44">        String secret = randomUrlSafe(32);</span>
+<span class="fc" id="L45">        String hashedSecret = passwordEncoder.encode(secret);</span>
+
+<span class="fc" id="L47">        ApiKey apiKey = apiKeyRepository.findByMerchant_Id(merchant.getId()).orElse(null);</span>
+<span class="fc bfc" id="L48" title="All 2 branches covered.">        boolean isNew = apiKey == null;</span>
+
+<span class="fc bfc" id="L50" title="All 2 branches covered.">        if (isNew) {</span>
+<span class="fc" id="L51">            apiKey = new ApiKey(merchant, keyPrefix, hashedSecret);</span>
+        } else {
+<span class="fc" id="L53">            apiKey.rotate(keyPrefix, hashedSecret);</span>
+        }
+<span class="fc" id="L55">        apiKeyRepository.save(apiKey);</span>
+
+<span class="fc bfc" id="L57" title="All 2 branches covered.">        log.info(&quot;API key {} for merchantId: {}&quot;, isNew ? &quot;generated&quot; : &quot;rotated&quot;, merchant.getId());</span>
+
+<span class="fc" id="L59">        return new ApiKeyResponse(keyPrefix, keyPrefix + &quot;.&quot; + secret);</span>
+    }
+
+    @Transactional
+    public ApiKeyStatusResponse revoke(Merchant merchant) {
+<span class="fc" id="L64">        Optional&lt;ApiKey&gt; apiKey = apiKeyRepository.findByMerchant_Id(merchant.getId());</span>
+<span class="fc bfc" id="L65" title="All 2 branches covered.">        if (apiKey.isEmpty()) {</span>
+<span class="fc" id="L66">            return new ApiKeyStatusResponse(null, false);</span>
+        }
+
+<span class="fc" id="L69">        ApiKey key = apiKey.get();</span>
+<span class="fc" id="L70">        key.setActive(false);</span>
+<span class="fc" id="L71">        key.setRevokedAt(LocalDateTime.now());</span>
+<span class="fc" id="L72">        apiKeyRepository.save(key);</span>
+
+<span class="fc" id="L74">        log.info(&quot;API key {} revoked for merchantId: {}&quot;, key.getKeyPrefix(), merchant.getId());</span>
+<span class="fc" id="L75">        return new ApiKeyStatusResponse(key.getKeyPrefix(), false);</span>
+    }
+
+    /** Validates a presented &quot;{prefix}.{secret}&quot; key and returns the ApiKey it matches, if valid and active. */
+    @Transactional
+    public Optional&lt;ApiKey&gt; resolve(String presentedKey) {
+<span class="fc" id="L81">        int separator = presentedKey.indexOf('.');</span>
+<span class="fc bfc" id="L82" title="All 4 branches covered.">        if (separator &lt;= 0 || separator == presentedKey.length() - 1) {</span>
+<span class="fc" id="L83">            return Optional.empty();</span>
+        }
+
+<span class="fc" id="L86">        String keyPrefix = presentedKey.substring(0, separator);</span>
+<span class="fc" id="L87">        String secret = presentedKey.substring(separator + 1);</span>
+
+<span class="fc" id="L89">        Optional&lt;ApiKey&gt; apiKey = apiKeyRepository.findByKeyPrefix(keyPrefix)</span>
+<span class="fc" id="L90">                .filter(ApiKey::isActive)</span>
+<span class="fc" id="L91">                .filter(key -&gt; passwordEncoder.matches(secret, key.getHashedSecret()));</span>
+
+<span class="fc" id="L93">        apiKey.ifPresent(key -&gt; {</span>
+<span class="fc" id="L94">            key.setLastUsedAt(LocalDateTime.now());</span>
+<span class="fc" id="L95">            apiKeyRepository.save(key);</span>
+<span class="fc" id="L96">        });</span>
+
+<span class="fc" id="L98">        return apiKey;</span>
+    }
+
+    private String randomUrlSafe(int numBytes) {
+<span class="fc" id="L102">        byte[] randomBytes = new byte[numBytes];</span>
+<span class="fc" id="L103">        SECURE_RANDOM.nextBytes(randomBytes);</span>
+<span class="fc" id="L104">        return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

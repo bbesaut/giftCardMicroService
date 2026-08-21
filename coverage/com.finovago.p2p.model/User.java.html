@@ -37,9 +37,6 @@ public class User {
     @JoinColumn(name = &quot;merchant_id&quot;)
     private Merchant merchant;
 
-    @Column(name = &quot;is_service_account&quot;, nullable = false)
-    private boolean serviceAccount;
-
     @Column(name = &quot;is_owner&quot;, nullable = false)
     private boolean owner;
 
@@ -48,22 +45,17 @@ public class User {
     private boolean active;
 
     public User(String email, String password, Role role, @Nullable Merchant merchant) {
-<span class="fc" id="L51">        this(email, password, role, merchant, false);</span>
-<span class="fc" id="L52">    }</span>
+<span class="fc" id="L48">        this(email, password, role, merchant, false);</span>
+<span class="fc" id="L49">    }</span>
 
-    public User(String email, String password, Role role, @Nullable Merchant merchant, boolean serviceAccount) {
-<span class="fc" id="L55">        this(email, password, role, merchant, serviceAccount, false);</span>
-<span class="fc" id="L56">    }</span>
-
-<span class="fc" id="L58">    public User(String email, String password, Role role, @Nullable Merchant merchant, boolean serviceAccount, boolean owner) {</span>
-<span class="fc" id="L59">        this.email = email;</span>
-<span class="fc" id="L60">        this.password = password;</span>
-<span class="fc" id="L61">        this.role = role;</span>
-<span class="fc" id="L62">        this.merchant = merchant;</span>
-<span class="fc" id="L63">        this.serviceAccount = serviceAccount;</span>
-<span class="fc" id="L64">        this.owner = owner;</span>
-<span class="fc" id="L65">        this.active = true;</span>
-<span class="fc" id="L66">    }</span>
+<span class="fc" id="L51">    public User(String email, String password, Role role, @Nullable Merchant merchant, boolean owner) {</span>
+<span class="fc" id="L52">        this.email = email;</span>
+<span class="fc" id="L53">        this.password = password;</span>
+<span class="fc" id="L54">        this.role = role;</span>
+<span class="fc" id="L55">        this.merchant = merchant;</span>
+<span class="fc" id="L56">        this.owner = owner;</span>
+<span class="fc" id="L57">        this.active = true;</span>
+<span class="fc" id="L58">    }</span>
 }
 
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

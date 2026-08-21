@@ -2,10 +2,14 @@
 
 import jakarta.annotation.Nullable;
 
-<span class="fc" id="L5">public record AuthenticatedUser(String email, String role, @Nullable Long merchantId, @Nullable Long userId) {</span>
+<span class="fc" id="L5">public record AuthenticatedUser(String email, String role, @Nullable Long merchantId, @Nullable Long userId, boolean apiKey) {</span>
+    public AuthenticatedUser(String email, String role, @Nullable Long merchantId, @Nullable Long userId) {
+<span class="fc" id="L7">        this(email, role, merchantId, userId, false);</span>
+<span class="fc" id="L8">    }</span>
+
     @Override
     public String toString() {
-<span class="fc" id="L8">        return email;</span>
+<span class="fc" id="L12">        return email;</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

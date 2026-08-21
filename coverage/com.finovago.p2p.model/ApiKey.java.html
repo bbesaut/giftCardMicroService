@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ApiKey.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.model</a> &gt; <span class="el_source">ApiKey.java</span></div><h1>ApiKey.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.model;
+
+import java.time.LocalDateTime;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@Entity
+@NoArgsConstructor
+@Getter
+@Table(name = &quot;api_keys&quot;)
+public class ApiKey {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne
+    @JoinColumn(name = &quot;merchant_id&quot;, nullable = false, unique = true)
+    private Merchant merchant;
+
+    @Column(name = &quot;key_prefix&quot;, nullable = false, unique = true)
+    private String keyPrefix;
+
+    @Setter
+    @Column(name = &quot;hashed_secret&quot;, nullable = false)
+    private String hashedSecret;
+
+    @Setter
+    @Column(nullable = false)
+    private boolean active;
+
+    @Column(name = &quot;created_at&quot;, nullable = false)
+    private LocalDateTime createdAt;
+
+    @Setter
+    @Column(name = &quot;revoked_at&quot;)
+    private LocalDateTime revokedAt;
+
+    @Setter
+    @Column(name = &quot;last_used_at&quot;)
+    private LocalDateTime lastUsedAt;
+
+<span class="fc" id="L52">    public ApiKey(Merchant merchant, String keyPrefix, String hashedSecret) {</span>
+<span class="fc" id="L53">        this.merchant = merchant;</span>
+<span class="fc" id="L54">        this.keyPrefix = keyPrefix;</span>
+<span class="fc" id="L55">        this.hashedSecret = hashedSecret;</span>
+<span class="fc" id="L56">        this.active = true;</span>
+<span class="fc" id="L57">        this.createdAt = LocalDateTime.now();</span>
+<span class="fc" id="L58">    }</span>
+
+    public void rotate(String newKeyPrefix, String newHashedSecret) {
+<span class="fc" id="L61">        this.keyPrefix = newKeyPrefix;</span>
+<span class="fc" id="L62">        this.hashedSecret = newHashedSecret;</span>
+<span class="fc" id="L63">        this.active = true;</span>
+<span class="fc" id="L64">        this.revokedAt = null;</span>
+<span class="fc" id="L65">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

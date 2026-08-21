@@ -32,57 +32,56 @@ public class LedgerService {
 
     /**
      * Appends a ledger row. Never call this outside the same transaction as the balance
-     * mutation it records - the two must commit or roll back together.
+     * mutation it records - the two must commit or roll back together. actorViaApiKey must be
+     * read from CurrentUserContext on the same thread that received the request - redeem's async
+     * path resolves it upfront and threads it through for exactly that reason (see
+     * GiftCardService#redeemGiftCardAsync).
      */
-    public void record(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, Long holdId, Long actorUserId) {
-<span class="fc" id="L38">        ledgerEntryRepository.save(new LedgerEntry(giftCard, merchantId, entryType, amount, balanceAfter, holdId, actorUserId));</span>
-<span class="fc" id="L39">    }</span>
+    public void record(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, Long holdId, Long actorUserId, boolean actorViaApiKey) {
+<span class="fc" id="L41">        ledgerEntryRepository.save(new LedgerEntry(giftCard, merchantId, entryType, amount, balanceAfter, holdId, actorUserId, null, null, actorViaApiKey));</span>
+<span class="fc" id="L42">    }</span>
 
     /** Same as {@link #record}, but also carries a REFUND's link back to the redemption it reverses and/or an operator-supplied reason. */
-    public void record(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, Long holdId, Long actorUserId, Long relatedEntryId, String reason) {
-<span class="fc" id="L43">        ledgerEntryRepository.save(new LedgerEntry(giftCard, merchantId, entryType, amount, balanceAfter, holdId, actorUserId, relatedEntryId, reason));</span>
-<span class="fc" id="L44">    }</span>
+    public void record(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, Long holdId, Long actorUserId, boolean actorViaApiKey, Long relatedEntryId, String reason) {
+<span class="fc" id="L46">        ledgerEntryRepository.save(new LedgerEntry(giftCard, merchantId, entryType, amount, balanceAfter, holdId, actorUserId, relatedEntryId, reason, actorViaApiKey));</span>
+<span class="fc" id="L47">    }</span>
 
     /** Gift cards whose stored balance disagrees with what their own ledger says it should be. */
     public List&lt;LedgerDiscrepancy&gt; findBalanceDiscrepancies() {
-<span class="fc" id="L48">        return ledgerEntryRepository.findBalanceDiscrepancies();</span>
+<span class="fc" id="L51">        return ledgerEntryRepository.findBalanceDiscrepancies();</span>
     }
 
     /** Full history for a single card, oldest first. Caller is responsible for tenant scoping. */
     public List&lt;LedgerEntry&gt; getEntriesForCard(Long giftCardId) {
-<span class="fc" id="L53">        return ledgerEntryRepository.findByGiftCardIdOrderByCreatedAtAsc(giftCardId);</span>
+<span class="fc" id="L56">        return ledgerEntryRepository.findByGiftCardIdOrderByCreatedAtAsc(giftCardId);</span>
     }
 
     /**
-     * Batch-resolves entries' actorUserId to a display string (&quot;SYSTEM / email&quot; for service
-     * accounts, plain email otherwise), one query for the whole list instead of N+1.
-     * Entries whose actorUserId is missing from the result have no row in the map - callers
+     * Batch-resolves entries' actorUserId to their email, one query for the whole list instead of
+     * N+1. Entries whose actorUserId is missing from the result have no row in the map - callers
      * distinguish &quot;no actor recorded&quot; (null actorUserId) from &quot;actor since deleted&quot; that way.
+     * Entries with no actorUserId at all are resolved separately, via LedgerEntry#isActorViaApiKey.
      */
     public Map&lt;Long, String&gt; resolveActors(List&lt;LedgerEntry&gt; entries) {
-<span class="fc" id="L63">        Set&lt;Long&gt; actorUserIds = entries.stream()</span>
-<span class="fc" id="L64">                .map(LedgerEntry::getActorUserId)</span>
-<span class="fc" id="L65">                .filter(Objects::nonNull)</span>
-<span class="fc" id="L66">                .collect(Collectors.toSet());</span>
-<span class="fc bfc" id="L67" title="All 2 branches covered.">        if (actorUserIds.isEmpty()) {</span>
-<span class="fc" id="L68">            return Map.of();</span>
+<span class="fc" id="L66">        Set&lt;Long&gt; actorUserIds = entries.stream()</span>
+<span class="fc" id="L67">                .map(LedgerEntry::getActorUserId)</span>
+<span class="fc" id="L68">                .filter(Objects::nonNull)</span>
+<span class="fc" id="L69">                .collect(Collectors.toSet());</span>
+<span class="fc bfc" id="L70" title="All 2 branches covered.">        if (actorUserIds.isEmpty()) {</span>
+<span class="fc" id="L71">            return Map.of();</span>
         }
-<span class="fc" id="L70">        return userRepository.findAllById(actorUserIds).stream()</span>
-<span class="fc" id="L71">                .collect(Collectors.toMap(User::getId, LedgerService::formatActor));</span>
-    }
-
-    private static String formatActor(User user) {
-<span class="fc bfc" id="L75" title="All 2 branches covered.">        return user.isServiceAccount() ? &quot;SYSTEM / &quot; + user.getEmail() : user.getEmail();</span>
+<span class="fc" id="L73">        return userRepository.findAllById(actorUserIds).stream()</span>
+<span class="fc" id="L74">                .collect(Collectors.toMap(User::getId, User::getEmail));</span>
     }
 
     /** January 1st of the furthest-out dated partition already created for gift_card_ledger. */
     public Optional&lt;LocalDate&gt; findLatestLedgerPartitionYear() {
-<span class="fc" id="L80">        return ledgerEntryRepository.findLatestLedgerPartitionYear();</span>
+<span class="fc" id="L79">        return ledgerEntryRepository.findLatestLedgerPartitionYear();</span>
     }
 
     /** Whether any row has ever landed in the DEFAULT catch-all partition (dated partitions ran out). */
     public boolean existsAnyRowInDefaultLedgerPartition() {
-<span class="fc" id="L85">        return ledgerEntryRepository.existsAnyRowInDefaultLedgerPartition();</span>
+<span class="fc" id="L84">        return ledgerEntryRepository.existsAnyRowInDefaultLedgerPartition();</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
