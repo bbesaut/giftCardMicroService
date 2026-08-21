@@ -1,6 +1,7 @@
 merchants
 gift_card
 users
+api_keys
 idempotency_key
 refresh_tokens
 gift_card_hold

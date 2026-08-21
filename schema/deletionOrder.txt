@@ -9,6 +9,7 @@ gift_card_ledger
 gift_card_hold
 refresh_tokens
 idempotency_key
+api_keys
 users
 gift_card
 merchants

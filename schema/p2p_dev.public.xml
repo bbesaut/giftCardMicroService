@@ -1,7 +1,32 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <database name="p2p_dev" schema="public" type="PostgreSQL - 17.11">
+   <sequences>
+      <sequence increment="1" name="api_keys_id_seq" startValue="1"/>
+   </sequences>
    <tables>
-      <table name="flyway_schema_history" numRows="25" remarks="" schema="public" type="TABLE">
+      <table name="api_keys" numRows="0" remarks="" schema="public" type="TABLE">
+         <column autoUpdated="true" defaultValue="nextval('api_keys_id_seq'::regclass)" digits="0" id="0" name="id" nullable="false" remarks="" size="19" type="bigserial" typeCode="-5"/>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="1" name="key_prefix" nullable="false" remarks="" size="32" type="varchar" typeCode="12"/>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="2" name="hashed_secret" nullable="false" remarks="" size="100" type="varchar" typeCode="12"/>
+         <column autoUpdated="false" defaultValue="true" digits="0" id="3" name="active" nullable="false" remarks="" size="1" type="bool" typeCode="-7"/>
+         <column autoUpdated="false" defaultValue="now()" digits="6" id="4" name="created_at" nullable="false" remarks="" size="29" type="timestamp" typeCode="93"/>
+         <column autoUpdated="false" defaultValue="null" digits="6" id="5" name="revoked_at" nullable="true" remarks="" size="29" type="timestamp" typeCode="93"/>
+         <column autoUpdated="false" defaultValue="null" digits="6" id="6" name="last_used_at" nullable="true" remarks="" size="29" type="timestamp" typeCode="93"/>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="7" name="merchant_id" nullable="false" remarks="" size="19" type="int8" typeCode="-5">
+            <parent column="id" foreignKey="api_keys_merchant_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="merchants"/>
+         </column>
+         <primaryKey column="id" sequenceNumberInPK="1"/>
+         <index name="api_keys_pkey" unique="true">
+            <column ascending="true" name="id"/>
+         </index>
+         <index name="api_keys_key_prefix_key" unique="true">
+            <column ascending="true" name="key_prefix"/>
+         </index>
+         <index name="uq_api_keys_merchant_id" unique="true">
+            <column ascending="true" name="merchant_id"/>
+         </index>
+      </table>
+      <table name="flyway_schema_history" numRows="30" remarks="" schema="public" type="TABLE">
          <column autoUpdated="false" defaultValue="null" digits="0" id="0" name="installed_rank" nullable="false" remarks="" size="10" type="int4" typeCode="4"/>
          <column autoUpdated="false" defaultValue="null" digits="0" id="1" name="version" nullable="true" remarks="" size="50" type="varchar" typeCode="12"/>
          <column autoUpdated="false" defaultValue="null" digits="0" id="2" name="description" nullable="false" remarks="" size="200" type="varchar" typeCode="12"/>
@@ -99,6 +124,7 @@
          </column>
          <column autoUpdated="false" defaultValue="null" digits="0" id="9" name="related_entry_id" nullable="true" remarks="" size="19" type="int8" typeCode="-5"/>
          <column autoUpdated="false" defaultValue="null" digits="0" id="10" name="reason" nullable="true" remarks="" size="500" type="varchar" typeCode="12"/>
+         <column autoUpdated="false" defaultValue="false" digits="0" id="11" name="actor_via_api_key" nullable="false" remarks="" size="1" type="bool" typeCode="-7"/>
          <primaryKey column="id" sequenceNumberInPK="1"/>
          <primaryKey column="created_at" sequenceNumberInPK="2"/>
          <index name="gift_card_ledger_new_pkey" unique="true">
@@ -138,6 +164,7 @@
          </column>
          <column autoUpdated="false" defaultValue="null" digits="0" id="9" name="related_entry_id" nullable="true" remarks="" size="19" type="int8" typeCode="-5"/>
          <column autoUpdated="false" defaultValue="null" digits="0" id="10" name="reason" nullable="true" remarks="" size="500" type="varchar" typeCode="12"/>
+         <column autoUpdated="false" defaultValue="false" digits="0" id="11" name="actor_via_api_key" nullable="false" remarks="" size="1" type="bool" typeCode="-7"/>
          <primaryKey column="id" sequenceNumberInPK="1"/>
          <primaryKey column="created_at" sequenceNumberInPK="2"/>
          <index name="gift_card_ledger_2026_pkey" unique="true">
@@ -177,6 +204,7 @@
          </column>
          <column autoUpdated="false" defaultValue="null" digits="0" id="9" name="related_entry_id" nullable="true" remarks="" size="19" type="int8" typeCode="-5"/>
          <column autoUpdated="false" defaultValue="null" digits="0" id="10" name="reason" nullable="true" remarks="" size="500" type="varchar" typeCode="12"/>
+         <column autoUpdated="false" defaultValue="false" digits="0" id="11" name="actor_via_api_key" nullable="false" remarks="" size="1" type="bool" typeCode="-7"/>
          <primaryKey column="id" sequenceNumberInPK="1"/>
          <primaryKey column="created_at" sequenceNumberInPK="2"/>
          <index name="gift_card_ledger_2027_pkey" unique="true">
@@ -216,6 +244,7 @@
          </column>
          <column autoUpdated="false" defaultValue="null" digits="0" id="9" name="related_entry_id" nullable="true" remarks="" size="19" type="int8" typeCode="-5"/>
          <column autoUpdated="false" defaultValue="null" digits="0" id="10" name="reason" nullable="true" remarks="" size="500" type="varchar" typeCode="12"/>
+         <column autoUpdated="false" defaultValue="false" digits="0" id="11" name="actor_via_api_key" nullable="false" remarks="" size="1" type="bool" typeCode="-7"/>
          <primaryKey column="id" sequenceNumberInPK="1"/>
          <primaryKey column="created_at" sequenceNumberInPK="2"/>
          <index name="gift_card_ledger_2028_pkey" unique="true">
@@ -255,6 +284,7 @@
          </column>
          <column autoUpdated="false" defaultValue="null" digits="0" id="9" name="related_entry_id" nullable="true" remarks="" size="19" type="int8" typeCode="-5"/>
          <column autoUpdated="false" defaultValue="null" digits="0" id="10" name="reason" nullable="true" remarks="" size="500" type="varchar" typeCode="12"/>
+         <column autoUpdated="false" defaultValue="false" digits="0" id="11" name="actor_via_api_key" nullable="false" remarks="" size="1" type="bool" typeCode="-7"/>
          <primaryKey column="id" sequenceNumberInPK="1"/>
          <primaryKey column="created_at" sequenceNumberInPK="2"/>
          <index name="gift_card_ledger_2029_pkey" unique="true">
@@ -294,6 +324,7 @@
          </column>
          <column autoUpdated="false" defaultValue="null" digits="0" id="9" name="related_entry_id" nullable="true" remarks="" size="19" type="int8" typeCode="-5"/>
          <column autoUpdated="false" defaultValue="null" digits="0" id="10" name="reason" nullable="true" remarks="" size="500" type="varchar" typeCode="12"/>
+         <column autoUpdated="false" defaultValue="false" digits="0" id="11" name="actor_via_api_key" nullable="false" remarks="" size="1" type="bool" typeCode="-7"/>
          <primaryKey column="id" sequenceNumberInPK="1"/>
          <primaryKey column="created_at" sequenceNumberInPK="2"/>
          <index name="gift_card_ledger_default_pkey" unique="true">
@@ -333,6 +364,7 @@
          </column>
          <column autoUpdated="false" defaultValue="null" digits="0" id="9" name="related_entry_id" nullable="true" remarks="" size="19" type="int8" typeCode="-5"/>
          <column autoUpdated="false" defaultValue="null" digits="0" id="10" name="reason" nullable="true" remarks="" size="500" type="varchar" typeCode="12"/>
+         <column autoUpdated="false" defaultValue="false" digits="0" id="11" name="actor_via_api_key" nullable="false" remarks="" size="1" type="bool" typeCode="-7"/>
          <primaryKey column="id" sequenceNumberInPK="1"/>
          <primaryKey column="created_at" sequenceNumberInPK="2"/>
          <index name="gift_card_ledger_historical_pkey" unique="true">
@@ -365,6 +397,7 @@
          <column autoUpdated="false" defaultValue="now()" digits="6" id="5" name="created_at" nullable="false" remarks="" size="29" type="timestamp" typeCode="93"/>
          <column autoUpdated="false" defaultValue="null" digits="6" id="6" name="expires_at" nullable="false" remarks="" size="29" type="timestamp" typeCode="93"/>
          <column autoUpdated="false" defaultValue="null" digits="0" id="7" name="response_body" nullable="true" remarks="" size="2147483647" type="text" typeCode="12"/>
+         <column autoUpdated="false" defaultValue="'UNKNOWN'::character varying" digits="0" id="8" name="endpoint" nullable="false" remarks="" size="50" type="varchar" typeCode="12"/>
          <primaryKey column="id" sequenceNumberInPK="1"/>
          <index name="idempotency_key_pkey" unique="true">
             <column ascending="true" name="id"/>
@@ -372,14 +405,16 @@
          <index name="idx_idempotency_key_expires_at" unique="false">
             <column ascending="true" name="expires_at"/>
          </index>
-         <index name="idx_idempotency_key_merchant_key" unique="true">
+         <index name="idx_idempotency_key_merchant_endpoint_key" unique="true">
             <column ascending="true" name="merchant_id"/>
+            <column ascending="true" name="endpoint"/>
             <column ascending="true" name="idempotency_key"/>
          </index>
          <checkConstraint constraint="((status)::text = ANY ((ARRAY['IN_PROGRESS'::character varying, 'COMPLETED'::character varying])::text[]))" name="idempotency_key_status_check"/>
       </table>
       <table name="merchants" numRows="1" remarks="" schema="public" type="TABLE">
          <column autoUpdated="true" defaultValue="null" digits="0" id="0" name="id" nullable="false" remarks="" size="19" type="int8" typeCode="-5">
+            <child column="merchant_id" foreignKey="api_keys_merchant_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="api_keys"/>
             <child column="merchant_id" foreignKey="gift_card_merchant_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="gift_card"/>
             <child column="merchant_id" foreignKey="gift_card_hold_merchant_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="gift_card_hold"/>
             <child column="merchant_id" foreignKey="gift_card_ledger_new_merchant_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="gift_card_ledger"/>
@@ -445,9 +480,8 @@
          <column autoUpdated="false" defaultValue="null" digits="0" id="4" name="merchant_id" nullable="true" remarks="" size="19" type="int8" typeCode="-5">
             <parent column="id" foreignKey="users_merchant_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="merchants"/>
          </column>
-         <column autoUpdated="false" defaultValue="false" digits="0" id="5" name="is_service_account" nullable="false" remarks="" size="1" type="bool" typeCode="-7"/>
-         <column autoUpdated="false" defaultValue="false" digits="0" id="6" name="is_owner" nullable="false" remarks="" size="1" type="bool" typeCode="-7"/>
-         <column autoUpdated="false" defaultValue="true" digits="0" id="7" name="active" nullable="false" remarks="" size="1" type="bool" typeCode="-7"/>
+         <column autoUpdated="false" defaultValue="false" digits="0" id="5" name="is_owner" nullable="false" remarks="" size="1" type="bool" typeCode="-7"/>
+         <column autoUpdated="false" defaultValue="true" digits="0" id="6" name="active" nullable="false" remarks="" size="1" type="bool" typeCode="-7"/>
          <primaryKey column="id" sequenceNumberInPK="1"/>
          <index name="users_pkey" unique="true">
             <column ascending="true" name="id"/>
