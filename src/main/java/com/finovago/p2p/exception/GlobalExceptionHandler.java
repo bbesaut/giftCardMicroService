@@ -290,6 +290,18 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(SamePasswordException.class)
+    public ResponseEntity<Object> handleSamePasswordException(SamePasswordException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(Map.of(
+                    "error", "Unprocessable Entity",
+                    "message", ex.getMessage()
+                ));
+    }
+
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<Object> handleBadCredentialsException(BadCredentialsException ex) {
         log.warn("Authentication failed - invalid credentials");

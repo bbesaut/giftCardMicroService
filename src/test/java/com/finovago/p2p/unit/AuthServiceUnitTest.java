@@ -25,12 +25,15 @@ import com.finovago.p2p.dto.AddMerchantUserRequest;
 import com.finovago.p2p.dto.ApiKeyResponse;
 import com.finovago.p2p.dto.ApiKeyStatusResponse;
 import com.finovago.p2p.dto.AuthResponse;
+import com.finovago.p2p.dto.ChangePasswordRequest;
 import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
 import com.finovago.p2p.dto.UserStatusResponse;
 import com.finovago.p2p.exception.OwnerPrivilegeRequiredException;
+import com.finovago.p2p.exception.SamePasswordException;
 import com.finovago.p2p.exception.SelfDeactivationException;
+import com.finovago.p2p.exception.ServiceAccountNotAllowedException;
 import com.finovago.p2p.exception.UserAlreadyExistsException;
 import com.finovago.p2p.exception.UserNotFoundException;
 import com.finovago.p2p.model.Merchant;
@@ -299,5 +302,52 @@ class AuthServiceUnitTest {
         when(userRepository.findByIdAndMerchant_Id(99L, null)).thenReturn(Optional.empty());
 
         assertThrows(UserNotFoundException.class, () -> authService.setUserActive(1L, 99L, false));
+    }
+
+    @Test
+    void should_changePasswordAndRevokeTokens_when_currentPasswordMatches() {
+        Merchant merchant = merchant();
+        User user = owner(1L, merchant);
+        ChangePasswordRequest request = new ChangePasswordRequest("oldPass123!", "NewPass456!");
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("oldPass123!", "hashed")).thenReturn(true);
+        when(passwordEncoder.encode("NewPass456!")).thenReturn("newHashed");
+
+        authService.changePassword(1L, request);
+
+        assertEquals("newHashed", user.getPassword());
+        verify(refreshTokenService).revokeAllForUser(user);
+    }
+
+    @Test
+    void should_throwBadCredentialsException_when_currentPasswordIsWrong() {
+        Merchant merchant = merchant();
+        User user = owner(1L, merchant);
+        ChangePasswordRequest request = new ChangePasswordRequest("wrongPass", "NewPass456!");
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("wrongPass", "hashed")).thenReturn(false);
+
+        assertThrows(BadCredentialsException.class, () -> authService.changePassword(1L, request));
+    }
+
+    @Test
+    void should_throwSamePasswordException_when_newPasswordEqualsCurrentPassword() {
+        Merchant merchant = merchant();
+        User user = owner(1L, merchant);
+        ChangePasswordRequest request = new ChangePasswordRequest("samePass123!", "samePass123!");
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("samePass123!", "hashed")).thenReturn(true);
+
+        assertThrows(SamePasswordException.class, () -> authService.changePassword(1L, request));
+    }
+
+    @Test
+    void should_throwServiceAccountNotAllowedException_when_callerIdIsNull() {
+        ChangePasswordRequest request = new ChangePasswordRequest("oldPass123!", "NewPass456!");
+
+        assertThrows(ServiceAccountNotAllowedException.class, () -> authService.changePassword(null, request));
     }
 }
