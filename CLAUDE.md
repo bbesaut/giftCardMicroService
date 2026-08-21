@@ -174,6 +174,27 @@ Content-Type: application/json
 - `409 Conflict`: Caller attempted to deactivate their own account
 - `500 Internal Server Error`: Server error
 
+### POST /api/v1/auth/me/password
+**Description**: Lets any authenticated human user change their own password, given the current one for confirmation. Requires authentication (JWT token) — rejected with `403` if the caller authenticated via API key, since a password belongs to a human account, not an automated integration (no role restriction otherwise: MERCHANT and ADMIN can both use it). Revokes all of the caller's active refresh tokens on success, logging out every other session — the access token already in use for this call stays valid until its own ~15 min expiry, same trade-off as user deactivation. Rate-limited per user id at the login capacity (`app.rate-limit.login-capacity`, not the merchant one), since this is a current-password-guessing surface like login rather than B2B traffic.
+
+**Request** (ChangePasswordRequest):
+```json
+{
+  "currentPassword": "oldSecurePass123",
+  "newPassword": "N3wSecureP@ss"
+}
+```
+
+**Response**: HTTP 204 No Content
+
+**Error Responses**:
+- `400 Bad Request`: Invalid request body, or `newPassword` doesn't meet complexity rules (min 8 chars, uppercase, lowercase, digit, special character)
+- `401 Unauthorized`: Missing or invalid JWT token, or `currentPassword` is incorrect
+- `403 Forbidden`: Caller authenticated via API key, not a human account
+- `422 Unprocessable Entity`: `newPassword` is the same as `currentPassword`
+- `429 Too Many Requests`: Rate limit exceeded
+- `500 Internal Server Error`: Server error
+
 ### POST /api/v1/auth/login
 **Description**: Authenticate user with credentials and obtain JWT tokens.
 
@@ -481,6 +502,11 @@ Response for revoking the merchant's API key (POST /api/v1/auth/me/api-key/revok
 Used to attach a human employee to a merchant, self-service by that merchant's owner (POST /api/v1/auth/me/users) — always creates a human account; API-key-style automated access is managed separately via POST /me/api-key
 - `email` (String): New employee's email, must be unique
 - `password` (String): New employee's password, non-blank
+
+### ChangePasswordRequest
+Used for self-service password change (POST /api/v1/auth/me/password)
+- `currentPassword` (String): Caller's current password, non-blank, for confirmation
+- `newPassword` (String): New password, non-blank, must be at least 8 characters with an uppercase letter, a lowercase letter, a digit, and a special character
 
 ### UserStatusResponse
 Response for POST /api/v1/auth/me/users/{userId}/activate and .../deactivate

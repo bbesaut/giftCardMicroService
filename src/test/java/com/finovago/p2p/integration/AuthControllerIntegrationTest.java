@@ -647,4 +647,108 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
                         .header(AUTHORIZATION, "Bearer " + clientAccessToken))
                 .andExpect(status().isForbidden());
     }
+
+    private static final String NEW_PASSWORD = "NewStrongP@ssw0rd";
+
+    @Test
+    void should_changePasswordAndRevokeOtherSessions_when_currentPasswordCorrect() throws Exception {
+        MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        AuthResponse loginResponse = objectMapper.readValue(loginResult.getResponse().getContentAsString(), AuthResponse.class);
+
+        mockMvc.perform(post("/api/v1/auth/me/password")
+                        .header(AUTHORIZATION, "Bearer " + loginResponse.accessToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\":\"" + PASSWORD + "\",\"newPassword\":\"" + NEW_PASSWORD + "\"}"))
+                .andExpect(status().isNoContent());
+
+        // Old password no longer works.
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isUnauthorized());
+
+        // New password works.
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + NEW_PASSWORD + "\"}"))
+                .andExpect(status().isOk());
+
+        // The refresh token issued before the change is revoked (other sessions logged out).
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + loginResponse.refreshToken() + "\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_returnUnauthorized_when_currentPasswordIsWrong() throws Exception {
+        String accessToken = loginAndGetAccessToken(EMAIL, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/me/password")
+                        .header(AUTHORIZATION, "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\":\"wrongPassword\",\"newPassword\":\"" + NEW_PASSWORD + "\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_returnUnprocessableEntity_when_newPasswordSameAsCurrentPassword() throws Exception {
+        // PASSWORD itself doesn't satisfy the new-password complexity rule, so this needs a user
+        // whose current password already complies, otherwise validation would 400 before the
+        // same-password check ever runs.
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+        String compliantEmployeeEmail = "compliant-password-employee@example.com";
+        mockMvc.perform(post("/api/v1/auth/me/users")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + compliantEmployeeEmail + "\",\"password\":\"" + NEW_PASSWORD + "\"}"))
+                .andExpect(status().isOk());
+        String employeeAccessToken = loginAndGetAccessToken(compliantEmployeeEmail, NEW_PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/me/password")
+                        .header(AUTHORIZATION, "Bearer " + employeeAccessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\":\"" + NEW_PASSWORD + "\",\"newPassword\":\"" + NEW_PASSWORD + "\"}"))
+                .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
+    void should_returnBadRequest_when_newPasswordFailsComplexityRules() throws Exception {
+        String accessToken = loginAndGetAccessToken(EMAIL, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/me/password")
+                        .header(AUTHORIZATION, "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\":\"" + PASSWORD + "\",\"newPassword\":\"weak\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void should_returnForbidden_when_changePasswordCalledViaApiKey() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+        MvcResult keyResult = mockMvc.perform(post("/api/v1/auth/me/api-key")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        String apiKeySecret = objectMapper.readValue(keyResult.getResponse().getContentAsString(), ApiKeyResponse.class)
+                .apiKeySecret();
+
+        mockMvc.perform(post("/api/v1/auth/me/password")
+                        .header("X-Api-Key", apiKeySecret)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\":\"" + PASSWORD + "\",\"newPassword\":\"" + NEW_PASSWORD + "\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void should_returnUnauthorized_when_changePasswordWithoutToken() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/me/password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\":\"" + PASSWORD + "\",\"newPassword\":\"" + NEW_PASSWORD + "\"}"))
+                .andExpect(status().isUnauthorized());
+    }
 }

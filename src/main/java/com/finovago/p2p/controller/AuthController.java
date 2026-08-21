@@ -4,12 +4,15 @@ import com.finovago.p2p.dto.AddMerchantUserRequest;
 import com.finovago.p2p.dto.ApiKeyResponse;
 import com.finovago.p2p.dto.ApiKeyStatusResponse;
 import com.finovago.p2p.dto.AuthResponse;
+import com.finovago.p2p.dto.ChangePasswordRequest;
 import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
 import com.finovago.p2p.dto.UserStatusResponse;
 import com.finovago.p2p.exception.OwnerPrivilegeRequiredException;
+import com.finovago.p2p.exception.SamePasswordException;
 import com.finovago.p2p.exception.SelfDeactivationException;
+import com.finovago.p2p.exception.ServiceAccountNotAllowedException;
 import com.finovago.p2p.exception.UserAlreadyExistsException;
 import com.finovago.p2p.exception.UserNotFoundException;
 import com.finovago.p2p.security.CurrentUserContext;
@@ -233,6 +236,41 @@ public class AuthController {
             return ResponseEntity.ok(response);
         } catch (OwnerPrivilegeRequiredException | SelfDeactivationException | UserNotFoundException e) {
             log.warn("Self-service set-active failed for userId {}: {}", userId, e.getMessage());
+            throw e;
+        }
+    }
+
+    @Operation(
+        summary = "Change my own password",
+        description = "Lets any authenticated human user change their own password, given the current one for "
+                    + "confirmation. Revokes all of the caller's active refresh tokens on success, logging out "
+                    + "every other session (the access token already in use for this call stays valid until its "
+                    + "own ~15 min expiry, same trade-off as user deactivation). Requires authentication (JWT "
+                    + "token) - rejected if the caller authenticated via API key, since a password belongs to a "
+                    + "human account, not an automated integration."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "204", description = "Password changed - all other sessions logged out"),
+        @ApiResponse(responseCode = "400", description = "Invalid request body (missing fields, or new password does not meet complexity rules)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"New password must be at least 8 characters long and include an uppercase letter, a lowercase letter, a digit, and a special character\"}"))),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token, or current password is incorrect",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid email or password\"}"))),
+        @ApiResponse(responseCode = "403", description = "Caller authenticated via API key, not a human account",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Forbidden\",\"message\":\"Password change must be performed by a human account, not an API key\"}"))),
+        @ApiResponse(responseCode = "422", description = "New password is the same as the current password",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unprocessable Entity\",\"message\":\"New password must be different from the current password\"}"))),
+        @ApiResponse(responseCode = "429", description = "Too Many Requests - rate limit exceeded",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Too Many Requests\",\"message\":\"Too many requests. Please try again later.\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @PostMapping("/me/password")
+    public ResponseEntity<Void> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        try {
+            authService.changePassword(currentUserContext.currentUserIdOrNull(), request);
+            log.info("Password changed via self-service");
+            return ResponseEntity.noContent().build();
+        } catch (BadCredentialsException | SamePasswordException | ServiceAccountNotAllowedException e) {
+            log.warn("Self-service password change failed: {}", e.getMessage());
             throw e;
         }
     }
