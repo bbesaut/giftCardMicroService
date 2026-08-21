@@ -69,7 +69,7 @@ class GiftCardHoldServiceUnitTest {
         lenient().when(currentUserContext.currentMerchantId()).thenReturn(MERCHANT_ID);
         lenient().when(currentUserContext.currentUserIdOrNull()).thenReturn(null);
         lenient().when(idempotencyKeyService.hashRequest(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString())).thenReturn("hash");
-        lenient().when(idempotencyKeyService.claim(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(HoldResponse.class)))
+        lenient().when(idempotencyKeyService.claim(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(HoldResponse.class)))
                 .thenReturn(Optional.empty());
     }
 
@@ -97,19 +97,19 @@ class GiftCardHoldServiceUnitTest {
         assertMoneyEquals(BigDecimal.valueOf(30.0), response.remainingAvailableBalance());
         // reserve() normalizes the incoming amount to scale 2, so the ledger record reflects
         // "50.00", not the scale-1 literal the request was built with.
-        verify(ledgerService).record(card, MERCHANT_ID, LedgerEntryType.HOLD_PLACED, new BigDecimal("50.00"), BigDecimal.valueOf(100.0), null, null);
+        verify(ledgerService).record(card, MERCHANT_ID, LedgerEntryType.HOLD_PLACED, new BigDecimal("50.00"), BigDecimal.valueOf(100.0), null, null, false);
     }
 
     @Test
     void reserve_returnsCachedResponse_withoutTouchingBusinessLogic_whenIdempotencyKeyAlreadyCompleted() {
         HoldResponse cached = new HoldResponse(1L, "PENDING", LocalDateTime.now().plusMinutes(15), BigDecimal.valueOf(50.0));
-        when(idempotencyKeyService.claim(MERCHANT_ID, IDEMPOTENCY_KEY, "hash", HoldResponse.class)).thenReturn(Optional.of(cached));
+        when(idempotencyKeyService.claim(MERCHANT_ID, "reserve", IDEMPOTENCY_KEY, "hash", HoldResponse.class)).thenReturn(Optional.of(cached));
 
         HoldResponse response = giftCardHoldService.reserve(new ReserveRequest("GC-CACHED", BigDecimal.valueOf(50.0)), IDEMPOTENCY_KEY);
 
         assertEquals(cached, response);
         verify(giftCardRepository, never()).findByMerchantIdAndCardCodeForUpdate(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
-        verify(idempotencyKeyService, never()).complete(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(idempotencyKeyService, never()).complete(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -119,8 +119,8 @@ class GiftCardHoldServiceUnitTest {
         assertThrows(UnknownGiftCardException.class,
                 () -> giftCardHoldService.reserve(new ReserveRequest("MISSING", BigDecimal.valueOf(10.0)), IDEMPOTENCY_KEY));
 
-        verify(idempotencyKeyService).discard(MERCHANT_ID, IDEMPOTENCY_KEY);
-        verify(idempotencyKeyService, never()).complete(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(idempotencyKeyService).discard(MERCHANT_ID, "reserve", IDEMPOTENCY_KEY);
+        verify(idempotencyKeyService, never()).complete(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -134,7 +134,7 @@ class GiftCardHoldServiceUnitTest {
         assertThrows(InsufficientAvailableBalanceException.class,
                 () -> giftCardHoldService.reserve(new ReserveRequest(cardCode, BigDecimal.valueOf(50.0)), IDEMPOTENCY_KEY));
         verify(ledgerService, never()).record(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean());
     }
 
     @Test
@@ -180,7 +180,7 @@ class GiftCardHoldServiceUnitTest {
 
         assertEquals("CAPTURED", response.status());
         assertMoneyEquals(BigDecimal.valueOf(70.0), card.getBalance());
-        verify(ledgerService).record(card, MERCHANT_ID, LedgerEntryType.HOLD_CAPTURED, BigDecimal.valueOf(30.0), BigDecimal.valueOf(70.0), hold.getId(), null);
+        verify(ledgerService).record(card, MERCHANT_ID, LedgerEntryType.HOLD_CAPTURED, BigDecimal.valueOf(30.0), BigDecimal.valueOf(70.0), hold.getId(), null, false);
     }
 
     @Test
@@ -197,7 +197,7 @@ class GiftCardHoldServiceUnitTest {
         assertEquals("CAPTURED", response.status());
         verify(giftCardRepository, never()).findByMerchantIdAndCardCodeForUpdate(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         verify(ledgerService, never()).record(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean());
     }
 
     @Test
@@ -243,7 +243,7 @@ class GiftCardHoldServiceUnitTest {
 
         assertEquals("RELEASED", response.status());
         assertMoneyEquals(BigDecimal.valueOf(100.0), card.getBalance());
-        verify(ledgerService).record(card, MERCHANT_ID, LedgerEntryType.HOLD_RELEASED, BigDecimal.valueOf(30.0), BigDecimal.valueOf(100.0), hold.getId(), null);
+        verify(ledgerService).record(card, MERCHANT_ID, LedgerEntryType.HOLD_RELEASED, BigDecimal.valueOf(30.0), BigDecimal.valueOf(100.0), hold.getId(), null, false);
     }
 
     @Test
@@ -259,7 +259,7 @@ class GiftCardHoldServiceUnitTest {
 
         assertEquals("RELEASED", response.status());
         verify(ledgerService, never()).record(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean());
     }
 
     @Test

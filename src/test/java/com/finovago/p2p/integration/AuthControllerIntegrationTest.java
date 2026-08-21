@@ -2,6 +2,7 @@ package com.finovago.p2p.integration;
 
 import com.finovago.p2p.AbstractIntegrationTest;
 import com.finovago.p2p.config.PostgresTestcontainerInitializer;
+import com.finovago.p2p.dto.ApiKeyResponse;
 import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.model.Role;
@@ -76,7 +77,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         merchantId = merchant.getId();
         userRepository.save(new User(EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant));
         userRepository.save(new User(VALID_EMAIL, passwordEncoder.encode(PASSWORD), Role.ADMIN, null));
-        ownerId = userRepository.save(new User(OWNER_EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant, false, true)).getId();
+        ownerId = userRepository.save(new User(OWNER_EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant, true)).getId();
     }
 
     @Test
@@ -323,10 +324,8 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
                         .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"New Merchant\"}"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.owner.accessToken", notNullValue()))
-                .andExpect(jsonPath("$.owner.refreshToken", notNullValue()))
-                .andExpect(jsonPath("$.serviceAccountEmail", notNullValue()))
-                .andExpect(jsonPath("$.serviceAccountPassword", notNullValue()));
+                .andExpect(jsonPath("$.accessToken", notNullValue()))
+                .andExpect(jsonPath("$.refreshToken", notNullValue()));
 
         // Verify user was created
         assertNotNull(userRepository.findByEmail(newEmail));
@@ -408,21 +407,112 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
                         .header(AUTHORIZATION, "Bearer " + adminAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"New Merchant\"}"))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken", notNullValue()))
+                .andExpect(jsonPath("$.refreshToken", notNullValue()));
 
         User createdOwner = userRepository.findByEmail(newEmail).orElseThrow();
         assertEquals(Role.MERCHANT, createdOwner.getRole());
         assertNotNull(createdOwner.getMerchant());
         assertEquals("New Merchant", createdOwner.getMerchant().getName());
         assertEquals(true, createdOwner.isOwner());
-        assertEquals(false, createdOwner.isServiceAccount());
 
-        // A service account is created alongside the owner, under the same new merchant.
-        long serviceAccountCount = userRepository.findAll().stream()
+        // No other user is created upfront - only the owner.
+        long usersForMerchant = userRepository.findAll().stream()
                 .filter(u -> createdOwner.getMerchant().getId().equals(u.getMerchant() != null ? u.getMerchant().getId() : null))
-                .filter(User::isServiceAccount)
                 .count();
-        assertEquals(1L, serviceAccountCount);
+        assertEquals(1L, usersForMerchant);
+    }
+
+    @Test
+    void should_generateApiKeyForMerchant_withoutCreatingAnyUser_when_ownerRequestsOne() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+        long usersBefore = userRepository.count();
+
+        mockMvc.perform(post("/api/v1/auth/me/api-key")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.keyPrefix", notNullValue()))
+                .andExpect(jsonPath("$.apiKeySecret", notNullValue()));
+
+        assertEquals(usersBefore, userRepository.count());
+    }
+
+    @Test
+    void should_authenticateWithApiKey_when_usedOnAMerchantEndpoint() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+
+        MvcResult keyResult = mockMvc.perform(post("/api/v1/auth/me/api-key")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String apiKeySecret = objectMapper.readValue(keyResult.getResponse().getContentAsString(), ApiKeyResponse.class)
+                .apiKeySecret();
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/giftcards/lookup/NON-EXISTENT-CODE")
+                        .header("X-Api-Key", apiKeySecret))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void should_rotateApiKey_invalidatingThePreviousSecret_when_ownerGeneratesAgain() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+
+        MvcResult firstResult = mockMvc.perform(post("/api/v1/auth/me/api-key")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        String firstSecret = objectMapper.readValue(firstResult.getResponse().getContentAsString(), ApiKeyResponse.class)
+                .apiKeySecret();
+
+        mockMvc.perform(post("/api/v1/auth/me/api-key")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/giftcards/lookup/NON-EXISTENT-CODE")
+                        .header("X-Api-Key", firstSecret))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_revokeApiKey_when_ownerCallsRevoke() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+
+        MvcResult keyResult = mockMvc.perform(post("/api/v1/auth/me/api-key")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        String apiKeySecret = objectMapper.readValue(keyResult.getResponse().getContentAsString(), ApiKeyResponse.class)
+                .apiKeySecret();
+
+        mockMvc.perform(post("/api/v1/auth/me/api-key/revoke")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(false));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/giftcards/lookup/NON-EXISTENT-CODE")
+                        .header("X-Api-Key", apiKeySecret))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_returnInactiveStatus_when_revokingApiKeyThatDoesNotExist() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/me/api-key/revoke")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(false));
+    }
+
+    @Test
+    void should_returnForbidden_when_nonOwnerRequestsApiKey() throws Exception {
+        String clientAccessToken = loginAndGetAccessToken(EMAIL, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/me/api-key")
+                        .header(AUTHORIZATION, "Bearer " + clientAccessToken))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -441,7 +531,6 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         User createdUser = userRepository.findByEmail(newEmail).orElseThrow();
         assertEquals(merchantId, createdUser.getMerchant().getId());
         assertEquals(false, createdUser.isOwner());
-        assertEquals(false, createdUser.isServiceAccount());
     }
 
     @Test
@@ -513,7 +602,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void should_deactivateServiceAccount_when_ownerNeedsToCutLeakedCredentials() throws Exception {
+    void should_revokeApiKey_when_ownerNeedsToCutLeakedCredentials() throws Exception {
         String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
         String newOwnerEmail = "svc-deactivate-owner@example.com";
 
@@ -523,21 +612,22 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
                         .content("{\"email\":\"" + newOwnerEmail + "\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"Svc Deactivate Merchant\"}"))
                 .andExpect(status().isOk());
 
-        User newOwner = userRepository.findByEmail(newOwnerEmail).orElseThrow();
-        User serviceAccount = userRepository.findAll().stream()
-                .filter(u -> newOwner.getMerchant().getId().equals(u.getMerchant() != null ? u.getMerchant().getId() : null))
-                .filter(User::isServiceAccount)
-                .findFirst()
-                .orElseThrow();
-
         String newOwnerAccessToken = loginAndGetAccessToken(newOwnerEmail, PASSWORD);
+        MvcResult keyResult = mockMvc.perform(post("/api/v1/auth/me/api-key")
+                        .header(AUTHORIZATION, "Bearer " + newOwnerAccessToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        String apiKeySecret = objectMapper.readValue(keyResult.getResponse().getContentAsString(), ApiKeyResponse.class)
+                .apiKeySecret();
 
-        mockMvc.perform(post("/api/v1/auth/me/users/" + serviceAccount.getId() + "/deactivate")
+        mockMvc.perform(post("/api/v1/auth/me/api-key/revoke")
                         .header(AUTHORIZATION, "Bearer " + newOwnerAccessToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.active").value(false));
 
-        assertEquals(false, userRepository.findById(serviceAccount.getId()).orElseThrow().isActive());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/giftcards/lookup/NON-EXISTENT-CODE")
+                        .header("X-Api-Key", apiKeySecret))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

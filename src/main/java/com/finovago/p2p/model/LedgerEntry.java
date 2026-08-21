@@ -59,6 +59,12 @@ public class LedgerEntry {
     @Column(name = "reason", length = 500)
     private String reason;
 
+    // True when an API key (not a specific User) made this call - actorUserId is then always null.
+    // Kept apart from "actorUserId == null" alone so LedgerService can tell "SYSTEM" (this flag)
+    // from a genuinely unattributed legacy row ("Unknown", predates this field entirely).
+    @Column(name = "actor_via_api_key", nullable = false)
+    private boolean actorViaApiKey;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -71,6 +77,10 @@ public class LedgerEntry {
     }
 
     public LedgerEntry(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, @Nullable Long holdId, @Nullable Long actorUserId, @Nullable Long relatedEntryId, @Nullable String reason) {
+        this(giftCard, merchantId, entryType, amount, balanceAfter, holdId, actorUserId, relatedEntryId, reason, false);
+    }
+
+    public LedgerEntry(GiftCard giftCard, Long merchantId, LedgerEntryType entryType, BigDecimal amount, BigDecimal balanceAfter, @Nullable Long holdId, @Nullable Long actorUserId, @Nullable Long relatedEntryId, @Nullable String reason, boolean actorViaApiKey) {
         this.giftCard = giftCard;
         this.merchantId = merchantId;
         this.entryType = entryType;
@@ -80,6 +90,7 @@ public class LedgerEntry {
         this.actorUserId = actorUserId;
         this.relatedEntryId = relatedEntryId;
         this.reason = reason;
+        this.actorViaApiKey = actorViaApiKey;
         this.createdAt = LocalDateTime.now();
     }
 }

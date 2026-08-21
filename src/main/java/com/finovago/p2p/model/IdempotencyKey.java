@@ -28,6 +28,9 @@ public class IdempotencyKey {
     @Column(name = "idempotency_key", nullable = false)
     private String idempotencyKey;
 
+    @Column(nullable = false, length = 50)
+    private String endpoint;
+
     @Column(name = "request_hash", nullable = false)
     private String requestHash;
 
@@ -44,9 +47,10 @@ public class IdempotencyKey {
     @Column(name = "expires_at", nullable = false)
     private LocalDateTime expiresAt;
 
-    public IdempotencyKey(Long merchantId, String idempotencyKey, String requestHash, LocalDateTime expiresAt) {
+    public IdempotencyKey(Long merchantId, String idempotencyKey, String endpoint, String requestHash, LocalDateTime expiresAt) {
         this.merchantId = merchantId;
         this.idempotencyKey = idempotencyKey;
+        this.endpoint = endpoint;
         this.requestHash = requestHash;
         this.status = IdempotencyStatus.IN_PROGRESS;
         this.createdAt = LocalDateTime.now();

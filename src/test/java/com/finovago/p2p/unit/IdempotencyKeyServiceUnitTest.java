@@ -35,6 +35,7 @@ import tools.jackson.databind.json.JsonMapper;
 class IdempotencyKeyServiceUnitTest {
     private static final Long MERCHANT_ID = 1L;
     private static final String KEY = "client-key-123";
+    private static final String ENDPOINT = "redeem";
 
     @Mock
     private IdempotencyKeyRepository idempotencyKeyRepository;
@@ -53,9 +54,9 @@ class IdempotencyKeyServiceUnitTest {
     @Test
     void claim_proceedsWithFreshKey_whenNoExistingEntry() {
         String requestHash = hash("GC-1", 10.0);
-        when(idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(MERCHANT_ID, KEY)).thenReturn(Optional.empty());
+        when(idempotencyKeyRepository.findByMerchantIdAndEndpointAndIdempotencyKey(MERCHANT_ID, ENDPOINT, KEY)).thenReturn(Optional.empty());
 
-        Optional<RedemptionResponse> result = idempotencyKeyService.claim(MERCHANT_ID, KEY, requestHash, RedemptionResponse.class);
+        Optional<RedemptionResponse> result = idempotencyKeyService.claim(MERCHANT_ID, ENDPOINT, KEY, requestHash, RedemptionResponse.class);
 
         assertTrue(result.isEmpty());
         verify(idempotencyKeyRepository).saveAndFlush(ArgumentMatchers.any(IdempotencyKey.class));
@@ -64,11 +65,11 @@ class IdempotencyKeyServiceUnitTest {
     @Test
     void claim_returnsCachedResponse_whenSameKeyAlreadyCompletedWithSameRequest() {
         String requestHash = hash("GC-1", 10.0);
-        IdempotencyKey completed = new IdempotencyKey(MERCHANT_ID, KEY, requestHash, LocalDateTime.now().plusHours(1));
+        IdempotencyKey completed = new IdempotencyKey(MERCHANT_ID, KEY, ENDPOINT, requestHash, LocalDateTime.now().plusHours(1));
         completed.complete("{\"status\":\"SUCCESS\",\"deductedAmount\":10.0,\"remainingBalance\":40.0,\"remainingToPay\":0.0}");
-        when(idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(MERCHANT_ID, KEY)).thenReturn(Optional.of(completed));
+        when(idempotencyKeyRepository.findByMerchantIdAndEndpointAndIdempotencyKey(MERCHANT_ID, ENDPOINT, KEY)).thenReturn(Optional.of(completed));
 
-        Optional<RedemptionResponse> result = idempotencyKeyService.claim(MERCHANT_ID, KEY, requestHash, RedemptionResponse.class);
+        Optional<RedemptionResponse> result = idempotencyKeyService.claim(MERCHANT_ID, ENDPOINT, KEY, requestHash, RedemptionResponse.class);
 
         assertTrue(result.isPresent());
         assertEquals(new RedemptionResponse("SUCCESS", BigDecimal.valueOf(10.0), BigDecimal.valueOf(40.0), BigDecimal.valueOf(0.0)), result.get());
@@ -76,54 +77,68 @@ class IdempotencyKeyServiceUnitTest {
     }
 
     @Test
+    void claim_isScopedByEndpoint_soTheSameKeyOnADifferentEndpointNeverSeesThisOnesClaim() {
+        // The whole point of scoping by (merchant, endpoint, key): reusing the same key value on
+        // a different endpoint must behave exactly like a fresh key, never replay/conflict against
+        // this endpoint's claim - the repository call itself proves the endpoint is part of the lookup.
+        String requestHash = hash("GC-1", 10.0);
+        when(idempotencyKeyRepository.findByMerchantIdAndEndpointAndIdempotencyKey(MERCHANT_ID, "reserve", KEY)).thenReturn(Optional.empty());
+
+        Optional<RedemptionResponse> result = idempotencyKeyService.claim(MERCHANT_ID, "reserve", KEY, requestHash, RedemptionResponse.class);
+
+        assertTrue(result.isEmpty());
+        verify(idempotencyKeyRepository, never()).findByMerchantIdAndEndpointAndIdempotencyKey(MERCHANT_ID, ENDPOINT, KEY);
+    }
+
+    @Test
     void claim_throwsInProgress_whenSameKeyStillBeingProcessed() {
         String requestHash = hash("GC-1", 10.0);
-        IdempotencyKey inProgress = new IdempotencyKey(MERCHANT_ID, KEY, requestHash, LocalDateTime.now().plusHours(1));
-        when(idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(MERCHANT_ID, KEY)).thenReturn(Optional.of(inProgress));
+        IdempotencyKey inProgress = new IdempotencyKey(MERCHANT_ID, KEY, ENDPOINT, requestHash, LocalDateTime.now().plusHours(1));
+        when(idempotencyKeyRepository.findByMerchantIdAndEndpointAndIdempotencyKey(MERCHANT_ID, ENDPOINT, KEY)).thenReturn(Optional.of(inProgress));
 
         assertThrows(IdempotencyKeyInProgressException.class,
-                () -> idempotencyKeyService.claim(MERCHANT_ID, KEY, requestHash, RedemptionResponse.class));
+                () -> idempotencyKeyService.claim(MERCHANT_ID, ENDPOINT, KEY, requestHash, RedemptionResponse.class));
     }
 
     @Test
     void claim_throwsConflict_whenSameKeyReusedWithDifferentPayload() {
-        IdempotencyKey completed = new IdempotencyKey(MERCHANT_ID, KEY, hash("GC-1", 10.0), LocalDateTime.now().plusHours(1));
+        IdempotencyKey completed = new IdempotencyKey(MERCHANT_ID, KEY, ENDPOINT, hash("GC-1", 10.0), LocalDateTime.now().plusHours(1));
         completed.complete("{\"status\":\"SUCCESS\",\"deductedAmount\":10.0,\"remainingBalance\":40.0,\"remainingToPay\":0.0}");
-        when(idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(MERCHANT_ID, KEY)).thenReturn(Optional.of(completed));
+        when(idempotencyKeyRepository.findByMerchantIdAndEndpointAndIdempotencyKey(MERCHANT_ID, ENDPOINT, KEY)).thenReturn(Optional.of(completed));
 
         assertThrows(IdempotencyKeyConflictException.class,
-                () -> idempotencyKeyService.claim(MERCHANT_ID, KEY, hash("GC-1", 999.0), RedemptionResponse.class));
+                () -> idempotencyKeyService.claim(MERCHANT_ID, ENDPOINT, KEY, hash("GC-1", 999.0), RedemptionResponse.class));
     }
 
     @Test
     void claim_resolvesFromConcurrentWinner_whenSaveLosesTheInsertRace() {
         String requestHash = hash("GC-1", 10.0);
-        IdempotencyKey wonByConcurrentRequest = new IdempotencyKey(MERCHANT_ID, KEY, requestHash, LocalDateTime.now().plusHours(1));
+        IdempotencyKey wonByConcurrentRequest = new IdempotencyKey(MERCHANT_ID, KEY, ENDPOINT, requestHash, LocalDateTime.now().plusHours(1));
 
-        when(idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(MERCHANT_ID, KEY))
+        when(idempotencyKeyRepository.findByMerchantIdAndEndpointAndIdempotencyKey(MERCHANT_ID, ENDPOINT, KEY))
                 .thenReturn(Optional.empty())
                 .thenReturn(Optional.of(wonByConcurrentRequest));
         when(idempotencyKeyRepository.saveAndFlush(ArgumentMatchers.any(IdempotencyKey.class)))
                 .thenThrow(new DataIntegrityViolationException("unique violation"));
 
         assertThrows(IdempotencyKeyInProgressException.class,
-                () -> idempotencyKeyService.claim(MERCHANT_ID, KEY, requestHash, RedemptionResponse.class));
-        verify(idempotencyKeyRepository, times(2)).findByMerchantIdAndIdempotencyKey(MERCHANT_ID, KEY);
+                () -> idempotencyKeyService.claim(MERCHANT_ID, ENDPOINT, KEY, requestHash, RedemptionResponse.class));
+        verify(idempotencyKeyRepository, times(2)).findByMerchantIdAndEndpointAndIdempotencyKey(MERCHANT_ID, ENDPOINT, KEY);
     }
 
     @Test
     void claim_returnsConcurrentWinnersResponse_whenSaveLosesTheInsertRaceAndWinnerAlreadyCompleted() {
         String requestHash = hash("GC-1", 10.0);
-        IdempotencyKey wonByConcurrentRequest = new IdempotencyKey(MERCHANT_ID, KEY, requestHash, LocalDateTime.now().plusHours(1));
+        IdempotencyKey wonByConcurrentRequest = new IdempotencyKey(MERCHANT_ID, KEY, ENDPOINT, requestHash, LocalDateTime.now().plusHours(1));
         wonByConcurrentRequest.complete("{\"status\":\"SUCCESS\",\"deductedAmount\":10.0,\"remainingBalance\":40.0,\"remainingToPay\":0.0}");
 
-        when(idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(MERCHANT_ID, KEY))
+        when(idempotencyKeyRepository.findByMerchantIdAndEndpointAndIdempotencyKey(MERCHANT_ID, ENDPOINT, KEY))
                 .thenReturn(Optional.empty())
                 .thenReturn(Optional.of(wonByConcurrentRequest));
         when(idempotencyKeyRepository.saveAndFlush(ArgumentMatchers.any(IdempotencyKey.class)))
                 .thenThrow(new DataIntegrityViolationException("unique violation"));
 
-        Optional<RedemptionResponse> result = idempotencyKeyService.claim(MERCHANT_ID, KEY, requestHash, RedemptionResponse.class);
+        Optional<RedemptionResponse> result = idempotencyKeyService.claim(MERCHANT_ID, ENDPOINT, KEY, requestHash, RedemptionResponse.class);
 
         assertTrue(result.isPresent());
         assertEquals(new RedemptionResponse("SUCCESS", BigDecimal.valueOf(10.0), BigDecimal.valueOf(40.0), BigDecimal.valueOf(0.0)), result.get());
@@ -132,10 +147,10 @@ class IdempotencyKeyServiceUnitTest {
     @Test
     void complete_marksExistingClaimAsCompletedWithSerializedResponse() {
         String requestHash = hash("GC-1", 10.0);
-        IdempotencyKey claim = new IdempotencyKey(MERCHANT_ID, KEY, requestHash, LocalDateTime.now().plusHours(1));
-        when(idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(MERCHANT_ID, KEY)).thenReturn(Optional.of(claim));
+        IdempotencyKey claim = new IdempotencyKey(MERCHANT_ID, KEY, ENDPOINT, requestHash, LocalDateTime.now().plusHours(1));
+        when(idempotencyKeyRepository.findByMerchantIdAndEndpointAndIdempotencyKey(MERCHANT_ID, ENDPOINT, KEY)).thenReturn(Optional.of(claim));
 
-        idempotencyKeyService.complete(MERCHANT_ID, KEY, new RedemptionResponse("SUCCESS", BigDecimal.valueOf(10.0), BigDecimal.valueOf(40.0), BigDecimal.valueOf(0.0)));
+        idempotencyKeyService.complete(MERCHANT_ID, ENDPOINT, KEY, new RedemptionResponse("SUCCESS", BigDecimal.valueOf(10.0), BigDecimal.valueOf(40.0), BigDecimal.valueOf(0.0)));
 
         assertTrue(!claim.isInProgress());
         assertTrue(claim.getResponseBody().contains("\"deductedAmount\":10.0"));
@@ -143,37 +158,37 @@ class IdempotencyKeyServiceUnitTest {
 
     @Test
     void discard_deletesExistingClaim() {
-        IdempotencyKey claim = new IdempotencyKey(MERCHANT_ID, KEY, hash("GC-1", 10.0), LocalDateTime.now().plusHours(1));
-        when(idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(MERCHANT_ID, KEY)).thenReturn(Optional.of(claim));
+        IdempotencyKey claim = new IdempotencyKey(MERCHANT_ID, KEY, ENDPOINT, hash("GC-1", 10.0), LocalDateTime.now().plusHours(1));
+        when(idempotencyKeyRepository.findByMerchantIdAndEndpointAndIdempotencyKey(MERCHANT_ID, ENDPOINT, KEY)).thenReturn(Optional.of(claim));
 
-        idempotencyKeyService.discard(MERCHANT_ID, KEY);
+        idempotencyKeyService.discard(MERCHANT_ID, ENDPOINT, KEY);
 
         verify(idempotencyKeyRepository).delete(claim);
     }
 
     @Test
     void discard_swallowsRepositoryFailure_insteadOfPropagating() {
-        when(idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(MERCHANT_ID, KEY))
+        when(idempotencyKeyRepository.findByMerchantIdAndEndpointAndIdempotencyKey(MERCHANT_ID, ENDPOINT, KEY))
                 .thenThrow(new RuntimeException("db unavailable"));
 
-        assertDoesNotThrow(() -> idempotencyKeyService.discard(MERCHANT_ID, KEY));
+        assertDoesNotThrow(() -> idempotencyKeyService.discard(MERCHANT_ID, ENDPOINT, KEY));
     }
 
     @Test
     void claim_throwsIllegalState_whenCachedResponseBodyIsCorrupted() {
         String requestHash = hash("GC-1", 10.0);
-        IdempotencyKey completed = new IdempotencyKey(MERCHANT_ID, KEY, requestHash, LocalDateTime.now().plusHours(1));
+        IdempotencyKey completed = new IdempotencyKey(MERCHANT_ID, KEY, ENDPOINT, requestHash, LocalDateTime.now().plusHours(1));
         completed.complete("not valid json");
-        when(idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(MERCHANT_ID, KEY)).thenReturn(Optional.of(completed));
+        when(idempotencyKeyRepository.findByMerchantIdAndEndpointAndIdempotencyKey(MERCHANT_ID, ENDPOINT, KEY)).thenReturn(Optional.of(completed));
 
         assertThrows(IllegalStateException.class,
-                () -> idempotencyKeyService.claim(MERCHANT_ID, KEY, requestHash, RedemptionResponse.class));
+                () -> idempotencyKeyService.claim(MERCHANT_ID, ENDPOINT, KEY, requestHash, RedemptionResponse.class));
     }
 
     @Test
     void deleteExpired_removesOnlyExpiredEntries() {
         LocalDateTime cutoff = LocalDateTime.now();
-        IdempotencyKey expired = new IdempotencyKey(MERCHANT_ID, KEY, hash("GC-1", 10.0), cutoff.minusMinutes(1));
+        IdempotencyKey expired = new IdempotencyKey(MERCHANT_ID, KEY, ENDPOINT, hash("GC-1", 10.0), cutoff.minusMinutes(1));
         when(idempotencyKeyRepository.findByExpiresAtBefore(cutoff)).thenReturn(List.of(expired));
 
         idempotencyKeyService.deleteExpired(cutoff);

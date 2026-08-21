@@ -22,7 +22,7 @@ public record LedgerEntryResponse(
     @Schema(description = "Timestamp at which this entry was recorded", example = "2026-07-23T15:30:00")
     LocalDateTime createdAt,
 
-    @Schema(description = "Who triggered this operation: the user's email (\"SYSTEM / email\" for a service account), \"Deleted user\" if the account no longer exists, or \"Unknown\" for entries recorded before this field existed.", example = "user@example.com", nullable = true)
+    @Schema(description = "Who triggered this operation: the user's email, \"SYSTEM\" if it was an API-key-authenticated call, \"Deleted user\" if the account no longer exists, or \"Unknown\" for entries recorded before this field existed.", example = "user@example.com", nullable = true)
     String actor,
 
     @Schema(description = "Operator-supplied justification. Set for ADJUSTMENT (mandatory when created) and optionally for REFUND; null for every other entry type.", example = "Customer return - order #4521", nullable = true)

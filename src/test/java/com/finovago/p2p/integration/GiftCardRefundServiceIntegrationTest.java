@@ -190,13 +190,12 @@ class GiftCardRefundServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void should_allow_refund_from_a_service_account() {
+    void should_allow_refund_from_an_api_key() {
         Long redemptionEntryId = createCardAndRedeem(BigDecimal.valueOf(100.0), BigDecimal.valueOf(40.0));
 
-        Long serviceUserId = userRepository.save(new User("integration-refund-test@example.com", "hashed", Role.MERCHANT, merchantRepository.findById(merchantId).orElseThrow(), true)).getId();
-        AuthenticatedUser serviceUser = new AuthenticatedUser("integration-refund-test@example.com", "MERCHANT", merchantId, serviceUserId);
+        AuthenticatedUser apiKeyCaller = new AuthenticatedUser("api-key:fovak_test", "MERCHANT", merchantId, null, true);
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(serviceUser, null, List.of()));
+                new UsernamePasswordAuthenticationToken(apiKeyCaller, null, List.of()));
 
         RefundResponse response = giftCardRefundService.refund(
                 new RefundRequest(CARD_CODE, BigDecimal.valueOf(40.0), redemptionEntryId, null),

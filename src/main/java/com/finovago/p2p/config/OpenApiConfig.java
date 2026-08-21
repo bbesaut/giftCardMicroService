@@ -22,7 +22,7 @@ public class OpenApiConfig {
                 .pathsToMatch("/", "/api/v1/giftcards/create", "/api/v1/giftcards/redeem", "/api/v1/giftcards/lookup/**",
                         "/api/v1/giftcards/reserve", "/api/v1/giftcards/holds/**", "/api/v1/giftcards/*/ledger",
                         "/api/v1/giftcards/refund", "/api/v1/giftcards/credit", "/api/v1/auth/me/users",
-                        "/api/v1/auth/me/users/**")
+                        "/api/v1/auth/me/users/**", "/api/v1/auth/me/api-key", "/api/v1/auth/me/api-key/**")
                 .build();
     }
 
