@@ -53,21 +53,26 @@ public class IdempotencyKeyService {
      * request already completed successfully under this key. Returns empty if the caller should
      * proceed with the business logic. Throws if the key is already in use by an in-flight or
      * mismatched request.
+     *
+     * Scoped by (merchant, endpoint, key) - like Stripe/PayPal/AWS - not just (merchant, key), so
+     * a client reusing the same key value on two different endpoints can never have one silently
+     * replay the other's response; requestHash only needs to catch reuse *within* the same
+     * endpoint with a different payload.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public <T> Optional<T> claim(Long merchantId, String idempotencyKey, String requestHash, Class<T> responseType) {
-        Optional<IdempotencyKey> existing = idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(merchantId, idempotencyKey);
+    public <T> Optional<T> claim(Long merchantId, String endpoint, String idempotencyKey, String requestHash, Class<T> responseType) {
+        Optional<IdempotencyKey> existing = idempotencyKeyRepository.findByMerchantIdAndEndpointAndIdempotencyKey(merchantId, endpoint, idempotencyKey);
         if (existing.isPresent()) {
             return resolveExisting(existing.get(), requestHash, responseType);
         }
 
         try {
-            IdempotencyKey claimRow = new IdempotencyKey(merchantId, idempotencyKey, requestHash, LocalDateTime.now().plusHours(ttlHours));
+            IdempotencyKey claimRow = new IdempotencyKey(merchantId, idempotencyKey, endpoint, requestHash, LocalDateTime.now().plusHours(ttlHours));
             idempotencyKeyRepository.saveAndFlush(claimRow);
             return Optional.empty();
         } catch (DataIntegrityViolationException e) {
             // Lost the race against a concurrent request with the same key: fall back to whatever it wrote.
-            IdempotencyKey concurrent = idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(merchantId, idempotencyKey)
+            IdempotencyKey concurrent = idempotencyKeyRepository.findByMerchantIdAndEndpointAndIdempotencyKey(merchantId, endpoint, idempotencyKey)
                     .orElseThrow(() -> e);
             return resolveExisting(concurrent, requestHash, responseType);
         }
@@ -84,16 +89,16 @@ public class IdempotencyKeyService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void complete(Long merchantId, String idempotencyKey, Object response) {
-        idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(merchantId, idempotencyKey)
+    public void complete(Long merchantId, String endpoint, String idempotencyKey, Object response) {
+        idempotencyKeyRepository.findByMerchantIdAndEndpointAndIdempotencyKey(merchantId, endpoint, idempotencyKey)
                 .ifPresent(key -> key.complete(serialize(response)));
     }
 
     /** Best-effort cleanup so a genuine business failure (e.g. inactive card) doesn't permanently block retries under the same key. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void discard(Long merchantId, String idempotencyKey) {
+    public void discard(Long merchantId, String endpoint, String idempotencyKey) {
         try {
-            idempotencyKeyRepository.findByMerchantIdAndIdempotencyKey(merchantId, idempotencyKey)
+            idempotencyKeyRepository.findByMerchantIdAndEndpointAndIdempotencyKey(merchantId, endpoint, idempotencyKey)
                     .ifPresent(idempotencyKeyRepository::delete);
         } catch (Exception e) {
             log.warn("Failed to discard idempotency key claim for merchant {}: {}", merchantId, e.getMessage());

@@ -64,7 +64,7 @@ public class GiftCardRefundService {
                 request.amount().setScale(2, RoundingMode.HALF_UP).toPlainString(),
                 String.valueOf(request.redemptionLedgerEntryId()));
 
-        Optional<RefundResponse> cached = idempotencyKeyService.claim(merchantId, idempotencyKey, requestHash, RefundResponse.class);
+        Optional<RefundResponse> cached = idempotencyKeyService.claim(merchantId, "refund", idempotencyKey, requestHash, RefundResponse.class);
         if (cached.isPresent()) {
             log.info("Idempotency-Key {} already completed, returning cached result", idempotencyKey);
             return cached.get();
@@ -72,10 +72,10 @@ public class GiftCardRefundService {
 
         try {
             RefundResponse response = refundWithoutIdempotency(merchantId, request);
-            idempotencyKeyService.complete(merchantId, idempotencyKey, response);
+            idempotencyKeyService.complete(merchantId, "refund", idempotencyKey, response);
             return response;
         } catch (RuntimeException e) {
-            idempotencyKeyService.discard(merchantId, idempotencyKey);
+            idempotencyKeyService.discard(merchantId, "refund", idempotencyKey);
             throw e;
         }
     }

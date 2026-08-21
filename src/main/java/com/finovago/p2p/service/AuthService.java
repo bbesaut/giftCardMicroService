@@ -176,7 +176,7 @@ public class AuthService {
     private User requireOwner(Long callerId) {
         User caller = callerId == null ? null : userRepository.findById(callerId).orElse(null);
         if (caller == null || !caller.isOwner() || !caller.isActive()) {
-            throw new OwnerPrivilegeRequiredException("Only the merchant's owner account can manage other users");
+            throw new OwnerPrivilegeRequiredException("Only the merchant's owner account can perform this action");
         }
         return caller;
     }

@@ -154,14 +154,14 @@ class GiftCardServiceUnitTest
     void redeemGiftCardAsync_returnsCachedResponse_withoutTouchingBusinessLogic_whenIdempotencyKeyAlreadyCompleted() {
         RedemptionResponse cached = new RedemptionResponse("SUCCESS", BigDecimal.valueOf(30.0), BigDecimal.valueOf(70.0), BigDecimal.ZERO);
         when(idempotencyKeyService.hashRequest("VALID123", "30.00")).thenReturn("hash");
-        when(idempotencyKeyService.claim(MERCHANT_ID, IDEMPOTENCY_KEY, "hash", RedemptionResponse.class)).thenReturn(Optional.of(cached));
+        when(idempotencyKeyService.claim(MERCHANT_ID, "redeem", IDEMPOTENCY_KEY, "hash", RedemptionResponse.class)).thenReturn(Optional.of(cached));
 
         CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(
                 new RedemptionRequest(BigDecimal.valueOf(30.0), "VALID123"), IDEMPOTENCY_KEY);
 
         assertEquals(cached, future.join());
         verify(giftCardRepository, never()).findByMerchantIdAndCardCode(any(), any());
-        verify(idempotencyKeyService, never()).complete(any(), any(), any());
+        verify(idempotencyKeyService, never()).complete(any(), any(), any(), any());
     }
 
     @Test
@@ -169,7 +169,7 @@ class GiftCardServiceUnitTest
         String cardCode = "VALID123";
         GiftCard activeCard = new GiftCard(merchant, cardCode, BigDecimal.valueOf(100.0), true, LocalDate.now().plusDays(30));
         when(idempotencyKeyService.hashRequest(cardCode, "30.00")).thenReturn("hash");
-        when(idempotencyKeyService.claim(MERCHANT_ID, IDEMPOTENCY_KEY, "hash", RedemptionResponse.class)).thenReturn(Optional.empty());
+        when(idempotencyKeyService.claim(MERCHANT_ID, "redeem", IDEMPOTENCY_KEY, "hash", RedemptionResponse.class)).thenReturn(Optional.empty());
         when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.of(activeCard));
 
         CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(
@@ -177,14 +177,14 @@ class GiftCardServiceUnitTest
         RedemptionResponse response = future.join();
 
         assertMoneyEquals(BigDecimal.valueOf(30.0), response.deductedAmount());
-        verify(idempotencyKeyService).complete(eq(MERCHANT_ID), eq(IDEMPOTENCY_KEY), eq(response));
+        verify(idempotencyKeyService).complete(eq(MERCHANT_ID), eq("redeem"), eq(IDEMPOTENCY_KEY), eq(response));
     }
 
     @Test
     void redeemGiftCardAsync_discardsClaim_whenBusinessLogicFails() {
         String unknownCode = "MISSING";
         when(idempotencyKeyService.hashRequest(unknownCode, "30.00")).thenReturn("hash");
-        when(idempotencyKeyService.claim(MERCHANT_ID, IDEMPOTENCY_KEY, "hash", RedemptionResponse.class)).thenReturn(Optional.empty());
+        when(idempotencyKeyService.claim(MERCHANT_ID, "redeem", IDEMPOTENCY_KEY, "hash", RedemptionResponse.class)).thenReturn(Optional.empty());
         when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, unknownCode)).thenReturn(Optional.empty());
 
         CompletableFuture<RedemptionResponse> future = giftCardService.redeemGiftCardAsync(
@@ -192,8 +192,8 @@ class GiftCardServiceUnitTest
 
         CompletionException thrown = assertThrows(CompletionException.class, future::join);
         assertEquals(UnknownGiftCardException.class, thrown.getCause().getClass());
-        verify(idempotencyKeyService).discard(MERCHANT_ID, IDEMPOTENCY_KEY);
-        verify(idempotencyKeyService, never()).complete(any(), any(), any());
+        verify(idempotencyKeyService).discard(MERCHANT_ID, "redeem", IDEMPOTENCY_KEY);
+        verify(idempotencyKeyService, never()).complete(any(), any(), any(), any());
     }
 
     @Test

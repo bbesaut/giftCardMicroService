@@ -62,7 +62,7 @@ public class GiftCardService {
         return CompletableFuture.supplyAsync(() -> {
             String requestHash = idempotencyKeyService.hashRequest(request.giftCardCode(), request.amount().setScale(2, RoundingMode.HALF_UP).toPlainString());
 
-            Optional<RedemptionResponse> cached = idempotencyKeyService.claim(merchantId, idempotencyKey, requestHash, RedemptionResponse.class);
+            Optional<RedemptionResponse> cached = idempotencyKeyService.claim(merchantId, "redeem", idempotencyKey, requestHash, RedemptionResponse.class);
             if (cached.isPresent()) {
                 log.info("Idempotency-Key {} already completed, returning cached result", idempotencyKey);
                 return cached.get();
@@ -70,10 +70,10 @@ public class GiftCardService {
 
             try {
                 RedemptionResponse response = executeRedemptionSync(merchantId, request.giftCardCode(), request.amount(), actorUserId, actorViaApiKey);
-                idempotencyKeyService.complete(merchantId, idempotencyKey, response);
+                idempotencyKeyService.complete(merchantId, "redeem", idempotencyKey, response);
                 return response;
             } catch (RuntimeException e) {
-                idempotencyKeyService.discard(merchantId, idempotencyKey);
+                idempotencyKeyService.discard(merchantId, "redeem", idempotencyKey);
                 throw e;
             }
         }, taskExecutor);

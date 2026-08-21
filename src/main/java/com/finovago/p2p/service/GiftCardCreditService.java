@@ -64,7 +64,7 @@ public class GiftCardCreditService {
                 request.giftCardCode(),
                 request.amount().setScale(2, RoundingMode.HALF_UP).toPlainString());
 
-        Optional<CreditResponse> cached = idempotencyKeyService.claim(merchantId, idempotencyKey, requestHash, CreditResponse.class);
+        Optional<CreditResponse> cached = idempotencyKeyService.claim(merchantId, "credit", idempotencyKey, requestHash, CreditResponse.class);
         if (cached.isPresent()) {
             log.info("Idempotency-Key {} already completed, returning cached result", idempotencyKey);
             return cached.get();
@@ -72,10 +72,10 @@ public class GiftCardCreditService {
 
         try {
             CreditResponse response = creditWithoutIdempotency(merchantId, request);
-            idempotencyKeyService.complete(merchantId, idempotencyKey, response);
+            idempotencyKeyService.complete(merchantId, "credit", idempotencyKey, response);
             return response;
         } catch (RuntimeException e) {
-            idempotencyKeyService.discard(merchantId, idempotencyKey);
+            idempotencyKeyService.discard(merchantId, "credit", idempotencyKey);
             throw e;
         }
     }

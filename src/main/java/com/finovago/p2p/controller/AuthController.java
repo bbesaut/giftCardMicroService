@@ -167,7 +167,7 @@ public class AuthController {
         @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Full authentication is required to access this resource\"}"))),
         @ApiResponse(responseCode = "403", description = "Insufficient permissions (caller must be the merchant's owner)",
-            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Forbidden\",\"message\":\"Only the merchant's owner account can manage other users\"}"))),
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Forbidden\",\"message\":\"Only the merchant's owner account can perform this action\"}"))),
         @ApiResponse(responseCode = "409", description = "Email already registered",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Conflict\",\"message\":\"Email already registered\"}"))),
         @ApiResponse(responseCode = "500", description = "Internal server error",

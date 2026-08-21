@@ -10,7 +10,7 @@ import com.finovago.p2p.model.IdempotencyKey;
 
 public interface IdempotencyKeyRepository extends JpaRepository<IdempotencyKey, Long> {
 
-    Optional<IdempotencyKey> findByMerchantIdAndIdempotencyKey(Long merchantId, String idempotencyKey);
+    Optional<IdempotencyKey> findByMerchantIdAndEndpointAndIdempotencyKey(Long merchantId, String endpoint, String idempotencyKey);
 
     // Unlocked read for the scheduler's periodic sweep of expired entries.
     List<IdempotencyKey> findByExpiresAtBefore(LocalDateTime cutoff);

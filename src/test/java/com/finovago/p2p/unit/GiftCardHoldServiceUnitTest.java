@@ -69,7 +69,7 @@ class GiftCardHoldServiceUnitTest {
         lenient().when(currentUserContext.currentMerchantId()).thenReturn(MERCHANT_ID);
         lenient().when(currentUserContext.currentUserIdOrNull()).thenReturn(null);
         lenient().when(idempotencyKeyService.hashRequest(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString())).thenReturn("hash");
-        lenient().when(idempotencyKeyService.claim(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(HoldResponse.class)))
+        lenient().when(idempotencyKeyService.claim(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(HoldResponse.class)))
                 .thenReturn(Optional.empty());
     }
 
@@ -103,13 +103,13 @@ class GiftCardHoldServiceUnitTest {
     @Test
     void reserve_returnsCachedResponse_withoutTouchingBusinessLogic_whenIdempotencyKeyAlreadyCompleted() {
         HoldResponse cached = new HoldResponse(1L, "PENDING", LocalDateTime.now().plusMinutes(15), BigDecimal.valueOf(50.0));
-        when(idempotencyKeyService.claim(MERCHANT_ID, IDEMPOTENCY_KEY, "hash", HoldResponse.class)).thenReturn(Optional.of(cached));
+        when(idempotencyKeyService.claim(MERCHANT_ID, "reserve", IDEMPOTENCY_KEY, "hash", HoldResponse.class)).thenReturn(Optional.of(cached));
 
         HoldResponse response = giftCardHoldService.reserve(new ReserveRequest("GC-CACHED", BigDecimal.valueOf(50.0)), IDEMPOTENCY_KEY);
 
         assertEquals(cached, response);
         verify(giftCardRepository, never()).findByMerchantIdAndCardCodeForUpdate(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
-        verify(idempotencyKeyService, never()).complete(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(idempotencyKeyService, never()).complete(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -119,8 +119,8 @@ class GiftCardHoldServiceUnitTest {
         assertThrows(UnknownGiftCardException.class,
                 () -> giftCardHoldService.reserve(new ReserveRequest("MISSING", BigDecimal.valueOf(10.0)), IDEMPOTENCY_KEY));
 
-        verify(idempotencyKeyService).discard(MERCHANT_ID, IDEMPOTENCY_KEY);
-        verify(idempotencyKeyService, never()).complete(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(idempotencyKeyService).discard(MERCHANT_ID, "reserve", IDEMPOTENCY_KEY);
+        verify(idempotencyKeyService, never()).complete(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test

@@ -68,7 +68,7 @@ class GiftCardCreditServiceUnitTest {
         lenient().when(userRepository.findById(USER_ID)).thenReturn(Optional.of(humanUser()));
         lenient().when(idempotencyKeyService.hashRequest(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
                 .thenReturn("hash");
-        lenient().when(idempotencyKeyService.claim(any(), any(), any(), eq(CreditResponse.class))).thenReturn(Optional.empty());
+        lenient().when(idempotencyKeyService.claim(any(), any(), any(), any(), eq(CreditResponse.class))).thenReturn(Optional.empty());
     }
 
     private static void assertMoneyEquals(BigDecimal expected, BigDecimal actual) {
@@ -107,7 +107,7 @@ class GiftCardCreditServiceUnitTest {
 
         assertThrows(ServiceAccountNotAllowedException.class, () -> giftCardCreditService.credit(request, IDEMPOTENCY_KEY));
         verify(giftCardRepository, never()).findByMerchantIdAndCardCodeForUpdate(any(), any());
-        verify(idempotencyKeyService, never()).claim(any(), any(), any(), any());
+        verify(idempotencyKeyService, never()).claim(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -123,14 +123,14 @@ class GiftCardCreditServiceUnitTest {
     @Test
     void credit_returnsCachedResponse_withoutTouchingBusinessLogic_whenIdempotencyKeyAlreadyCompleted() {
         CreditResponse cached = new CreditResponse("SUCCESS", BigDecimal.valueOf(20.0), BigDecimal.valueOf(70.0));
-        when(idempotencyKeyService.claim(eq(MERCHANT_ID), eq(IDEMPOTENCY_KEY), eq("hash"), eq(CreditResponse.class))).thenReturn(Optional.of(cached));
+        when(idempotencyKeyService.claim(eq(MERCHANT_ID), eq("credit"), eq(IDEMPOTENCY_KEY), eq("hash"), eq(CreditResponse.class))).thenReturn(Optional.of(cached));
 
         CreditRequest request = new CreditRequest("GC-2", BigDecimal.valueOf(20.0), "reason");
         CreditResponse response = giftCardCreditService.credit(request, IDEMPOTENCY_KEY);
 
         assertEquals(cached, response);
         verify(giftCardRepository, never()).findByMerchantIdAndCardCodeForUpdate(any(), any());
-        verify(idempotencyKeyService, never()).complete(any(), any(), any());
+        verify(idempotencyKeyService, never()).complete(any(), any(), any(), any());
     }
 
     @Test
@@ -141,7 +141,7 @@ class GiftCardCreditServiceUnitTest {
         CreditRequest request = new CreditRequest(unknownCode, BigDecimal.valueOf(10.0), "reason");
 
         assertThrows(UnknownGiftCardException.class, () -> giftCardCreditService.credit(request, IDEMPOTENCY_KEY));
-        verify(idempotencyKeyService).discard(MERCHANT_ID, IDEMPOTENCY_KEY);
-        verify(idempotencyKeyService, never()).complete(any(), any(), any());
+        verify(idempotencyKeyService).discard(MERCHANT_ID, "credit", IDEMPOTENCY_KEY);
+        verify(idempotencyKeyService, never()).complete(any(), any(), any(), any());
     }
 }

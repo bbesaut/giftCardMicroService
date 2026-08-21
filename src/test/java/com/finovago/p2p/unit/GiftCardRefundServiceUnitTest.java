@@ -68,7 +68,7 @@ class GiftCardRefundServiceUnitTest {
         lenient().when(currentUserContext.currentUserIdOrNull()).thenReturn(null);
         lenient().when(idempotencyKeyService.hashRequest(ArgumentMatchers.anyString(), ArgumentMatchers.anyString(), ArgumentMatchers.anyString()))
                 .thenReturn("hash");
-        lenient().when(idempotencyKeyService.claim(any(), any(), any(), eq(RefundResponse.class))).thenReturn(Optional.empty());
+        lenient().when(idempotencyKeyService.claim(any(), any(), any(), any(), eq(RefundResponse.class))).thenReturn(Optional.empty());
     }
 
     private static void assertMoneyEquals(BigDecimal expected, BigDecimal actual) {
@@ -154,14 +154,14 @@ class GiftCardRefundServiceUnitTest {
     @Test
     void refund_returnsCachedResponse_withoutTouchingBusinessLogic_whenIdempotencyKeyAlreadyCompleted() {
         RefundResponse cached = new RefundResponse("SUCCESS", BigDecimal.valueOf(30.0), BigDecimal.valueOf(100.0));
-        when(idempotencyKeyService.claim(eq(MERCHANT_ID), eq(IDEMPOTENCY_KEY), eq("hash"), eq(RefundResponse.class))).thenReturn(Optional.of(cached));
+        when(idempotencyKeyService.claim(eq(MERCHANT_ID), eq("refund"), eq(IDEMPOTENCY_KEY), eq("hash"), eq(RefundResponse.class))).thenReturn(Optional.of(cached));
 
         RefundRequest request = new RefundRequest("GC-1", BigDecimal.valueOf(30.0), 42L, null);
         RefundResponse response = giftCardRefundService.refund(request, IDEMPOTENCY_KEY);
 
         assertEquals(cached, response);
         verify(giftCardRepository, never()).findByMerchantIdAndCardCodeForUpdate(any(), any());
-        verify(idempotencyKeyService, never()).complete(any(), any(), any());
+        verify(idempotencyKeyService, never()).complete(any(), any(), any(), any());
     }
 
     @Test
@@ -172,7 +172,7 @@ class GiftCardRefundServiceUnitTest {
         RefundRequest request = new RefundRequest(unknownCode, BigDecimal.valueOf(10.0), 1L, null);
 
         assertThrows(UnknownGiftCardException.class, () -> giftCardRefundService.refund(request, IDEMPOTENCY_KEY));
-        verify(idempotencyKeyService).discard(MERCHANT_ID, IDEMPOTENCY_KEY);
-        verify(idempotencyKeyService, never()).complete(any(), any(), any());
+        verify(idempotencyKeyService).discard(MERCHANT_ID, "refund", IDEMPOTENCY_KEY);
+        verify(idempotencyKeyService, never()).complete(any(), any(), any(), any());
     }
 }
