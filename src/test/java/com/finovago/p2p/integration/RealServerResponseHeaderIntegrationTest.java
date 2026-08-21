@@ -17,6 +17,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.ContextConfiguration;
 
+import com.finovago.p2p.config.MailHogTestcontainerInitializer;
 import com.finovago.p2p.config.PostgresTestcontainerInitializer;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.model.Role;
@@ -40,7 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureTestRestTemplate
 @ActiveProfiles("test")
-@ContextConfiguration(initializers = PostgresTestcontainerInitializer.class)
+@ContextConfiguration(initializers = {PostgresTestcontainerInitializer.class, MailHogTestcontainerInitializer.class})
 class RealServerResponseHeaderIntegrationTest {
 
     private static final String TEST_EMAIL = "real-server-test@example.com";
