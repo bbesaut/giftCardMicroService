@@ -10,13 +10,16 @@ import com.finovago.p2p.dto.AddMerchantUserRequest;
 import com.finovago.p2p.dto.ApiKeyResponse;
 import com.finovago.p2p.dto.ApiKeyStatusResponse;
 import com.finovago.p2p.dto.AuthResponse;
+import com.finovago.p2p.dto.ChangePasswordRequest;
 import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
 import com.finovago.p2p.dto.UserStatusResponse;
 import com.finovago.p2p.exception.InvalidRefreshTokenException;
 import com.finovago.p2p.exception.OwnerPrivilegeRequiredException;
+import com.finovago.p2p.exception.SamePasswordException;
 import com.finovago.p2p.exception.SelfDeactivationException;
+import com.finovago.p2p.exception.ServiceAccountNotAllowedException;
 import com.finovago.p2p.exception.UserAlreadyExistsException;
 import com.finovago.p2p.exception.UserNotFoundException;
 import com.finovago.p2p.model.Merchant;
@@ -171,6 +174,29 @@ public class AuthService {
                 active ? "reactivated" : "deactivated", caller.getEmail());
 
         return new UserStatusResponse(target.getId(), target.getEmail(), target.isActive());
+    }
+
+    /** Self-service password change for any active human user (not an API key). Logs out every other session. */
+    public void changePassword(Long callerId, ChangePasswordRequest request) {
+        User caller = callerId == null ? null : userRepository.findById(callerId).orElse(null);
+        if (caller == null) {
+            throw new ServiceAccountNotAllowedException("Password change must be performed by a human account, not an API key");
+        }
+
+        if (!passwordEncoder.matches(request.currentPassword(), caller.getPassword())) {
+            log.warn("Password change failed - invalid current password for user: {}", caller.getEmail());
+            throw new BadCredentialsException("Invalid credentials");
+        }
+
+        if (request.newPassword().equals(request.currentPassword())) {
+            throw new SamePasswordException("New password must be different from the current password");
+        }
+
+        caller.setPassword(passwordEncoder.encode(request.newPassword()));
+        userRepository.save(caller);
+        refreshTokenService.revokeAllForUser(caller);
+
+        log.info("Password changed successfully for user: {}", caller.getEmail());
     }
 
     private User requireOwner(Long callerId) {

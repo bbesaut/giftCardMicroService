@@ -5,6 +5,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.ContextConfiguration;
 
+import com.finovago.p2p.config.MailHogTestcontainerInitializer;
 import com.finovago.p2p.config.PostgresTestcontainerInitializer;
 
 /**
@@ -27,6 +28,6 @@ import com.finovago.p2p.config.PostgresTestcontainerInitializer;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@ContextConfiguration(initializers = PostgresTestcontainerInitializer.class)
+@ContextConfiguration(initializers = {PostgresTestcontainerInitializer.class, MailHogTestcontainerInitializer.class})
 public abstract class AbstractIntegrationTest {
 }
