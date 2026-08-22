@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -39,9 +40,12 @@ import tools.jackson.databind.json.JsonMapper;
  * one of a merchant's end users shares that backend's IP - an IP-based limit would throttle
  * legitimate concurrent traffic rather than abuse. Change-password is capped per user id (login's
  * capacity, not the higher merchant one) since it's a current-password-guessing surface like login
- * rather than B2B traffic, and an ADMIN caller has no merchantId to key on. Limits are per-instance
- * only (in-memory buckets) - if this service is ever scaled horizontally, this must move to a
- * shared store (e.g. Redis) or each instance will allow the full quota independently.
+ * rather than B2B traffic, and an ADMIN caller has no merchantId to key on. The password-reset
+ * request/confirm endpoints are unauthenticated (no user id to key on either) so they're capped per
+ * IP like login - request is an account-enumeration surface, confirm is a token-guessing surface.
+ * Limits are per-instance only (in-memory buckets) - if this service is ever scaled horizontally,
+ * this must move to a shared store (e.g. Redis) or each instance will allow the full quota
+ * independently.
  */
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
@@ -49,10 +53,21 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final Logger log = LoggerFactory.getLogger(RateLimitFilter.class);
     private static final String LOGIN_PREFIX = "/api/v1/auth/login";
     private static final String CHANGE_PASSWORD_PREFIX = "/api/v1/auth/me/password";
+    private static final String PASSWORD_RESET_REQUEST_PREFIX = "/api/v1/auth/password-reset/request";
+    private static final String PASSWORD_RESET_CONFIRM_PREFIX = "/api/v1/auth/password-reset/confirm";
+
+    // Unauthenticated endpoints with no identity but the caller's IP to key a bucket on.
+    private static final Set<String> IP_KEYED_PREFIXES = Set.of(
+        LOGIN_PREFIX,
+        PASSWORD_RESET_REQUEST_PREFIX,
+        PASSWORD_RESET_CONFIRM_PREFIX
+    );
 
     private static final List<String> PROTECTED_PATH_PREFIXES = List.of(
         LOGIN_PREFIX,
         CHANGE_PASSWORD_PREFIX,
+        PASSWORD_RESET_REQUEST_PREFIX,
+        PASSWORD_RESET_CONFIRM_PREFIX,
         "/api/v1/giftcards/lookup/",
         "/api/v1/giftcards/redeem",
         "/api/v1/giftcards/reserve",
@@ -100,14 +115,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
 
         String matchedPrefix = matchedPrefix(request.getRequestURI());
-        boolean isLogin = LOGIN_PREFIX.equals(matchedPrefix);
+        boolean isIpKeyed = IP_KEYED_PREFIXES.contains(matchedPrefix);
         boolean isChangePassword = CHANGE_PASSWORD_PREFIX.equals(matchedPrefix);
 
         String bucketKey;
         int capacityForKey;
         String identityForLog;
 
-        if (isLogin) {
+        if (isIpKeyed) {
             String clientIp = resolveClientIp(request);
             bucketKey = matchedPrefix + "|ip:" + clientIp;
             capacityForKey = loginCapacity;

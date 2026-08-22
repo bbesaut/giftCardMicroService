@@ -6,6 +6,7 @@
 - JWT authentication (JJWT)
 - JPA with Lombok
 - Swagger/OpenAPI
+- Mail (password reset): `spring-boot-starter-mail` / `JavaMailSender`, Brevo SMTP relay in dev/prod (free tier, 300 emails/day, no card required), MailHog (Testcontainers) in tests
 
 ## ⚙️ Commands
 ```bash
@@ -55,7 +56,8 @@ Two ways to see it without running Maven yourself:
 - **Async**: Custom TaskExecutor with MdcTaskDecorator for MDC propagation
 - **Exception handling**: GlobalExceptionHandler with custom exceptions
 - **Response timing**: ResponseTimeFilter adds `X-Response-Time` header to all responses (in milliseconds)
-- **Rate limiting**: `RateLimitFilter` caps `login` at 10 requests/minute per client IP (the only identity available pre-auth — protects against credential stuffing). `lookup`/`redeem`/`reserve` are capped at 300 requests/minute **per merchant** (from the JWT), not per IP — these are B2B endpoints called from a merchant's own backend, so all of a merchant's end users would otherwise share one IP and throttle each other. A merchant can get a custom quota via `merchants.rate_limit_capacity` (nullable override; `NULL` falls back to the `app.rate-limit.merchant-capacity` default). In-memory buckets, per-instance only (see `app.rate-limit.*` properties). Disabled under the `test` profile.
+- **Rate limiting**: `RateLimitFilter` caps `login`, `password-reset/request`, and `password-reset/confirm` at 10 requests/minute per client IP (the only identity available pre-auth — protects against credential stuffing / account enumeration / token guessing). `POST /me/password` is capped the same way but keyed per **user id** instead of IP (an ADMIN caller has no merchantId to key on, and it's a current-password-guessing surface like login). `lookup`/`redeem`/`reserve`/`refund`/`credit` are capped at 300 requests/minute **per merchant** (from the JWT), not per IP — these are B2B endpoints called from a merchant's own backend, so all of a merchant's end users would otherwise share one IP and throttle each other. A merchant can get a custom quota via `merchants.rate_limit_capacity` (nullable override; `NULL` falls back to the `app.rate-limit.merchant-capacity` default). In-memory buckets, per-instance only (see `app.rate-limit.*` properties). Disabled under the `test` profile.
+- **Password reset**: `PasswordResetToken` mirrors `RefreshToken`'s pattern exactly — a `UUID.randomUUID()` raw token is emailed once and never stored, only its SHA-256 hash (`password_reset_tokens.token_hash`), same-day-expiring (`app.password-reset.expiration-minutes`, default 30 min), single-use (`used` flag, not deleted, so a replay of an already-consumed token is distinguishable from garbage in logs/metrics). Requesting a new reset invalidates any still-outstanding token for that account first, so at most one valid token exists per user at a time. `EmailService` wraps `JavaMailSender` (Brevo SMTP relay in dev/prod via `MAIL_HOST`/`MAIL_USERNAME`/`MAIL_PASSWORD`/`MAIL_FROM` - `MAIL_USERNAME`/`MAIL_PASSWORD` are Brevo's SMTP login/key from its SMTP & API settings, not the account password, and `MAIL_FROM` must be a sender address verified in Brevo; MailHog via Testcontainers in `test`, a real SMTP server that captures instead of delivering, so integration tests exercise the actual SMTP path rather than mocking the email step). `PasswordResetTokenCleanupScheduler` sweeps expired entries (see `app.password-reset.*` properties), same pattern as `RefreshTokenCleanupScheduler`.
 - **Idempotency**: `POST /giftcards/redeem` and `POST /giftcards/reserve` require an `Idempotency-Key` header — any mutating endpoint without a natural uniqueness guard is a candidate (`create`/`register` are already covered by their own unique constraints; `capture`/`release` are idempotent by target state — a retry that already reached the requested terminal state (e.g. re-capturing an already-CAPTURED hold) replays the same 200 response; a retry hitting a *different* terminal state (e.g. capturing an already-RELEASED hold) is a genuine conflict and returns 409). `IdempotencyKeyService` is endpoint-agnostic business-logic-wise, but keys are scoped by `(merchant_id, endpoint, idempotency_key)` — not just `(merchant_id, idempotency_key)` — the same way Stripe/PayPal/AWS do it, so a client reusing the same key value on two different endpoints (e.g. `reserve` then `redeem`) can never have one silently replay the other's cached response even if their request-hash inputs happen to coincide (`request_hash` only needs to catch reuse *within* the same endpoint with a different payload). It claims the key in its own transaction (REQUIRES_NEW) before the business logic runs, so concurrent duplicates are caught by the DB unique constraint; a completed claim replays its cached response (serialized as JSON, endpoint-specific DTO type), a failed one is discarded so retries can proceed cleanly. `IdempotencyKeyCleanupScheduler` sweeps expired entries (see `app.idempotency.*` properties).
 - **Ledger partitioning**: `gift_card_ledger` is RANGE-partitioned by year on `created_at` (see `V21__partition_gift_card_ledger_by_date.sql`) — it's an append-only audit trail that grows forever, so partitioning keeps per-partition indexes/vacuum small and makes future retention (`DETACH PARTITION` + export + drop) a metadata-only operation instead of a slow `DELETE`. Yearly (not monthly) because the retention policy this supports is expressed in years and current queries don't filter by date range, so finer granularity would only add catalog/index overhead. Partitions are pre-created through 2029, plus a `gift_card_ledger_default` catch-all so an insert past that window degrades (lands in the catch-all) instead of failing.
   - **Automated from 2030 onward** (see `V24__automate_ledger_partition_maintenance.sql`): `pg_partman` creates new yearly partitions on a `pg_cron` schedule (`partman-maintenance-ledger`, daily at 03:00 UTC), so a yearly manual migration is no longer needed. Neon-only: `pg_cron` requires `cron.database_name` set to `neondb` via the Neon API (`PATCH /endpoints/{id}`, `pg_settings.cron.database_name`) followed by a compute restart — not doable via SQL, must be done once out-of-band per environment. `p2p_app` still has no DDL rights (V17); instead, a dedicated `partman_admin` role (created out-of-band, same reasoning as `p2p_app`) executes the cron job, but only through the `run_ledger_partition_maintenance()` `SECURITY DEFINER` wrapper function — attaching a partition requires table ownership, which Postgres has no lesser grant for, so `partman_admin` itself can do nothing beyond calling that one function.
@@ -193,6 +195,41 @@ Content-Type: application/json
 - `403 Forbidden`: Caller authenticated via API key, not a human account
 - `422 Unprocessable Entity`: `newPassword` is the same as `currentPassword`
 - `429 Too Many Requests`: Rate limit exceeded
+- `500 Internal Server Error`: Server error
+
+### POST /api/v1/auth/password-reset/request
+**Description**: Starts a password reset for a forgotten password. If the email belongs to an active account, emails it a single-use reset token (`app.password-reset.expiration-minutes`, default 30 min) and invalidates any previously issued, still-valid token for that account. Always answers `202 Accepted` regardless of whether the email is registered, to avoid leaking which emails have an account. Unauthenticated (no login needed - that's the point). Rate-limited per client IP like `login` (account-enumeration surface).
+
+**Request** (PasswordResetRequestRequest):
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+**Response**: HTTP 202 Accepted (always, regardless of whether the email exists)
+
+**Error Responses**:
+- `400 Bad Request`: Invalid request body (missing or invalid email)
+- `429 Too Many Requests`: Rate limit exceeded (max 10 attempts/minute per IP)
+- `500 Internal Server Error`: Server error
+
+### POST /api/v1/auth/password-reset/confirm
+**Description**: Completes a password reset using the single-use token received by email. Revokes all of the account's active refresh tokens on success, logging out every other session. Unauthenticated. Rate-limited per client IP like `login` (token-guessing surface).
+
+**Request** (PasswordResetConfirmRequest):
+```json
+{
+  "token": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "newPassword": "N3wSecureP@ss"
+}
+```
+
+**Response**: HTTP 204 No Content
+
+**Error Responses**:
+- `400 Bad Request`: Invalid request body, `newPassword` doesn't meet complexity rules, or the token is invalid/already used/expired (single generic message either way, to avoid leaking which)
+- `429 Too Many Requests`: Rate limit exceeded (max 10 attempts/minute per IP)
 - `500 Internal Server Error`: Server error
 
 ### POST /api/v1/auth/login
@@ -506,6 +543,15 @@ Used to attach a human employee to a merchant, self-service by that merchant's o
 ### ChangePasswordRequest
 Used for self-service password change (POST /api/v1/auth/me/password)
 - `currentPassword` (String): Caller's current password, non-blank, for confirmation
+- `newPassword` (String): New password, non-blank, must be at least 8 characters with an uppercase letter, a lowercase letter, a digit, and a special character
+
+### PasswordResetRequestRequest
+Used to start a password reset (POST /api/v1/auth/password-reset/request)
+- `email` (String): Email to send the reset token to, if it belongs to an active account
+
+### PasswordResetConfirmRequest
+Used to complete a password reset (POST /api/v1/auth/password-reset/confirm)
+- `token` (String): Raw single-use reset token received by email, non-blank
 - `newPassword` (String): New password, non-blank, must be at least 8 characters with an uppercase letter, a lowercase letter, a digit, and a special character
 
 ### UserStatusResponse
