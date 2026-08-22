@@ -8,8 +8,9 @@ gift_card_ledger_2026
 gift_card_ledger
 gift_card_hold
 refresh_tokens
+password_reset_tokens
 idempotency_key
 api_keys
-users
 gift_card
+users
 merchants
