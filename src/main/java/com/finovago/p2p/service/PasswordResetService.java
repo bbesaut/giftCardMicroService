@@ -31,7 +31,7 @@ public class PasswordResetService {
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final RefreshTokenService refreshTokenService;
-    private final EmailService emailService;
+    private final EmailSender emailSender;
     private final long expirationMinutes;
 
     public PasswordResetService(
@@ -39,13 +39,13 @@ public class PasswordResetService {
             PasswordResetTokenRepository passwordResetTokenRepository,
             PasswordEncoder passwordEncoder,
             RefreshTokenService refreshTokenService,
-            EmailService emailService,
+            EmailSender emailSender,
             @Value("${app.password-reset.expiration-minutes}") long expirationMinutes) {
         this.userRepository = userRepository;
         this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.refreshTokenService = refreshTokenService;
-        this.emailService = emailService;
+        this.emailSender = emailSender;
         this.expirationMinutes = expirationMinutes;
     }
 
@@ -69,7 +69,7 @@ public class PasswordResetService {
         Instant expiryDate = Instant.now().plusSeconds(expirationMinutes * 60);
         passwordResetTokenRepository.save(new PasswordResetToken(hash(rawToken), user, expiryDate));
 
-        emailService.send(
+        emailSender.send(
                 user.getEmail(),
                 "Password reset request",
                 "A password reset was requested for your account.\n\n"
