@@ -28,10 +28,11 @@ public class BrevoApiEmailSender implements EmailSender {
     private final String fromAddress;
 
     public BrevoApiEmailSender(
-            RestClient.Builder restClientBuilder,
             @Value("${app.brevo.api-key}") String apiKey,
             @Value("${app.mail.from}") String fromAddress) {
-        this.restClient = restClientBuilder.build();
+        // Built directly rather than injecting RestClient.Builder: that bean isn't autoconfigured
+        // in this Spring Boot 4.1.0 setup, and this is the only caller - no need for a shared bean.
+        this.restClient = RestClient.create();
         this.apiKey = apiKey;
         this.fromAddress = fromAddress;
     }
