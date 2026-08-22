@@ -29,7 +29,7 @@ import com.finovago.p2p.model.Role;
 import com.finovago.p2p.model.User;
 import com.finovago.p2p.repository.PasswordResetTokenRepository;
 import com.finovago.p2p.repository.UserRepository;
-import com.finovago.p2p.service.EmailService;
+import com.finovago.p2p.service.EmailSender;
 import com.finovago.p2p.service.PasswordResetService;
 import com.finovago.p2p.service.RefreshTokenService;
 
@@ -51,14 +51,14 @@ class PasswordResetServiceUnitTest {
     private RefreshTokenService refreshTokenService;
 
     @Mock
-    private EmailService emailService;
+    private EmailSender emailSender;
 
     private PasswordResetService passwordResetService;
 
     @BeforeEach
     void setUp() {
         passwordResetService = new PasswordResetService(
-                userRepository, passwordResetTokenRepository, passwordEncoder, refreshTokenService, emailService, EXPIRATION_MINUTES);
+                userRepository, passwordResetTokenRepository, passwordEncoder, refreshTokenService, emailSender, EXPIRATION_MINUTES);
     }
 
     @Test
@@ -73,7 +73,7 @@ class PasswordResetServiceUnitTest {
         verify(passwordResetTokenRepository).save(captor.capture());
         assertEquals(user, captor.getValue().getUser());
 
-        verify(emailService).send(org.mockito.ArgumentMatchers.eq("client@example.com"), anyString(), anyString());
+        verify(emailSender).send(org.mockito.ArgumentMatchers.eq("client@example.com"), anyString(), anyString());
     }
 
     @Test
@@ -95,7 +95,7 @@ class PasswordResetServiceUnitTest {
 
         passwordResetService.requestReset("unknown@example.com");
 
-        verify(emailService, never()).send(anyString(), anyString(), anyString());
+        verify(emailSender, never()).send(anyString(), anyString(), anyString());
         verify(passwordResetTokenRepository, never()).save(any());
     }
 

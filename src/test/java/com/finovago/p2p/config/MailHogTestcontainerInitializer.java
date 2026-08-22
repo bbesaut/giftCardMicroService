@@ -9,8 +9,9 @@ import org.testcontainers.utility.DockerImageName;
 /**
  * Integration test initializer using a MailHog TestContainer - a real SMTP server that captures
  * messages instead of delivering them, exposing an HTTP API to read what was "sent". Lets
- * password-reset integration tests exercise the actual JavaMailSender/SMTP code path (same as
- * production, just pointed at a different server) instead of mocking EmailService.
+ * password-reset integration tests exercise the actual JavaMailSender/SMTP code path used by
+ * SmtpEmailSender (active in dev/test) instead of mocking it. Prod uses a different sender
+ * entirely (BrevoApiEmailSender, HTTP-based) since Render blocks outbound SMTP.
  *
  * Runs ONLY with: mvn test -P integration-tests
  */
