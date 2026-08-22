@@ -27,6 +27,8 @@ public class SecurityConfig {
             &quot;/api/v1/auth/login&quot;,
             &quot;/api/v1/auth/refresh&quot;,
             &quot;/api/v1/auth/logout&quot;,
+            &quot;/api/v1/auth/password-reset/request&quot;,
+            &quot;/api/v1/auth/password-reset/confirm&quot;,
             &quot;/&quot;,
             &quot;/swagger-ui.html&quot;,
             &quot;/swagger-ui/**&quot;,
@@ -39,13 +41,13 @@ public class SecurityConfig {
             &quot;/error&quot;
     };
 
-<span class="fc" id="L42">    private static final String[] ADMIN_ROUTES = {</span>
+<span class="fc" id="L44">    private static final String[] ADMIN_ROUTES = {</span>
             &quot;/api/v1/auth/register&quot;,
             &quot;/api/v1/giftcards/list&quot;,
             &quot;/api/v1/giftcards/list/**&quot;
     };
 
-<span class="fc" id="L48">    private static final String[] MERCHANT_ROUTES = {</span>
+<span class="fc" id="L50">    private static final String[] MERCHANT_ROUTES = {</span>
             &quot;/api/v1/giftcards/redeem/**&quot;,
             &quot;/api/v1/giftcards/lookup/**&quot;,
             &quot;/api/v1/giftcards/create/**&quot;,
@@ -69,46 +71,46 @@ public class SecurityConfig {
             JwtAuthenticationFilter jwtAuthFilter,
             ApiKeyAuthenticationFilter apiKeyAuthFilter,
             JwtAuthenticationEntryPoint authenticationEntryPoint,
-<span class="fc" id="L72">            JwtAccessDeniedHandler accessDeniedHandler) {</span>
-<span class="fc" id="L73">        this.jwtAuthFilter = jwtAuthFilter;</span>
-<span class="fc" id="L74">        this.apiKeyAuthFilter = apiKeyAuthFilter;</span>
-<span class="fc" id="L75">        this.authenticationEntryPoint = authenticationEntryPoint;</span>
-<span class="fc" id="L76">        this.accessDeniedHandler = accessDeniedHandler;</span>
-<span class="fc" id="L77">    }</span>
+<span class="fc" id="L74">            JwtAccessDeniedHandler accessDeniedHandler) {</span>
+<span class="fc" id="L75">        this.jwtAuthFilter = jwtAuthFilter;</span>
+<span class="fc" id="L76">        this.apiKeyAuthFilter = apiKeyAuthFilter;</span>
+<span class="fc" id="L77">        this.authenticationEntryPoint = authenticationEntryPoint;</span>
+<span class="fc" id="L78">        this.accessDeniedHandler = accessDeniedHandler;</span>
+<span class="fc" id="L79">    }</span>
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-<span class="fc" id="L81">        return new BCryptPasswordEncoder();</span>
+<span class="fc" id="L83">        return new BCryptPasswordEncoder();</span>
     }
 
     @Bean
     public RoleHierarchy roleHierarchy() {
         // No implied roles: ADMIN manages the platform (merchants, global gift card listing)
         // but does not act on behalf of a specific merchant's own gift cards.
-<span class="fc" id="L88">        return RoleHierarchyImpl.withDefaultRolePrefix().build();</span>
+<span class="fc" id="L90">        return RoleHierarchyImpl.withDefaultRolePrefix().build();</span>
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-<span class="fc" id="L93">        http</span>
-<span class="fc" id="L94">                .csrf(csrf -&gt; csrf.disable())</span>
-<span class="fc" id="L95">                .headers(headers -&gt; headers.frameOptions(frame -&gt; frame.disable()))</span>
-<span class="fc" id="L96">                .sessionManagement(session -&gt; session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))</span>
+<span class="fc" id="L95">        http</span>
+<span class="fc" id="L96">                .csrf(csrf -&gt; csrf.disable())</span>
+<span class="fc" id="L97">                .headers(headers -&gt; headers.frameOptions(frame -&gt; frame.disable()))</span>
+<span class="fc" id="L98">                .sessionManagement(session -&gt; session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))</span>
 
-<span class="fc" id="L98">                .authorizeHttpRequests(auth -&gt; auth</span>
-<span class="fc" id="L99">                        .requestMatchers(&quot;/h2-console/**&quot;).permitAll()</span>
-<span class="fc" id="L100">                        .requestMatchers(PUBLIC_ROUTES).permitAll()</span>
-<span class="fc" id="L101">                        .requestMatchers(ADMIN_ROUTES).hasRole(&quot;ADMIN&quot;)</span>
-<span class="fc" id="L102">                        .requestMatchers(MERCHANT_ROUTES).hasRole(&quot;MERCHANT&quot;)</span>
-<span class="fc" id="L103">                        .anyRequest().authenticated())</span>
+<span class="fc" id="L100">                .authorizeHttpRequests(auth -&gt; auth</span>
+<span class="fc" id="L101">                        .requestMatchers(&quot;/h2-console/**&quot;).permitAll()</span>
+<span class="fc" id="L102">                        .requestMatchers(PUBLIC_ROUTES).permitAll()</span>
+<span class="fc" id="L103">                        .requestMatchers(ADMIN_ROUTES).hasRole(&quot;ADMIN&quot;)</span>
+<span class="fc" id="L104">                        .requestMatchers(MERCHANT_ROUTES).hasRole(&quot;MERCHANT&quot;)</span>
+<span class="fc" id="L105">                        .anyRequest().authenticated())</span>
 
-<span class="fc" id="L105">                .exceptionHandling(exception -&gt; exception</span>
-<span class="fc" id="L106">                        .authenticationEntryPoint(authenticationEntryPoint)</span>
-<span class="fc" id="L107">                        .accessDeniedHandler(accessDeniedHandler))</span>
-<span class="fc" id="L108">                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)</span>
-<span class="fc" id="L109">                .addFilterBefore(apiKeyAuthFilter, UsernamePasswordAuthenticationFilter.class);</span>
+<span class="fc" id="L107">                .exceptionHandling(exception -&gt; exception</span>
+<span class="fc" id="L108">                        .authenticationEntryPoint(authenticationEntryPoint)</span>
+<span class="fc" id="L109">                        .accessDeniedHandler(accessDeniedHandler))</span>
+<span class="fc" id="L110">                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)</span>
+<span class="fc" id="L111">                .addFilterBefore(apiKeyAuthFilter, UsernamePasswordAuthenticationFilter.class);</span>
 
-<span class="fc" id="L111">        return http.build();</span>
+<span class="fc" id="L113">        return http.build();</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

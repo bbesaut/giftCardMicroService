@@ -11,28 +11,29 @@ import org.springdoc.core.models.GroupedOpenApi;
     GroupedOpenApi publicApi() {
 <span class="fc" id="L12">        return GroupedOpenApi.builder()</span>
 <span class="fc" id="L13">                .group(&quot;public-api&quot;)</span>
-<span class="fc" id="L14">                .pathsToMatch(&quot;/api/v1/auth/login&quot;, &quot;/api/v1/auth/refresh&quot;, &quot;/api/v1/auth/logout&quot;)</span>
-<span class="fc" id="L15">                .build();</span>
+<span class="fc" id="L14">                .pathsToMatch(&quot;/api/v1/auth/login&quot;, &quot;/api/v1/auth/refresh&quot;, &quot;/api/v1/auth/logout&quot;,</span>
+                        &quot;/api/v1/auth/password-reset/request&quot;, &quot;/api/v1/auth/password-reset/confirm&quot;)
+<span class="fc" id="L16">                .build();</span>
     }
 
     @Bean
     GroupedOpenApi customerApi() {
-<span class="fc" id="L20">        return GroupedOpenApi.builder()</span>
-<span class="fc" id="L21">                .group(&quot;customer-api&quot;)</span>
-<span class="fc" id="L22">                .pathsToMatch(&quot;/&quot;, &quot;/api/v1/giftcards/create&quot;, &quot;/api/v1/giftcards/redeem&quot;, &quot;/api/v1/giftcards/lookup/**&quot;,</span>
+<span class="fc" id="L21">        return GroupedOpenApi.builder()</span>
+<span class="fc" id="L22">                .group(&quot;customer-api&quot;)</span>
+<span class="fc" id="L23">                .pathsToMatch(&quot;/&quot;, &quot;/api/v1/giftcards/create&quot;, &quot;/api/v1/giftcards/redeem&quot;, &quot;/api/v1/giftcards/lookup/**&quot;,</span>
                         &quot;/api/v1/giftcards/reserve&quot;, &quot;/api/v1/giftcards/holds/**&quot;, &quot;/api/v1/giftcards/*/ledger&quot;,
                         &quot;/api/v1/giftcards/refund&quot;, &quot;/api/v1/giftcards/credit&quot;, &quot;/api/v1/auth/me/users&quot;,
                         &quot;/api/v1/auth/me/users/**&quot;, &quot;/api/v1/auth/me/api-key&quot;, &quot;/api/v1/auth/me/api-key/**&quot;,
                         &quot;/api/v1/auth/me/password&quot;)
-<span class="fc" id="L27">                .build();</span>
+<span class="fc" id="L28">                .build();</span>
     }
 
     @Bean
     GroupedOpenApi adminApi() {
-<span class="fc" id="L32">        return GroupedOpenApi.builder()</span>
-<span class="fc" id="L33">                .group(&quot;admin-api&quot;)</span>
-<span class="fc" id="L34">                .pathsToMatch(&quot;/api/v1/auth/register&quot;, &quot;/api/v1/giftcards/list&quot;, &quot;/api/v1/auth/me/password&quot;)</span>
-<span class="fc" id="L35">                .build();</span>
+<span class="fc" id="L33">        return GroupedOpenApi.builder()</span>
+<span class="fc" id="L34">                .group(&quot;admin-api&quot;)</span>
+<span class="fc" id="L35">                .pathsToMatch(&quot;/api/v1/auth/register&quot;, &quot;/api/v1/giftcards/list&quot;, &quot;/api/v1/auth/me/password&quot;)</span>
+<span class="fc" id="L36">                .build();</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
