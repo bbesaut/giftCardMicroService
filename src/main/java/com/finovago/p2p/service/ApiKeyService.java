@@ -10,6 +10,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.finovago.p2p.dto.ApiKeyResponse;
 import com.finovago.p2p.dto.ApiKeyStatusResponse;
@@ -70,8 +72,9 @@ public class ApiKeyService {
         if (isNew) {
             apiKey = new ApiKey(merchant, keyPrefix, hashedSecret);
         } else {
-            keyPrefixCache.invalidate(apiKey.getKeyPrefix());
+            String previousPrefix = apiKey.getKeyPrefix();
             apiKey.rotate(keyPrefix, hashedSecret);
+            invalidateCacheAfterCommit(previousPrefix);
         }
         apiKeyRepository.save(apiKey);
 
@@ -88,10 +91,10 @@ public class ApiKeyService {
         }
 
         ApiKey key = apiKey.get();
-        keyPrefixCache.invalidate(key.getKeyPrefix());
         key.setActive(false);
         key.setRevokedAt(LocalDateTime.now());
         apiKeyRepository.save(key);
+        invalidateCacheAfterCommit(key.getKeyPrefix());
 
         log.info("API key {} revoked for merchantId: {}", key.getKeyPrefix(), merchant.getId());
         return new ApiKeyStatusResponse(key.getKeyPrefix(), false);
@@ -120,6 +123,26 @@ public class ApiKeyService {
         });
 
         return apiKey;
+    }
+
+    /**
+     * Invalidating immediately (mid-transaction) would let a concurrent resolve() re-cache the
+     * pre-change row before this transaction's UPDATE is even committed, leaving the cache stuck
+     * on stale data for the rest of the TTL. Deferring invalidation to after commit closes that
+     * window: nothing can re-cache the old row once it's actually gone from the DB. Falls back to
+     * immediate invalidation outside a transaction (e.g. unit tests calling the service directly).
+     */
+    private void invalidateCacheAfterCommit(String keyPrefix) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            keyPrefixCache.invalidate(keyPrefix);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                keyPrefixCache.invalidate(keyPrefix);
+            }
+        });
     }
 
     private String randomUrlSafe(int numBytes) {
