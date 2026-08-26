@@ -4,7 +4,9 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,6 +16,8 @@ import com.finovago.p2p.dto.ApiKeyStatusResponse;
 import com.finovago.p2p.model.ApiKey;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.repository.ApiKeyRepository;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -28,13 +32,29 @@ public class ApiKeyService {
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final String PREFIX_HEADER = "fovak_";
+    private static final long MAX_CACHE_ENTRIES = 10_000;
 
     private final ApiKeyRepository apiKeyRepository;
     private final PasswordEncoder passwordEncoder;
 
-    public ApiKeyService(ApiKeyRepository apiKeyRepository, PasswordEncoder passwordEncoder) {
+    /**
+     * keyPrefix -> ApiKey, so resolve() can skip the DB lookup on repeat calls with the same key.
+     * BCrypt verification still runs on every call against the cached hash - only the SELECT is
+     * skipped. TTL is a backstop; rotate()/revoke() invalidate explicitly so a change takes effect
+     * immediately rather than waiting out the window.
+     */
+    private final Cache<String, ApiKey> keyPrefixCache;
+
+    public ApiKeyService(
+            ApiKeyRepository apiKeyRepository,
+            PasswordEncoder passwordEncoder,
+            @Value("${app.api-key-cache.ttl-minutes:2}") long cacheTtlMinutes) {
         this.apiKeyRepository = apiKeyRepository;
         this.passwordEncoder = passwordEncoder;
+        this.keyPrefixCache = Caffeine.newBuilder()
+                .expireAfterWrite(cacheTtlMinutes, TimeUnit.MINUTES)
+                .maximumSize(MAX_CACHE_ENTRIES)
+                .build();
     }
 
     /** Creates the merchant's first key, or rotates it if one already exists - either way the old secret stops working. */
@@ -50,6 +70,7 @@ public class ApiKeyService {
         if (isNew) {
             apiKey = new ApiKey(merchant, keyPrefix, hashedSecret);
         } else {
+            keyPrefixCache.invalidate(apiKey.getKeyPrefix());
             apiKey.rotate(keyPrefix, hashedSecret);
         }
         apiKeyRepository.save(apiKey);
@@ -67,6 +88,7 @@ public class ApiKeyService {
         }
 
         ApiKey key = apiKey.get();
+        keyPrefixCache.invalidate(key.getKeyPrefix());
         key.setActive(false);
         key.setRevokedAt(LocalDateTime.now());
         apiKeyRepository.save(key);
@@ -86,7 +108,9 @@ public class ApiKeyService {
         String keyPrefix = presentedKey.substring(0, separator);
         String secret = presentedKey.substring(separator + 1);
 
-        Optional<ApiKey> apiKey = apiKeyRepository.findByKeyPrefix(keyPrefix)
+        ApiKey cachedKey = keyPrefixCache.get(keyPrefix, prefix -> apiKeyRepository.findByKeyPrefix(prefix).orElse(null));
+
+        Optional<ApiKey> apiKey = Optional.ofNullable(cachedKey)
                 .filter(ApiKey::isActive)
                 .filter(key -> passwordEncoder.matches(secret, key.getHashedSecret()));
 
