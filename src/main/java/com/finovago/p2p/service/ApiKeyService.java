@@ -117,10 +117,7 @@ public class ApiKeyService {
                 .filter(ApiKey::isActive)
                 .filter(key -> passwordEncoder.matches(secret, key.getHashedSecret()));
 
-        apiKey.ifPresent(key -> {
-            key.setLastUsedAt(LocalDateTime.now());
-            apiKeyRepository.save(key);
-        });
+        apiKey.ifPresent(key -> apiKeyRepository.updateLastUsedAt(key.getId(), LocalDateTime.now()));
 
         return apiKey;
     }

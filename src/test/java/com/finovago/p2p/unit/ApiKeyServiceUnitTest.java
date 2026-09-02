@@ -113,7 +113,7 @@ class ApiKeyServiceUnitTest {
 
         assertTrue(resolved.isPresent());
         assertEquals(merchant, resolved.get().getMerchant());
-        verify(repo).save(key);
+        verify(repo).updateLastUsedAt(org.mockito.ArgumentMatchers.eq(key.getId()), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
