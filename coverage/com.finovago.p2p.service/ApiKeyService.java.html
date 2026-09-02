@@ -4,16 +4,22 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.finovago.p2p.dto.ApiKeyResponse;
 import com.finovago.p2p.dto.ApiKeyStatusResponse;
 import com.finovago.p2p.model.ApiKey;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.repository.ApiKeyRepository;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -22,86 +28,124 @@ import lombok.extern.slf4j.Slf4j;
  * belongs directly to a Merchant - it is its own identity, not a stand-in &quot;service account&quot; User
  * with a fake email/password.
  */
-<span class="fc" id="L25">@Slf4j</span>
+<span class="fc" id="L31">@Slf4j</span>
 @Service
 public class ApiKeyService {
 
-<span class="fc" id="L29">    private static final SecureRandom SECURE_RANDOM = new SecureRandom();</span>
+<span class="fc" id="L35">    private static final SecureRandom SECURE_RANDOM = new SecureRandom();</span>
     private static final String PREFIX_HEADER = &quot;fovak_&quot;;
+    private static final long MAX_CACHE_ENTRIES = 10_000;
 
     private final ApiKeyRepository apiKeyRepository;
     private final PasswordEncoder passwordEncoder;
 
-<span class="fc" id="L35">    public ApiKeyService(ApiKeyRepository apiKeyRepository, PasswordEncoder passwordEncoder) {</span>
-<span class="fc" id="L36">        this.apiKeyRepository = apiKeyRepository;</span>
-<span class="fc" id="L37">        this.passwordEncoder = passwordEncoder;</span>
-<span class="fc" id="L38">    }</span>
+    /**
+     * keyPrefix -&gt; ApiKey, so resolve() can skip the DB lookup on repeat calls with the same key.
+     * BCrypt verification still runs on every call against the cached hash - only the SELECT is
+     * skipped. TTL is a backstop; rotate()/revoke() invalidate explicitly so a change takes effect
+     * immediately rather than waiting out the window.
+     */
+    private final Cache&lt;String, ApiKey&gt; keyPrefixCache;
+
+    public ApiKeyService(
+            ApiKeyRepository apiKeyRepository,
+            PasswordEncoder passwordEncoder,
+<span class="fc" id="L53">            @Value(&quot;${app.api-key-cache.ttl-minutes:2}&quot;) long cacheTtlMinutes) {</span>
+<span class="fc" id="L54">        this.apiKeyRepository = apiKeyRepository;</span>
+<span class="fc" id="L55">        this.passwordEncoder = passwordEncoder;</span>
+<span class="fc" id="L56">        this.keyPrefixCache = Caffeine.newBuilder()</span>
+<span class="fc" id="L57">                .expireAfterWrite(cacheTtlMinutes, TimeUnit.MINUTES)</span>
+<span class="fc" id="L58">                .maximumSize(MAX_CACHE_ENTRIES)</span>
+<span class="fc" id="L59">                .build();</span>
+<span class="fc" id="L60">    }</span>
 
     /** Creates the merchant's first key, or rotates it if one already exists - either way the old secret stops working. */
     @Transactional
     public ApiKeyResponse generateOrRotate(Merchant merchant) {
-<span class="fc" id="L43">        String keyPrefix = PREFIX_HEADER + randomUrlSafe(9);</span>
-<span class="fc" id="L44">        String secret = randomUrlSafe(32);</span>
-<span class="fc" id="L45">        String hashedSecret = passwordEncoder.encode(secret);</span>
+<span class="fc" id="L65">        String keyPrefix = PREFIX_HEADER + randomUrlSafe(9);</span>
+<span class="fc" id="L66">        String secret = randomUrlSafe(32);</span>
+<span class="fc" id="L67">        String hashedSecret = passwordEncoder.encode(secret);</span>
 
-<span class="fc" id="L47">        ApiKey apiKey = apiKeyRepository.findByMerchant_Id(merchant.getId()).orElse(null);</span>
-<span class="fc bfc" id="L48" title="All 2 branches covered.">        boolean isNew = apiKey == null;</span>
+<span class="fc" id="L69">        ApiKey apiKey = apiKeyRepository.findByMerchant_Id(merchant.getId()).orElse(null);</span>
+<span class="fc bfc" id="L70" title="All 2 branches covered.">        boolean isNew = apiKey == null;</span>
 
-<span class="fc bfc" id="L50" title="All 2 branches covered.">        if (isNew) {</span>
-<span class="fc" id="L51">            apiKey = new ApiKey(merchant, keyPrefix, hashedSecret);</span>
+<span class="fc bfc" id="L72" title="All 2 branches covered.">        if (isNew) {</span>
+<span class="fc" id="L73">            apiKey = new ApiKey(merchant, keyPrefix, hashedSecret);</span>
         } else {
-<span class="fc" id="L53">            apiKey.rotate(keyPrefix, hashedSecret);</span>
+<span class="fc" id="L75">            String previousPrefix = apiKey.getKeyPrefix();</span>
+<span class="fc" id="L76">            apiKey.rotate(keyPrefix, hashedSecret);</span>
+<span class="fc" id="L77">            invalidateCacheAfterCommit(previousPrefix);</span>
         }
-<span class="fc" id="L55">        apiKeyRepository.save(apiKey);</span>
+<span class="fc" id="L79">        apiKeyRepository.save(apiKey);</span>
 
-<span class="fc bfc" id="L57" title="All 2 branches covered.">        log.info(&quot;API key {} for merchantId: {}&quot;, isNew ? &quot;generated&quot; : &quot;rotated&quot;, merchant.getId());</span>
+<span class="fc bfc" id="L81" title="All 2 branches covered.">        log.info(&quot;API key {} for merchantId: {}&quot;, isNew ? &quot;generated&quot; : &quot;rotated&quot;, merchant.getId());</span>
 
-<span class="fc" id="L59">        return new ApiKeyResponse(keyPrefix, keyPrefix + &quot;.&quot; + secret);</span>
+<span class="fc" id="L83">        return new ApiKeyResponse(keyPrefix, keyPrefix + &quot;.&quot; + secret);</span>
     }
 
     @Transactional
     public ApiKeyStatusResponse revoke(Merchant merchant) {
-<span class="fc" id="L64">        Optional&lt;ApiKey&gt; apiKey = apiKeyRepository.findByMerchant_Id(merchant.getId());</span>
-<span class="fc bfc" id="L65" title="All 2 branches covered.">        if (apiKey.isEmpty()) {</span>
-<span class="fc" id="L66">            return new ApiKeyStatusResponse(null, false);</span>
+<span class="fc" id="L88">        Optional&lt;ApiKey&gt; apiKey = apiKeyRepository.findByMerchant_Id(merchant.getId());</span>
+<span class="fc bfc" id="L89" title="All 2 branches covered.">        if (apiKey.isEmpty()) {</span>
+<span class="fc" id="L90">            return new ApiKeyStatusResponse(null, false);</span>
         }
 
-<span class="fc" id="L69">        ApiKey key = apiKey.get();</span>
-<span class="fc" id="L70">        key.setActive(false);</span>
-<span class="fc" id="L71">        key.setRevokedAt(LocalDateTime.now());</span>
-<span class="fc" id="L72">        apiKeyRepository.save(key);</span>
+<span class="fc" id="L93">        ApiKey key = apiKey.get();</span>
+<span class="fc" id="L94">        key.setActive(false);</span>
+<span class="fc" id="L95">        key.setRevokedAt(LocalDateTime.now());</span>
+<span class="fc" id="L96">        apiKeyRepository.save(key);</span>
+<span class="fc" id="L97">        invalidateCacheAfterCommit(key.getKeyPrefix());</span>
 
-<span class="fc" id="L74">        log.info(&quot;API key {} revoked for merchantId: {}&quot;, key.getKeyPrefix(), merchant.getId());</span>
-<span class="fc" id="L75">        return new ApiKeyStatusResponse(key.getKeyPrefix(), false);</span>
+<span class="fc" id="L99">        log.info(&quot;API key {} revoked for merchantId: {}&quot;, key.getKeyPrefix(), merchant.getId());</span>
+<span class="fc" id="L100">        return new ApiKeyStatusResponse(key.getKeyPrefix(), false);</span>
     }
 
     /** Validates a presented &quot;{prefix}.{secret}&quot; key and returns the ApiKey it matches, if valid and active. */
     @Transactional
     public Optional&lt;ApiKey&gt; resolve(String presentedKey) {
-<span class="fc" id="L81">        int separator = presentedKey.indexOf('.');</span>
-<span class="fc bfc" id="L82" title="All 4 branches covered.">        if (separator &lt;= 0 || separator == presentedKey.length() - 1) {</span>
-<span class="fc" id="L83">            return Optional.empty();</span>
+<span class="fc" id="L106">        int separator = presentedKey.indexOf('.');</span>
+<span class="fc bfc" id="L107" title="All 4 branches covered.">        if (separator &lt;= 0 || separator == presentedKey.length() - 1) {</span>
+<span class="fc" id="L108">            return Optional.empty();</span>
         }
 
-<span class="fc" id="L86">        String keyPrefix = presentedKey.substring(0, separator);</span>
-<span class="fc" id="L87">        String secret = presentedKey.substring(separator + 1);</span>
+<span class="fc" id="L111">        String keyPrefix = presentedKey.substring(0, separator);</span>
+<span class="fc" id="L112">        String secret = presentedKey.substring(separator + 1);</span>
 
-<span class="fc" id="L89">        Optional&lt;ApiKey&gt; apiKey = apiKeyRepository.findByKeyPrefix(keyPrefix)</span>
-<span class="fc" id="L90">                .filter(ApiKey::isActive)</span>
-<span class="fc" id="L91">                .filter(key -&gt; passwordEncoder.matches(secret, key.getHashedSecret()));</span>
+<span class="fc" id="L114">        ApiKey cachedKey = keyPrefixCache.get(keyPrefix, prefix -&gt; apiKeyRepository.findByKeyPrefix(prefix).orElse(null));</span>
 
-<span class="fc" id="L93">        apiKey.ifPresent(key -&gt; {</span>
-<span class="fc" id="L94">            key.setLastUsedAt(LocalDateTime.now());</span>
-<span class="fc" id="L95">            apiKeyRepository.save(key);</span>
-<span class="fc" id="L96">        });</span>
+<span class="fc" id="L116">        Optional&lt;ApiKey&gt; apiKey = Optional.ofNullable(cachedKey)</span>
+<span class="fc" id="L117">                .filter(ApiKey::isActive)</span>
+<span class="fc" id="L118">                .filter(key -&gt; passwordEncoder.matches(secret, key.getHashedSecret()));</span>
 
-<span class="fc" id="L98">        return apiKey;</span>
+<span class="fc" id="L120">        apiKey.ifPresent(key -&gt; apiKeyRepository.updateLastUsedAt(key.getId(), LocalDateTime.now()));</span>
+
+<span class="fc" id="L122">        return apiKey;</span>
     }
 
+    /**
+     * Invalidating immediately (mid-transaction) would let a concurrent resolve() re-cache the
+     * pre-change row before this transaction's UPDATE is even committed, leaving the cache stuck
+     * on stale data for the rest of the TTL. Deferring invalidation to after commit closes that
+     * window: nothing can re-cache the old row once it's actually gone from the DB. Falls back to
+     * immediate invalidation outside a transaction (e.g. unit tests calling the service directly).
+     */
+    private void invalidateCacheAfterCommit(String keyPrefix) {
+<span class="fc bfc" id="L133" title="All 2 branches covered.">        if (!TransactionSynchronizationManager.isSynchronizationActive()) {</span>
+<span class="fc" id="L134">            keyPrefixCache.invalidate(keyPrefix);</span>
+<span class="fc" id="L135">            return;</span>
+        }
+<span class="fc" id="L137">        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {</span>
+            @Override
+            public void afterCommit() {
+<span class="nc" id="L140">                keyPrefixCache.invalidate(keyPrefix);</span>
+<span class="nc" id="L141">            }</span>
+        });
+<span class="fc" id="L143">    }</span>
+
     private String randomUrlSafe(int numBytes) {
-<span class="fc" id="L102">        byte[] randomBytes = new byte[numBytes];</span>
-<span class="fc" id="L103">        SECURE_RANDOM.nextBytes(randomBytes);</span>
-<span class="fc" id="L104">        return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);</span>
+<span class="fc" id="L146">        byte[] randomBytes = new byte[numBytes];</span>
+<span class="fc" id="L147">        SECURE_RANDOM.nextBytes(randomBytes);</span>
+<span class="fc" id="L148">        return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
