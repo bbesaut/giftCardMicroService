@@ -17,6 +17,7 @@ import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.model.Role;
 import com.finovago.p2p.model.User;
 import com.finovago.p2p.repository.GiftCardRepository;
+import com.finovago.p2p.repository.IdempotencyKeyRepository;
 import com.finovago.p2p.repository.MerchantRepository;
 import com.finovago.p2p.repository.RefreshTokenRepository;
 import com.finovago.p2p.repository.UserRepository;
@@ -63,15 +64,20 @@ class PasswordResetControllerIntegrationTest extends AbstractIntegrationTest {
     private RefreshTokenRepository refreshTokenRepository;
 
     @Autowired
+    private IdempotencyKeyRepository idempotencyKeyRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @BeforeEach
     void setUp() throws IOException, InterruptedException {
         refreshTokenRepository.deleteAll();
         userRepository.deleteAll();
-        // gift_card has a FK to merchants; other non-transactional integration test classes commit
-        // rows that outlive this class, so merchants must not be deleted while leftover gift cards
-        // still reference them - same reasoning as AuthControllerIntegrationTest#setUp.
+        // gift_card and idempotency_key both have a FK to merchants; other non-transactional
+        // integration test classes commit rows that outlive this class, so merchants must not be
+        // deleted while leftover rows still reference them - same reasoning as
+        // AuthControllerIntegrationTest#setUp.
+        idempotencyKeyRepository.deleteAll();
         PostgresTestcontainerInitializer.executeAsMigrator("TRUNCATE TABLE gift_card_ledger RESTART IDENTITY");
         giftCardRepository.deleteAll();
         merchantRepository.deleteAll();
