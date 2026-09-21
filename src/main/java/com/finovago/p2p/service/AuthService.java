@@ -11,10 +11,12 @@ import com.finovago.p2p.dto.ApiKeyResponse;
 import com.finovago.p2p.dto.ApiKeyStatusResponse;
 import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.dto.ChangePasswordRequest;
+import com.finovago.p2p.dto.CurrentUserResponse;
 import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
 import com.finovago.p2p.dto.UserStatusResponse;
+import com.finovago.p2p.exception.InactiveAccountException;
 import com.finovago.p2p.exception.InvalidRefreshTokenException;
 import com.finovago.p2p.exception.OwnerPrivilegeRequiredException;
 import com.finovago.p2p.exception.SamePasswordException;
@@ -174,6 +176,26 @@ public class AuthService {
                 active ? "reactivated" : "deactivated", caller.getEmail());
 
         return new UserStatusResponse(target.getId(), target.getEmail(), target.isActive());
+    }
+
+    /**
+     * Profile of the calling human user. Reads the database rather than trusting the JWT claims, so a user
+     * deactivated after their access token was issued is rejected here instead of lingering until expiry.
+     */
+    public CurrentUserResponse getCurrentUser(Long callerId) {
+        if (callerId == null) {
+            throw new ServiceAccountNotAllowedException("Current user profile is only available to a human account, not an API key");
+        }
+
+        User user = userRepository.findById(callerId)
+                .filter(User::isActive)
+                .orElseThrow(() -> new InactiveAccountException("Account no longer exists or has been deactivated"));
+
+        Merchant merchant = user.getMerchant();
+        CurrentUserResponse.MerchantSummary merchantSummary =
+                merchant == null ? null : new CurrentUserResponse.MerchantSummary(merchant.getId(), merchant.getName());
+
+        return new CurrentUserResponse(user.getId(), user.getEmail(), user.getRole().name(), user.isOwner(), merchantSummary);
     }
 
     /** Self-service password change for any active human user (not an API key). Logs out every other session. */

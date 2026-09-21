@@ -314,6 +314,18 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(InactiveAccountException.class)
+    public ResponseEntity<Object> handleInactiveAccountException(InactiveAccountException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of(
+                    "error", "Unauthorized",
+                    "message", ex.getMessage()
+                ));
+    }
+
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<Object> handleBadCredentialsException(BadCredentialsException ex) {
         log.warn("Authentication failed - invalid credentials");
