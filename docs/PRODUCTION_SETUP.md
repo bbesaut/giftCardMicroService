@@ -25,7 +25,7 @@ To create an admin with a custom password:
 
    Or use this Spring Boot one-liner:
    ```bash
-   mvn spring-boot:run -Dspring-boot.run.arguments="--bcrypt=YourPassword"
+   mvn spring-boot:run "-Dspring-boot.run.arguments=--bcrypt=YourPassword"
    ```
 
 2. **Update the migration** `V4__insert_admin_user.sql`:
