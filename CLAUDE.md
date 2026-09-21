@@ -12,7 +12,7 @@
 ```bash
 docker-compose up -d postgres-dev    # Start local PostgreSQL for dev mode
 mvn clean install                    # Full build with tests
-mvn spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=dev"  # Dev mode
+mvn spring-boot:run "-Dspring-boot.run.arguments=--spring.profiles.active=dev"  # Dev mode
 mvn test                             # Run unit tests (Mockito-based, no DB, no Docker)
 mvn test -P integration-tests        # Run all tests with real PostgreSQL 17 via Testcontainers (requires Docker)
 ```

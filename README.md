@@ -16,7 +16,7 @@ Requirements: JDK 21, Docker, Maven (or use `./mvnw`).
 
 ```bash
 docker-compose up -d postgres-dev
-./mvnw spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=dev"
+./mvnw spring-boot:run "-Dspring-boot.run.arguments=--spring.profiles.active=dev"
 ```
 
 The API starts on `http://localhost:8080`, Swagger UI at `/swagger-ui.html`.
