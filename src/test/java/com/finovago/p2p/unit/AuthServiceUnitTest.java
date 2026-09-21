@@ -4,6 +4,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
@@ -26,10 +27,12 @@ import com.finovago.p2p.dto.ApiKeyResponse;
 import com.finovago.p2p.dto.ApiKeyStatusResponse;
 import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.dto.ChangePasswordRequest;
+import com.finovago.p2p.dto.CurrentUserResponse;
 import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
 import com.finovago.p2p.dto.UserStatusResponse;
+import com.finovago.p2p.exception.InactiveAccountException;
 import com.finovago.p2p.exception.OwnerPrivilegeRequiredException;
 import com.finovago.p2p.exception.SamePasswordException;
 import com.finovago.p2p.exception.SelfDeactivationException;
@@ -349,5 +352,72 @@ class AuthServiceUnitTest {
         ChangePasswordRequest request = new ChangePasswordRequest("oldPass123!", "NewPass456!");
 
         assertThrows(ServiceAccountNotAllowedException.class, () -> authService.changePassword(null, request));
+    }
+
+    @Test
+    void should_returnOwnerProfileWithMerchant_when_getCurrentUserCalledByOwner() {
+        Merchant merchant = merchant();
+        org.springframework.test.util.ReflectionTestUtils.setField(merchant, "id", 10L);
+        User owner = owner(1L, merchant);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
+
+        CurrentUserResponse response = authService.getCurrentUser(1L);
+
+        assertEquals(1L, response.userId());
+        assertEquals("owner@example.com", response.email());
+        assertEquals("MERCHANT", response.role());
+        assertTrue(response.owner());
+        assertEquals(new CurrentUserResponse.MerchantSummary(10L, "Test Merchant"), response.merchant());
+    }
+
+    @Test
+    void should_returnNonOwnerProfile_when_getCurrentUserCalledByEmployee() {
+        Merchant merchant = merchant();
+        User employee = new User("employee@example.com", "hashed", Role.MERCHANT, merchant, false);
+        org.springframework.test.util.ReflectionTestUtils.setField(employee, "id", 2L);
+
+        when(userRepository.findById(2L)).thenReturn(Optional.of(employee));
+
+        CurrentUserResponse response = authService.getCurrentUser(2L);
+
+        assertFalse(response.owner());
+        assertEquals("MERCHANT", response.role());
+    }
+
+    @Test
+    void should_returnProfileWithoutMerchant_when_getCurrentUserCalledByAdmin() {
+        User admin = new User("admin@example.com", "hashed", Role.ADMIN, null);
+        org.springframework.test.util.ReflectionTestUtils.setField(admin, "id", 3L);
+
+        when(userRepository.findById(3L)).thenReturn(Optional.of(admin));
+
+        CurrentUserResponse response = authService.getCurrentUser(3L);
+
+        assertEquals("ADMIN", response.role());
+        assertFalse(response.owner());
+        assertNull(response.merchant());
+    }
+
+    @Test
+    void should_throwServiceAccountNotAllowedException_when_getCurrentUserCalledWithNullId() {
+        assertThrows(ServiceAccountNotAllowedException.class, () -> authService.getCurrentUser(null));
+    }
+
+    @Test
+    void should_throwInactiveAccountException_when_getCurrentUserCalledForUnknownUser() {
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThrows(InactiveAccountException.class, () -> authService.getCurrentUser(99L));
+    }
+
+    @Test
+    void should_throwInactiveAccountException_when_getCurrentUserCalledForDeactivatedUser() {
+        User deactivated = owner(1L, merchant());
+        deactivated.setActive(false);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(deactivated));
+
+        assertThrows(InactiveAccountException.class, () -> authService.getCurrentUser(1L));
     }
 }
