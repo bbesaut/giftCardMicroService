@@ -24,7 +24,7 @@ public class OpenApiConfig {
                         "/api/v1/giftcards/reserve", "/api/v1/giftcards/holds/**", "/api/v1/giftcards/*/ledger",
                         "/api/v1/giftcards/refund", "/api/v1/giftcards/credit", "/api/v1/auth/me/users",
                         "/api/v1/auth/me/users/**", "/api/v1/auth/me/api-key", "/api/v1/auth/me/api-key/**",
-                        "/api/v1/auth/me/password")
+                        "/api/v1/auth/me/password", "/api/v1/auth/me")
                 .build();
     }
 
@@ -32,7 +32,8 @@ public class OpenApiConfig {
     GroupedOpenApi adminApi() {
         return GroupedOpenApi.builder()
                 .group("admin-api")
-                .pathsToMatch("/api/v1/auth/register", "/api/v1/giftcards/list", "/api/v1/auth/me/password")
+                .pathsToMatch("/api/v1/auth/register", "/api/v1/giftcards/list", "/api/v1/auth/me/password",
+                        "/api/v1/auth/me")
                 .build();
     }
 }
