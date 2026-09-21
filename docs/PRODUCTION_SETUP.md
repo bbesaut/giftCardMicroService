@@ -86,6 +86,7 @@ New users are automatically assigned the **CLIENT** role and cannot elevate to A
 
 - [ ] Change default admin password before going live
 - [ ] Configure JWT_SECRET_KEY environment variable (never hardcode)
+- [ ] Configure CORS_ALLOWED_ORIGINS with the exact front-end origin(s), comma-separated, `https://` only, no trailing slash and no wildcard (e.g. `https://my-front.onrender.com`). The app refuses to start without it.
 - [ ] Enable HTTPS in production
 - [ ] Set appropriate log levels (INFO or WARNING, not DEBUG)
 - [ ] Review database backups and recovery procedures
