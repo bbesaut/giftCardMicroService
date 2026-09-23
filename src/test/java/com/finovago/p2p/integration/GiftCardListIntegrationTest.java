@@ -157,9 +157,20 @@ class GiftCardListIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_returnBadRequest_whenSizeExceedsMax() throws Exception {
+        // Regression: the message must always be in English (not the host JVM's default locale)
+        // and name the parameter itself ("size"), not the internal "listMyGiftCards.size" path.
         mockMvc.perform(get("/api/v1/giftcards").param("size", "101").header(AUTHORIZATION, "Bearer " + merchantAToken))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("Bad Request"));
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.message").value("size: must be less than or equal to 100"));
+    }
+
+    @Test
+    void should_returnBadRequest_whenPageIsNegative() throws Exception {
+        mockMvc.perform(get("/api/v1/giftcards").param("page", "-1").header(AUTHORIZATION, "Bearer " + merchantAToken))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.message").value("page: must be greater than or equal to 0"));
     }
 
     @Test
