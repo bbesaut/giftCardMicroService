@@ -49,6 +49,7 @@ public class SecurityConfig {
     };
 
     private static final String[] MERCHANT_ROUTES = {
+            "/api/v1/giftcards",
             "/api/v1/giftcards/redeem/**",
             "/api/v1/giftcards/lookup/**",
             "/api/v1/giftcards/create/**",

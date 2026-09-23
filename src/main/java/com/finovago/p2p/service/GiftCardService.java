@@ -10,13 +10,20 @@ import java.util.concurrent.Executor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import org.springframework.transaction.annotation.Transactional;
 
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.GiftCardResponse;
+import com.finovago.p2p.dto.GiftCardSortField;
 import com.finovago.p2p.dto.LedgerEntryResponse;
+import com.finovago.p2p.dto.PagedResponse;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.dto.RedemptionRequest;
 import com.finovago.p2p.exception.UnknownGiftCardException;
@@ -26,6 +33,7 @@ import com.finovago.p2p.model.LedgerEntryType;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.repository.GiftCardRepository;
 import com.finovago.p2p.repository.MerchantRepository;
+import com.finovago.p2p.repository.specification.GiftCardSpecifications;
 import com.finovago.p2p.security.CurrentUserContext;
 
 @Service
@@ -178,6 +186,32 @@ public class GiftCardService {
                 .stream()
                 .map(card -> new GiftCardResponse(card.getCardCode(), card.getBalance(), card.isActive(), card.getExpirationDate(), card.getMerchant().getId()))
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResponse<GiftCardResponse> getMyGiftCards(Boolean active, String code, int page, int size, GiftCardSortField sortBy, Sort.Direction sortDirection) {
+        Long merchantId = currentUserContext.currentMerchantId();
+
+        log.info("Listing gift cards for merchant {}. page={}, size={}, active={}, code={}", merchantId, page, size, active, code);
+
+        Specification<GiftCard> spec = Specification 
+                .where(GiftCardSpecifications.belongsToMerchant(merchantId))
+                .and(GiftCardSpecifications.hasActive(active))
+                .and(GiftCardSpecifications.codeContains(code)); // Object that builds the WHERE (standart for ORM filtering)
+
+        // Tie-breaker on id keeps ordering deterministic across pages when the primary sort field
+        // has duplicate values (e.g. several cards with the same balance) - without it, a row could
+        // be skipped or repeated between two page requests depending on how Postgres happens to
+        // order ties internally.
+        Sort sort = Sort.by(sortDirection, sortBy.getPropertyName()).and(Sort.by("id")); // Object that builds the ORDER BY, (here sort by the param and his direction, AND always id (tie-breaker) to avoid to see one line twice or maybe never)
+        Pageable pageable = PageRequest.of(page, size, sort); // object that groups the controller's page, size, and the sort object we built) (interface) 
+
+        Page<GiftCard> result = giftCardRepository.findAll(spec, pageable); // now get the result with our spec object and our pageable object
+
+        Page<GiftCardResponse> mapped = result.map(card -> new GiftCardResponse(
+                card.getCardCode(), card.getBalance(), card.isActive(), card.getExpirationDate(), merchantId));
+
+        return PagedResponse.from(mapped);
     }
 
     @Transactional(readOnly = true)

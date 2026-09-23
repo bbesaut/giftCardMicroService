@@ -323,6 +323,36 @@ Content-Type: application/json
 
 All gift card endpoints below are scoped to the calling MERCHANT's own tenant — `merchantId` is derived from the JWT, never accepted from the client. A gift card code only needs to be unique **within a merchant** (`UNIQUE(merchant_id, card_code)`); two different merchants may use the same code without collision. Looking up or redeeming another merchant's card returns `404 Not Found` (not `403`), so tenant existence is never leaked.
 
+### GET /api/v1/giftcards
+**Description**: Retrieve a paginated, filterable page of the caller's own gift cards ("my gift cards"), scoped to the caller's merchant. Requires authentication (MERCHANT role). Distinct from `GET /giftcards/list` below, which is ADMIN-only, unpaginated, and returns every merchant's cards.
+
+**Query Parameters**:
+- `page` (int, optional, default `0`): 0-indexed page number
+- `size` (int, optional, default `20`, max `100`): items per page
+- `active` (boolean, optional): filter by active status
+- `code` (String, optional): case-insensitive partial match on the gift card code
+- `sortBy` (GiftCardSortField, optional, default `CARD_CODE`): one of `CARD_CODE`, `BALANCE`, `EXPIRATION_DATE`
+- `sortDirection` (String, optional, default `ASC`): `ASC` or `DESC`
+
+**Response** (PagedResponse<GiftCardResponse> - HTTP 200):
+```json
+{
+  "content": [
+    { "giftCardCode": "GC-12345", "balance": 150.0, "active": true, "expirationDate": "2025-12-31" }
+  ],
+  "page": 0,
+  "size": 20,
+  "totalElements": 1,
+  "totalPages": 1
+}
+```
+
+**Error Responses**:
+- `400 Bad Request`: `page`/`size` out of range, or `sortBy`/`sortDirection` not a recognized value
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Insufficient permissions (MERCHANT role required)
+- `500 Internal Server Error`: Database or unexpected server error
+
 ### GET /api/v1/giftcards/lookup/{code}
 **Description**: Retrieve detailed information about a specific gift card by its code, scoped to the caller's merchant. Returns the card's current balance, active status, and expiration date. Requires authentication (MERCHANT role).
 
@@ -611,6 +641,18 @@ Response containing gift card details
 - `active` (boolean): Indicates if the gift card is active
 - `expirationDate` (LocalDate): Expiration date
 
+### PagedResponse<T>
+Generic wrapper for any paginated list response (e.g. GET /api/v1/giftcards)
+- `content` (List<T>): The items in this page
+- `page` (int): Current page number (0-indexed)
+- `size` (int): Items per page
+- `totalElements` (long): Total number of items across all pages
+- `totalPages` (int): Total number of pages
+
+### GiftCardSortField
+Enum of sortable fields for GET /api/v1/giftcards's `sortBy` parameter
+- `CARD_CODE`, `BALANCE`, `EXPIRATION_DATE`
+
 ### GiftCardCreateRequest
 Used for creating new gift cards (POST /api/v1/giftcards/create)
 - `giftCardCode` (String): Unique gift card code
@@ -706,6 +748,7 @@ The correlation ID is **not** duplicated in the body — it is already returned 
 - **Response timing**: All responses include `X-Response-Time` header (milliseconds). This is HTTP metadata only—never add timing to DTOs.
 - **Correlation id & response timing filters run before Spring Security** (`@Order(Ordered.HIGHEST_PRECEDENCE)` on `MdcFilter`/`ResponseTimeFilter`) so that even 401/403 responses rejected by Security itself carry `X-Correlation-Id`/`X-Response-Time` — don't remove that ordering.
 - **Tenant scoping**: never trust a client-supplied `merchantId` for gift card operations — it always comes from the authenticated principal's JWT/API key (`CurrentUserContext`).
+- **Swagger groups**: `OpenApiConfig`'s `public-api`/`customer-api`/`admin-api` groups are explicit path allowlists (`pathsToMatch`), separate from `@Operation`/`@ApiResponses` annotations on the controller method. A new endpoint can be fully annotated and still be invisible in Swagger UI if its path isn't added to the right group — this has already happened twice (`GET /auth/me`, `GET /giftcards`). Always add the new path to `OpenApiConfig` in the same commit as the endpoint.
 
 ## 👥 Admin User Setup
 
