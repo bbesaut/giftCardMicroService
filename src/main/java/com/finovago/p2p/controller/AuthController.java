@@ -5,6 +5,7 @@ import com.finovago.p2p.dto.ApiKeyResponse;
 import com.finovago.p2p.dto.ApiKeyStatusResponse;
 import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.dto.ChangePasswordRequest;
+import com.finovago.p2p.dto.CurrentUserResponse;
 import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
@@ -108,6 +109,31 @@ public class AuthController {
             log.warn("Registration failed - email already exists: {}", sanitizeEmail(request.email()));
             throw e;
         }
+    }
+
+    @Operation(
+        summary = "Get my profile",
+        description = "Returns the profile of the authenticated user (id, email, role, whether they own their "
+                    + "merchant, and their merchant's id and name - null for an ADMIN), so a front-end can "
+                    + "bootstrap its session after login or refresh and decide which screens to show. Read from "
+                    + "the database, not from the JWT claims: a user deactivated after their access token was "
+                    + "issued is rejected with 401 here, which lets the front log them out immediately. Requires "
+                    + "authentication (JWT token), any role - rejected if the caller authenticated via API key, "
+                    + "since a profile belongs to a human account, not an automated integration."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Profile of the authenticated user",
+            content = @Content(schema = @Schema(implementation = CurrentUserResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token, or the account no longer exists or has been deactivated",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Account no longer exists or has been deactivated\"}"))),
+        @ApiResponse(responseCode = "403", description = "Caller authenticated via API key, not a human account",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Forbidden\",\"message\":\"Current user profile is only available to a human account, not an API key\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
+    })
+    @GetMapping("/me")
+    public ResponseEntity<CurrentUserResponse> getCurrentUser() {
+        return ResponseEntity.ok(authService.getCurrentUser(currentUserContext.currentUserIdOrNull()));
     }
 
     @Operation(

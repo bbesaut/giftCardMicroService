@@ -12,7 +12,7 @@
 ```bash
 docker-compose up -d postgres-dev    # Start local PostgreSQL for dev mode
 mvn clean install                    # Full build with tests
-mvn spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=dev"  # Dev mode
+mvn spring-boot:run "-Dspring-boot.run.arguments=--spring.profiles.active=dev"  # Dev mode
 mvn test                             # Run unit tests (Mockito-based, no DB, no Docker)
 mvn test -P integration-tests        # Run all tests with real PostgreSQL 17 via Testcontainers (requires Docker)
 ```
@@ -56,6 +56,8 @@ Two ways to see it without running Maven yourself:
 - **Async**: Custom TaskExecutor with MdcTaskDecorator for MDC propagation
 - **Exception handling**: GlobalExceptionHandler with custom exceptions
 - **Response timing**: ResponseTimeFilter adds `X-Response-Time` header to all responses (in milliseconds)
+- **CORS**: `CorsConfig` exposes a `CorsConfigurationSource` for `/api/**`, plugged into Spring Security via `.cors(...)` in `SecurityConfig` (so preflight `OPTIONS` is answered before authorization, which has no JWT to check, and 401/403/429 responses still carry CORS headers — `RateLimitFilter` runs after the Security chain, so it never sees preflights either). Origins are an exact allowlist from `app.cors.allowed-origins` (comma-separated, env var `CORS_ALLOWED_ORIGINS`): no wildcard, no path/trailing slash, validated at startup — the app refuses to boot on a missing/blank/malformed list. `dev` defaults to `http://localhost:4200` (Angular); `prod` has **no default** and sets `app.cors.require-https=true`, so an `http://` origin is also rejected at startup. `allowCredentials` is `false` on purpose: auth is a Bearer JWT header, no cookies. Allowed methods `GET/POST/OPTIONS`; allowed headers `Authorization`, `Content-Type`, `Idempotency-Key`; **`X-Api-Key` is deliberately not allowed** (API keys are backend-to-backend and must never be sent from a browser). Exposed to front JS: `X-Correlation-Id`, `X-Response-Time`, `Retry-After`. CORS is a browser-side rule, not access control — authorization stays with JWT/roles/tenant scoping. If the refresh token ever moves to an `HttpOnly` cookie, this needs `allowCredentials(true)` plus CSRF protection on `/auth/refresh` and `/auth/logout` — a separate change.
+- **CORS**: `CorsConfig` exposes a `CorsConfigurationSource` for `/api/**`, wired through Spring Security (`.cors(...)` in `SecurityConfig`) so preflights and 401/403/429 responses also carry CORS headers. Origins are an exact allowlist from `app.cors.allowed-origins` (comma-separated, no wildcard, no path/trailing slash; `CORS_ALLOWED_ORIGINS` env var in dev/prod) — the app refuses to start if it's missing or malformed, and in prod (`app.cors.require-https=true`) only `https` origins are accepted. Allowed methods are `GET`, `POST`, `OPTIONS` (the API has no `PUT`/`PATCH`/`DELETE` — add them here if that changes); allowed request headers are `Authorization`, `Content-Type`, `Idempotency-Key`. `X-Api-Key` is deliberately **not** allowed: API keys are backend-to-backend and must never be sent from a browser. Credentials are disabled (Bearer JWT, no cookies). Exposed response headers (`Access-Control-Expose-Headers`): `X-Correlation-Id`, `X-Response-Time`, `Retry-After` — browsers hide any response header not listed here from JS, so a front can only read them because of this list.
 - **Rate limiting**: `RateLimitFilter` caps `login`, `password-reset/request`, and `password-reset/confirm` at 10 requests/minute per client IP (the only identity available pre-auth — protects against credential stuffing / account enumeration / token guessing). `POST /me/password` is capped the same way but keyed per **user id** instead of IP (an ADMIN caller has no merchantId to key on, and it's a current-password-guessing surface like login). `lookup`/`redeem`/`reserve`/`refund`/`credit` are capped at 300 requests/minute **per merchant** (from the JWT), not per IP — these are B2B endpoints called from a merchant's own backend, so all of a merchant's end users would otherwise share one IP and throttle each other. A merchant can get a custom quota via `merchants.rate_limit_capacity` (nullable override; `NULL` falls back to the `app.rate-limit.merchant-capacity` default). In-memory buckets, per-instance only (see `app.rate-limit.*` properties). Disabled under the `test` profile.
 - **Password reset**: `PasswordResetToken` mirrors `RefreshToken`'s pattern exactly — a `UUID.randomUUID()` raw token is emailed once and never stored, only its SHA-256 hash (`password_reset_tokens.token_hash`), same-day-expiring (`app.password-reset.expiration-minutes`, default 30 min), single-use (`used` flag, not deleted, so a replay of an already-consumed token is distinguishable from garbage in logs/metrics). Requesting a new reset invalidates any still-outstanding token for that account first, so at most one valid token exists per user at a time. Email delivery goes through the `EmailSender` interface, with the implementation picked by Spring profile: `SmtpEmailSender` (`@Profile("!prod")`) wraps `JavaMailSender` against Brevo's SMTP relay in dev via `MAIL_HOST`/`MAIL_USERNAME`/`MAIL_PASSWORD`/`MAIL_FROM` (`MAIL_USERNAME`/`MAIL_PASSWORD` are Brevo's SMTP login/key from its SMTP & API settings, not the account password), and against MailHog via Testcontainers in `test` (a real SMTP server that captures instead of delivering, so integration tests exercise the actual SMTP path rather than mocking the email step). `BrevoApiEmailSender` (`@Profile("prod")`) calls Brevo's HTTP transactional email API (`https://api.brevo.com/v3/smtp/email`) instead, using a separate `BREVO_API_KEY` (not the SMTP one) via Spring's `RestClient` - Render, like most PaaS hosts, blocks outbound SMTP ports at the network level to fight spam, so the SMTP relay that works everywhere else times out there regardless of credentials. Both implementations require `MAIL_FROM` to be a sender address verified in Brevo. `PasswordResetTokenCleanupScheduler` sweeps expired entries (see `app.password-reset.*` properties), same pattern as `RefreshTokenCleanupScheduler`.
 - **Idempotency**: `POST /giftcards/redeem` and `POST /giftcards/reserve` require an `Idempotency-Key` header — any mutating endpoint without a natural uniqueness guard is a candidate (`create`/`register` are already covered by their own unique constraints; `capture`/`release` are idempotent by target state — a retry that already reached the requested terminal state (e.g. re-capturing an already-CAPTURED hold) replays the same 200 response; a retry hitting a *different* terminal state (e.g. capturing an already-RELEASED hold) is a genuine conflict and returns 409). `IdempotencyKeyService` is endpoint-agnostic business-logic-wise, but keys are scoped by `(merchant_id, endpoint, idempotency_key)` — not just `(merchant_id, idempotency_key)` — the same way Stripe/PayPal/AWS do it, so a client reusing the same key value on two different endpoints (e.g. `reserve` then `redeem`) can never have one silently replay the other's cached response even if their request-hash inputs happen to coincide (`request_hash` only needs to catch reuse *within* the same endpoint with a different payload). It claims the key in its own transaction (REQUIRES_NEW) before the business logic runs, so concurrent duplicates are caught by the DB unique constraint; a completed claim replays its cached response (serialized as JSON, endpoint-specific DTO type), a failed one is discarded so retries can proceed cleanly. `IdempotencyKeyCleanupScheduler` sweeps expired entries (see `app.idempotency.*` properties).
@@ -113,6 +115,26 @@ Content-Type: application/json
 - `email`: Required, must be valid email format, must be unique in database — becomes the owner's login
 - `password`: Required, non-blank — the owner's password
 - `merchantName`: Required, non-blank — becomes the new Merchant's business name
+
+### GET /api/v1/auth/me
+**Description**: Returns the profile of the calling user, so a front-end can bootstrap its session after login/refresh (who is logged in, which screens to show — e.g. `owner` gates the `/me/users/**` and `/me/api-key` screens). Requires authentication (JWT token), any role (MERCHANT and ADMIN). Read from the database, **not** from the JWT claims: a user deactivated after their access token was issued gets `401` here instead of a stale profile, so the front can log them out immediately (unlike other endpoints, which honour that token until it expires — see the known limitation under `deactivate`). Rejected with `403` if the caller authenticated via API key, since a profile belongs to a human account.
+
+**Response** (CurrentUserResponse - HTTP 200):
+```json
+{
+  "userId": 5,
+  "email": "client@finovago.com",
+  "role": "MERCHANT",
+  "owner": true,
+  "merchant": { "id": 1, "name": "Finovago Demo Merchant" }
+}
+```
+`merchant` is `null` for an ADMIN (no merchant of its own). The password hash, API key and rate-limit quota are never exposed.
+
+**Error Responses**:
+- `401 Unauthorized`: Missing or invalid JWT token, or the account no longer exists / has been deactivated
+- `403 Forbidden`: Caller authenticated via API key, not a human account
+- `500 Internal Server Error`: Server error
 
 ### POST /api/v1/auth/me/api-key
 **Description**: Generates the caller's own merchant's API key for automated/backend integration use, or **rotates** it (previous secret stops working immediately) if one already exists. The key attaches directly to the merchant (`api_keys.merchant_id`) — no user account is created for it. Requires authentication (MERCHANT role) and the caller must be that merchant's owner — otherwise `403`.
@@ -525,6 +547,14 @@ Used for merchant registration (POST /api/v1/auth/register) — describes the ne
 - `password` (String): Owner's password, non-blank
 - `merchantName` (String): Business name for the new Merchant created alongside this user, non-blank
 
+### CurrentUserResponse
+Response for GET /api/v1/auth/me
+- `userId` (Long): Id of the authenticated user
+- `email` (String): Email of the authenticated user
+- `role` (String): `ADMIN` or `MERCHANT`
+- `owner` (boolean): Whether the user owns their merchant (always false for an ADMIN)
+- `merchant` (object, nullable): `{ "id": Long, "name": String }` of the user's merchant, null for an ADMIN
+
 ### ApiKeyResponse
 Response for generating/rotating the merchant's API key (POST /api/v1/auth/me/api-key)
 - `keyPrefix` (String): Non-secret prefix identifying this key, safe to log or display
@@ -671,6 +701,7 @@ The correlation ID is **not** duplicated in the body — it is already returned 
 - Use `@Valid` for DTO validation
 - Async operations return CompletableFuture or HTTP 202 (Accepted)
 - All endpoints require JWT (except /api/v1/auth/login, /api/v1/auth/refresh, /api/v1/auth/logout). `/api/v1/auth/register` requires JWT + ADMIN role.
+- **CORS**: never add `*`/wildcard origins or `allowCredentials(true)` to `CorsConfig` without revisiting the auth model (see Architecture Summary). New front-end origins go in `CORS_ALLOWED_ORIGINS`, not in code.
 - Profiles: dev (PostgreSQL via docker-compose, DEBUG), prod (PostgreSQL, INFO), test (PostgreSQL via Testcontainers, random port)
 - **Response timing**: All responses include `X-Response-Time` header (milliseconds). This is HTTP metadata only—never add timing to DTOs.
 - **Correlation id & response timing filters run before Spring Security** (`@Order(Ordered.HIGHEST_PRECEDENCE)` on `MdcFilter`/`ResponseTimeFilter`) so that even 401/403 responses rejected by Security itself carry `X-Correlation-Id`/`X-Response-Time` — don't remove that ordering.

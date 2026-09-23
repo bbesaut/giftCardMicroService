@@ -16,7 +16,7 @@ Requirements: JDK 21, Docker, Maven (or use `./mvnw`).
 
 ```bash
 docker-compose up -d postgres-dev
-./mvnw spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=dev"
+./mvnw spring-boot:run "-Dspring-boot.run.arguments=--spring.profiles.active=dev"
 ```
 
 The API starts on `http://localhost:8080`, Swagger UI at `/swagger-ui.html`.
@@ -59,5 +59,6 @@ Never push directly to `main`. PRs into `develop` or `main` require tests passin
 - Idempotency required on `redeem`/`reserve` via `Idempotency-Key` header.
 - Rate limiting: 10 req/min per IP on `login`/`lookup`/`redeem`.
 - Correlation IDs (`X-Correlation-Id`) and response timing (`X-Response-Time`) on every response, including auth failures.
+- CORS for browser front-ends: exact-origin allowlist via `app.cors.allowed-origins` (`CORS_ALLOWED_ORIGINS` in prod, required). `X-Correlation-Id`, `X-Response-Time` and `Retry-After` are exposed to browser JS.
 
 See [CLAUDE.md](CLAUDE.md) for the detailed breakdown.

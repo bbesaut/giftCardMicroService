@@ -25,7 +25,7 @@ To create an admin with a custom password:
 
    Or use this Spring Boot one-liner:
    ```bash
-   mvn spring-boot:run -Dspring-boot.run.arguments="--bcrypt=YourPassword"
+   mvn spring-boot:run "-Dspring-boot.run.arguments=--bcrypt=YourPassword"
    ```
 
 2. **Update the migration** `V4__insert_admin_user.sql`:
@@ -86,6 +86,7 @@ New users are automatically assigned the **CLIENT** role and cannot elevate to A
 
 - [ ] Change default admin password before going live
 - [ ] Configure JWT_SECRET_KEY environment variable (never hardcode)
+- [ ] Configure CORS_ALLOWED_ORIGINS with the exact front-end origin(s), comma-separated, `https://` only, no trailing slash and no wildcard (e.g. `https://my-front.onrender.com`). The app refuses to start without it.
 - [ ] Enable HTTPS in production
 - [ ] Set appropriate log levels (INFO or WARNING, not DEBUG)
 - [ ] Review database backups and recovery procedures

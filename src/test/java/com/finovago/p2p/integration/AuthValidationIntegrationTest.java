@@ -6,6 +6,7 @@ import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.model.Role;
 import com.finovago.p2p.model.User;
 import com.finovago.p2p.repository.GiftCardRepository;
+import com.finovago.p2p.repository.IdempotencyKeyRepository;
 import com.finovago.p2p.repository.MerchantRepository;
 import com.finovago.p2p.repository.RefreshTokenRepository;
 import com.finovago.p2p.repository.UserRepository;
@@ -44,14 +45,18 @@ class AuthValidationIntegrationTest extends AbstractIntegrationTest {
     private RefreshTokenRepository refreshTokenRepository;
 
     @Autowired
+    private IdempotencyKeyRepository idempotencyKeyRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @BeforeEach
     void setUp() {
         refreshTokenRepository.deleteAll();
         userRepository.deleteAll();
-        // gift_card has a FK to merchants; other integration test classes are non-transactional
-        // and commit rows that outlive this class, so clear gift cards before deleting merchants.
+        // gift_card and idempotency_key both have a FK to merchants; other integration test classes
+        // are non-transactional and commit rows that outlive this class, so clear both before deleting merchants.
+        idempotencyKeyRepository.deleteAll();
         PostgresTestcontainerInitializer.executeAsMigrator("TRUNCATE TABLE gift_card_ledger RESTART IDENTITY");
         giftCardRepository.deleteAll();
         merchantRepository.deleteAll();
