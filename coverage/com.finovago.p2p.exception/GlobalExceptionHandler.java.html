@@ -314,13 +314,25 @@ import io.jsonwebtoken.security.SignatureException;
                 ));
     }
 
-    @ExceptionHandler(BadCredentialsException.class)
-    public ResponseEntity&lt;Object&gt; handleBadCredentialsException(BadCredentialsException ex) {
-<span class="fc" id="L319">        log.warn(&quot;Authentication failed - invalid credentials&quot;);</span>
+    @ExceptionHandler(InactiveAccountException.class)
+    public ResponseEntity&lt;Object&gt; handleInactiveAccountException(InactiveAccountException ex) {
+<span class="fc" id="L319">        log.warn(ex.getMessage());</span>
 
 <span class="fc" id="L321">        return ResponseEntity</span>
 <span class="fc" id="L322">                .status(HttpStatus.UNAUTHORIZED)</span>
 <span class="fc" id="L323">                .body(Map.of(</span>
+                    &quot;error&quot;, &quot;Unauthorized&quot;,
+<span class="fc" id="L325">                    &quot;message&quot;, ex.getMessage()</span>
+                ));
+    }
+
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity&lt;Object&gt; handleBadCredentialsException(BadCredentialsException ex) {
+<span class="fc" id="L331">        log.warn(&quot;Authentication failed - invalid credentials&quot;);</span>
+
+<span class="fc" id="L333">        return ResponseEntity</span>
+<span class="fc" id="L334">                .status(HttpStatus.UNAUTHORIZED)</span>
+<span class="fc" id="L335">                .body(Map.of(</span>
                     &quot;error&quot;, &quot;Unauthorized&quot;,
                     &quot;message&quot;, &quot;Invalid email or password&quot;
                 ));
