@@ -10,13 +10,20 @@ import java.util.concurrent.Executor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import org.springframework.transaction.annotation.Transactional;
 
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.GiftCardResponse;
+import com.finovago.p2p.dto.GiftCardSortField;
 import com.finovago.p2p.dto.LedgerEntryResponse;
+import com.finovago.p2p.dto.PagedResponse;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.dto.RedemptionRequest;
 import com.finovago.p2p.exception.UnknownGiftCardException;
@@ -26,6 +33,7 @@ import com.finovago.p2p.model.LedgerEntryType;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.repository.GiftCardRepository;
 import com.finovago.p2p.repository.MerchantRepository;
+import com.finovago.p2p.repository.specification.GiftCardSpecifications;
 import com.finovago.p2p.security.CurrentUserContext;
 
 @Service
@@ -36,7 +44,7 @@ public class GiftCardService {
     private final IdempotencyKeyService idempotencyKeyService;
     private final LedgerService ledgerService;
     private final Executor taskExecutor;
-<span class="fc" id="L39">    private static final Logger log = LoggerFactory.getLogger(GiftCardService.class);</span>
+<span class="fc" id="L47">    private static final Logger log = LoggerFactory.getLogger(GiftCardService.class);</span>
 
     public GiftCardService(
             GiftCardRepository giftCardRepository,
@@ -44,96 +52,96 @@ public class GiftCardService {
             CurrentUserContext currentUserContext,
             IdempotencyKeyService idempotencyKeyService,
             LedgerService ledgerService,
-<span class="fc" id="L47">            @Qualifier(&quot;taskExecutor&quot;) Executor taskExecutor) {</span>
-<span class="fc" id="L48">        this.giftCardRepository = giftCardRepository;</span>
-<span class="fc" id="L49">        this.merchantRepository = merchantRepository;</span>
-<span class="fc" id="L50">        this.currentUserContext = currentUserContext;</span>
-<span class="fc" id="L51">        this.idempotencyKeyService = idempotencyKeyService;</span>
-<span class="fc" id="L52">        this.ledgerService = ledgerService;</span>
-<span class="fc" id="L53">        this.taskExecutor = taskExecutor;</span>
-<span class="fc" id="L54">    }</span>
+<span class="fc" id="L55">            @Qualifier(&quot;taskExecutor&quot;) Executor taskExecutor) {</span>
+<span class="fc" id="L56">        this.giftCardRepository = giftCardRepository;</span>
+<span class="fc" id="L57">        this.merchantRepository = merchantRepository;</span>
+<span class="fc" id="L58">        this.currentUserContext = currentUserContext;</span>
+<span class="fc" id="L59">        this.idempotencyKeyService = idempotencyKeyService;</span>
+<span class="fc" id="L60">        this.ledgerService = ledgerService;</span>
+<span class="fc" id="L61">        this.taskExecutor = taskExecutor;</span>
+<span class="fc" id="L62">    }</span>
 
     public CompletableFuture&lt;RedemptionResponse&gt; redeemGiftCardAsync(RedemptionRequest request, String idempotencyKey) {
-<span class="fc" id="L57">        Long merchantId = currentUserContext.currentMerchantId();</span>
+<span class="fc" id="L65">        Long merchantId = currentUserContext.currentMerchantId();</span>
         // Captured on the calling thread, same as merchantId above: supplyAsync runs on taskExecutor,
         // where SecurityContextHolder (and therefore CurrentUserContext) is not populated.
-<span class="fc" id="L60">        Long actorUserId = currentUserContext.currentUserIdOrNull();</span>
-<span class="fc" id="L61">        boolean actorViaApiKey = currentUserContext.isApiKeyAuthenticated();</span>
-<span class="fc" id="L62">        return CompletableFuture.supplyAsync(() -&gt; {</span>
-<span class="fc" id="L63">            String requestHash = idempotencyKeyService.hashRequest(request.giftCardCode(), request.amount().setScale(2, RoundingMode.HALF_UP).toPlainString());</span>
+<span class="fc" id="L68">        Long actorUserId = currentUserContext.currentUserIdOrNull();</span>
+<span class="fc" id="L69">        boolean actorViaApiKey = currentUserContext.isApiKeyAuthenticated();</span>
+<span class="fc" id="L70">        return CompletableFuture.supplyAsync(() -&gt; {</span>
+<span class="fc" id="L71">            String requestHash = idempotencyKeyService.hashRequest(request.giftCardCode(), request.amount().setScale(2, RoundingMode.HALF_UP).toPlainString());</span>
 
-<span class="fc" id="L65">            Optional&lt;RedemptionResponse&gt; cached = idempotencyKeyService.claim(merchantId, &quot;redeem&quot;, idempotencyKey, requestHash, RedemptionResponse.class);</span>
-<span class="fc bfc" id="L66" title="All 2 branches covered.">            if (cached.isPresent()) {</span>
-<span class="fc" id="L67">                log.info(&quot;Idempotency-Key {} already completed, returning cached result&quot;, idempotencyKey);</span>
-<span class="fc" id="L68">                return cached.get();</span>
+<span class="fc" id="L73">            Optional&lt;RedemptionResponse&gt; cached = idempotencyKeyService.claim(merchantId, &quot;redeem&quot;, idempotencyKey, requestHash, RedemptionResponse.class);</span>
+<span class="fc bfc" id="L74" title="All 2 branches covered.">            if (cached.isPresent()) {</span>
+<span class="fc" id="L75">                log.info(&quot;Idempotency-Key {} already completed, returning cached result&quot;, idempotencyKey);</span>
+<span class="fc" id="L76">                return cached.get();</span>
             }
 
             try {
-<span class="fc" id="L72">                RedemptionResponse response = executeRedemptionSync(merchantId, request.giftCardCode(), request.amount(), actorUserId, actorViaApiKey);</span>
-<span class="fc" id="L73">                idempotencyKeyService.complete(merchantId, &quot;redeem&quot;, idempotencyKey, response);</span>
-<span class="fc" id="L74">                return response;</span>
-<span class="fc" id="L75">            } catch (RuntimeException e) {</span>
-<span class="fc" id="L76">                idempotencyKeyService.discard(merchantId, &quot;redeem&quot;, idempotencyKey);</span>
-<span class="fc" id="L77">                throw e;</span>
+<span class="fc" id="L80">                RedemptionResponse response = executeRedemptionSync(merchantId, request.giftCardCode(), request.amount(), actorUserId, actorViaApiKey);</span>
+<span class="fc" id="L81">                idempotencyKeyService.complete(merchantId, &quot;redeem&quot;, idempotencyKey, response);</span>
+<span class="fc" id="L82">                return response;</span>
+<span class="fc" id="L83">            } catch (RuntimeException e) {</span>
+<span class="fc" id="L84">                idempotencyKeyService.discard(merchantId, &quot;redeem&quot;, idempotencyKey);</span>
+<span class="fc" id="L85">                throw e;</span>
             }
         }, taskExecutor);
     }
 
     @Transactional
     public RedemptionResponse executeRedemptionSync(Long merchantId, String code, BigDecimal amount) {
-<span class="fc" id="L84">        return executeRedemptionSync(merchantId, code, amount, null, false);</span>
+<span class="fc" id="L92">        return executeRedemptionSync(merchantId, code, amount, null, false);</span>
     }
 
     @Transactional
     public RedemptionResponse executeRedemptionSync(Long merchantId, String code, BigDecimal amount, Long actorUserId, boolean actorViaApiKey) {
 
-<span class="fc" id="L90">        log.info(&quot;Processing database validation for card code: {}&quot;, code);</span>
+<span class="fc" id="L98">        log.info(&quot;Processing database validation for card code: {}&quot;, code);</span>
 
-<span class="fc" id="L92">        long startTime = System.currentTimeMillis();</span>
+<span class="fc" id="L100">        long startTime = System.currentTimeMillis();</span>
 
-<span class="fc bfc" id="L94" title="All 4 branches covered.">        if (code == null || code.isEmpty()) {</span>
-<span class="fc" id="L95">            throw new IllegalArgumentException(&quot;Card code invalid&quot;);</span>
+<span class="fc bfc" id="L102" title="All 4 branches covered.">        if (code == null || code.isEmpty()) {</span>
+<span class="fc" id="L103">            throw new IllegalArgumentException(&quot;Card code invalid&quot;);</span>
         }
 
-<span class="pc bpc" id="L98" title="1 of 4 branches missed.">        if (amount == null || amount.signum() &lt;= 0) {</span>
-<span class="fc" id="L99">            throw new IllegalArgumentException(&quot;Amount must be greater than zero&quot;);</span>
+<span class="pc bpc" id="L106" title="1 of 4 branches missed.">        if (amount == null || amount.signum() &lt;= 0) {</span>
+<span class="fc" id="L107">            throw new IllegalArgumentException(&quot;Amount must be greater than zero&quot;);</span>
         }
 
         // @Digits on RedemptionRequest already rejects more than 2 decimal places, so this only
         // pads the scale (e.g. &quot;1&quot; -&gt; &quot;1.00&quot;) - it never rounds away precision. Doing it here,
         // before the amount touches the balance/ledger/response, keeps every downstream value at
         // a consistent scale instead of echoing back whatever scale the client happened to send.
-<span class="fc" id="L106">        amount = amount.setScale(2, RoundingMode.HALF_UP);</span>
+<span class="fc" id="L114">        amount = amount.setScale(2, RoundingMode.HALF_UP);</span>
 
-<span class="fc" id="L108">        GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, code)</span>
-<span class="fc" id="L109">                .orElseThrow(() -&gt; new UnknownGiftCardException(&quot;Gift card not found&quot;));</span>
+<span class="fc" id="L116">        GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, code)</span>
+<span class="fc" id="L117">                .orElseThrow(() -&gt; new UnknownGiftCardException(&quot;Gift card not found&quot;));</span>
 
-<span class="fc" id="L111">        giftCard.ensureUsable();</span>
+<span class="fc" id="L119">        giftCard.ensureUsable();</span>
 
         BigDecimal deducted;
-<span class="fc" id="L114">        BigDecimal remainingToPay = BigDecimal.ZERO.setScale(2);</span>
+<span class="fc" id="L122">        BigDecimal remainingToPay = BigDecimal.ZERO.setScale(2);</span>
 
-<span class="fc bfc" id="L116" title="All 2 branches covered.">        if (giftCard.getBalance().compareTo(amount) &gt; 0) {</span>
-<span class="fc" id="L117">            giftCard.deductBalance(amount);</span>
-<span class="fc" id="L118">            deducted = amount;</span>
+<span class="fc bfc" id="L124" title="All 2 branches covered.">        if (giftCard.getBalance().compareTo(amount) &gt; 0) {</span>
+<span class="fc" id="L125">            giftCard.deductBalance(amount);</span>
+<span class="fc" id="L126">            deducted = amount;</span>
         } else {
-<span class="fc" id="L120">            deducted = giftCard.getBalance();</span>
-<span class="fc" id="L121">            remainingToPay = amount.subtract(giftCard.getBalance());</span>
-<span class="fc" id="L122">            giftCard.drainCard();</span>
+<span class="fc" id="L128">            deducted = giftCard.getBalance();</span>
+<span class="fc" id="L129">            remainingToPay = amount.subtract(giftCard.getBalance());</span>
+<span class="fc" id="L130">            giftCard.drainCard();</span>
         }
 
-<span class="fc" id="L125">        giftCardRepository.save(giftCard);</span>
+<span class="fc" id="L133">        giftCardRepository.save(giftCard);</span>
 
-<span class="fc" id="L127">        ledgerService.record(giftCard, merchantId, LedgerEntryType.REDEMPTION, deducted, giftCard.getBalance(), null, actorUserId, actorViaApiKey);</span>
+<span class="fc" id="L135">        ledgerService.record(giftCard, merchantId, LedgerEntryType.REDEMPTION, deducted, giftCard.getBalance(), null, actorUserId, actorViaApiKey);</span>
 
-<span class="fc" id="L129">        long duration = System.currentTimeMillis() - startTime;</span>
+<span class="fc" id="L137">        long duration = System.currentTimeMillis() - startTime;</span>
 
-<span class="fc" id="L131">        log.info(&quot;Redemption done in {}ms. Remaining balance: {}&quot;, duration, giftCard.getBalance());</span>
+<span class="fc" id="L139">        log.info(&quot;Redemption done in {}ms. Remaining balance: {}&quot;, duration, giftCard.getBalance());</span>
 
-<span class="fc" id="L133">        return new RedemptionResponse(</span>
+<span class="fc" id="L141">        return new RedemptionResponse(</span>
                 &quot;SUCCESS&quot;,
                 deducted,
-<span class="fc" id="L136">                giftCard.getBalance(),</span>
+<span class="fc" id="L144">                giftCard.getBalance(),</span>
                 remainingToPay
         );
     }
@@ -141,91 +149,117 @@ public class GiftCardService {
 
     @Transactional
     public GiftCardResponse createGiftCard(GiftCardCreateRequest request) {
-<span class="fc" id="L144">        Long merchantId = currentUserContext.currentMerchantId();</span>
+<span class="fc" id="L152">        Long merchantId = currentUserContext.currentMerchantId();</span>
 
-<span class="fc" id="L146">        Optional&lt;GiftCard&gt; existingCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, request.giftCardCode());</span>
-<span class="fc bfc" id="L147" title="All 2 branches covered.">        if (existingCard.isPresent()) {</span>
-<span class="fc" id="L148">            throw new IllegalArgumentException(&quot;Gift card with this code already exists&quot;);</span>
+<span class="fc" id="L154">        Optional&lt;GiftCard&gt; existingCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, request.giftCardCode());</span>
+<span class="fc bfc" id="L155" title="All 2 branches covered.">        if (existingCard.isPresent()) {</span>
+<span class="fc" id="L156">            throw new IllegalArgumentException(&quot;Gift card with this code already exists&quot;);</span>
         }
 
-<span class="fc" id="L151">        log.debug(&quot;Database command issued: Instantiating new entity record for code: {}&quot;, request.giftCardCode());</span>
+<span class="fc" id="L159">        log.debug(&quot;Database command issued: Instantiating new entity record for code: {}&quot;, request.giftCardCode());</span>
 
         // merchantId is trusted (derived from the authenticated principal, never from the request body).
         // getReferenceById avoids an extra round-trip to load the full Merchant just to set the FK.
-<span class="fc" id="L155">        Merchant merchant = merchantRepository.getReferenceById(merchantId);</span>
+<span class="fc" id="L163">        Merchant merchant = merchantRepository.getReferenceById(merchantId);</span>
 
         // See executeRedemptionSync for why this is a plain setScale, not a rounding decision.
-<span class="fc" id="L158">        BigDecimal balance = request.balance().setScale(2, RoundingMode.HALF_UP);</span>
-<span class="fc" id="L159">        GiftCard giftCard = new GiftCard(merchant, request.giftCardCode(), balance, request.active(), request.expirationDate());</span>
-<span class="fc" id="L160">        GiftCard savedCard = giftCardRepository.save(giftCard);</span>
+<span class="fc" id="L166">        BigDecimal balance = request.balance().setScale(2, RoundingMode.HALF_UP);</span>
+<span class="fc" id="L167">        GiftCard giftCard = new GiftCard(merchant, request.giftCardCode(), balance, request.active(), request.expirationDate());</span>
+<span class="fc" id="L168">        GiftCard savedCard = giftCardRepository.save(giftCard);</span>
 
-<span class="fc" id="L162">        ledgerService.record(savedCard, merchantId, LedgerEntryType.CREATION, savedCard.getBalance(), savedCard.getBalance(), null, currentUserContext.currentUserIdOrNull(), currentUserContext.isApiKeyAuthenticated());</span>
+<span class="fc" id="L170">        ledgerService.record(savedCard, merchantId, LedgerEntryType.CREATION, savedCard.getBalance(), savedCard.getBalance(), null, currentUserContext.currentUserIdOrNull(), currentUserContext.isApiKeyAuthenticated());</span>
 
-<span class="fc" id="L164">        log.info(&quot;Administrative Event: Gift card [{}] successfully registered into database vault.&quot;, request.giftCardCode());</span>
+<span class="fc" id="L172">        log.info(&quot;Administrative Event: Gift card [{}] successfully registered into database vault.&quot;, request.giftCardCode());</span>
 
-<span class="fc" id="L166">        return new GiftCardResponse(savedCard.getCardCode(), savedCard.getBalance(), savedCard.isActive(), savedCard.getExpirationDate(), merchantId);</span>
+<span class="fc" id="L174">        return new GiftCardResponse(savedCard.getCardCode(), savedCard.getBalance(), savedCard.isActive(), savedCard.getExpirationDate(), merchantId);</span>
     }
 
     @Transactional(readOnly = true)
     public List&lt;GiftCardResponse&gt; getAllGiftCards() {
-<span class="fc" id="L171">        log.info(&quot;Fetching all gift cards from database&quot;);</span>
+<span class="fc" id="L179">        log.info(&quot;Fetching all gift cards from database&quot;);</span>
 
-<span class="fc bfc" id="L173" title="All 2 branches covered.">        List&lt;GiftCard&gt; cards = currentUserContext.isAdmin()</span>
-<span class="fc" id="L174">                ? giftCardRepository.findAll()</span>
-<span class="fc" id="L175">                : giftCardRepository.findAllByMerchantId(currentUserContext.currentMerchantId());</span>
+<span class="fc bfc" id="L181" title="All 2 branches covered.">        List&lt;GiftCard&gt; cards = currentUserContext.isAdmin()</span>
+<span class="fc" id="L182">                ? giftCardRepository.findAll()</span>
+<span class="fc" id="L183">                : giftCardRepository.findAllByMerchantId(currentUserContext.currentMerchantId());</span>
 
-<span class="fc" id="L177">        return cards</span>
-<span class="fc" id="L178">                .stream()</span>
-<span class="fc" id="L179">                .map(card -&gt; new GiftCardResponse(card.getCardCode(), card.getBalance(), card.isActive(), card.getExpirationDate(), card.getMerchant().getId()))</span>
-<span class="fc" id="L180">                .toList();</span>
+<span class="fc" id="L185">        return cards</span>
+<span class="fc" id="L186">                .stream()</span>
+<span class="fc" id="L187">                .map(card -&gt; new GiftCardResponse(card.getCardCode(), card.getBalance(), card.isActive(), card.getExpirationDate(), card.getMerchant().getId()))</span>
+<span class="fc" id="L188">                .toList();</span>
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResponse&lt;GiftCardResponse&gt; getMyGiftCards(Boolean active, String code, int page, int size, GiftCardSortField sortBy, Sort.Direction sortDirection) {
+<span class="fc" id="L193">        Long merchantId = currentUserContext.currentMerchantId();</span>
+
+<span class="fc" id="L195">        log.info(&quot;Listing gift cards for merchant {}. page={}, size={}, active={}, code={}&quot;, merchantId, page, size, active, code);</span>
+
+<span class="fc" id="L197">        Specification&lt;GiftCard&gt; spec = Specification </span>
+<span class="fc" id="L198">                .where(GiftCardSpecifications.belongsToMerchant(merchantId))</span>
+<span class="fc" id="L199">                .and(GiftCardSpecifications.hasActive(active))</span>
+<span class="fc" id="L200">                .and(GiftCardSpecifications.codeContains(code)); // Object that builds the WHERE (standart for ORM filtering)</span>
+
+        // Tie-breaker on id keeps ordering deterministic across pages when the primary sort field
+        // has duplicate values (e.g. several cards with the same balance) - without it, a row could
+        // be skipped or repeated between two page requests depending on how Postgres happens to
+        // order ties internally.
+<span class="fc" id="L206">        Sort sort = Sort.by(sortDirection, sortBy.getPropertyName()).and(Sort.by(&quot;id&quot;)); // Object that builds the ORDER BY, (here sort by the param and his direction, AND always id (tie-breaker) to avoid to see one line twice or maybe never)</span>
+<span class="fc" id="L207">        Pageable pageable = PageRequest.of(page, size, sort); // object that groups the controller's page, size, and the sort object we built) (interface) </span>
+
+<span class="fc" id="L209">        Page&lt;GiftCard&gt; result = giftCardRepository.findAll(spec, pageable); // now get the result with our spec object and our pageable object</span>
+
+<span class="fc" id="L211">        Page&lt;GiftCardResponse&gt; mapped = result.map(card -&gt; new GiftCardResponse(</span>
+<span class="fc" id="L212">                card.getCardCode(), card.getBalance(), card.isActive(), card.getExpirationDate(), merchantId));</span>
+
+<span class="fc" id="L214">        return PagedResponse.from(mapped);</span>
     }
 
     @Transactional(readOnly = true)
     public GiftCardResponse lookupGiftCard(String code) {
-<span class="fc" id="L185">        log.info(&quot;Looking up gift card with code: {}&quot;, code);</span>
+<span class="fc" id="L219">        log.info(&quot;Looking up gift card with code: {}&quot;, code);</span>
 
-<span class="fc" id="L187">        Long merchantId = currentUserContext.currentMerchantId();</span>
-<span class="fc" id="L188">        GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, code)</span>
-<span class="fc" id="L189">                .orElseThrow(() -&gt; new UnknownGiftCardException(&quot;Gift card not found&quot;));</span>
+<span class="fc" id="L221">        Long merchantId = currentUserContext.currentMerchantId();</span>
+<span class="fc" id="L222">        GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, code)</span>
+<span class="fc" id="L223">                .orElseThrow(() -&gt; new UnknownGiftCardException(&quot;Gift card not found&quot;));</span>
 
-<span class="fc" id="L191">        return new GiftCardResponse(</span>
-<span class="fc" id="L192">                giftCard.getCardCode(),</span>
-<span class="fc" id="L193">                giftCard.getBalance(),</span>
-<span class="fc" id="L194">                giftCard.isActive(),</span>
-<span class="fc" id="L195">                giftCard.getExpirationDate(),</span>
+<span class="fc" id="L225">        return new GiftCardResponse(</span>
+<span class="fc" id="L226">                giftCard.getCardCode(),</span>
+<span class="fc" id="L227">                giftCard.getBalance(),</span>
+<span class="fc" id="L228">                giftCard.isActive(),</span>
+<span class="fc" id="L229">                giftCard.getExpirationDate(),</span>
                 merchantId
         );
     }
 
     @Transactional(readOnly = true)
     public List&lt;LedgerEntryResponse&gt; getLedger(String code) {
-<span class="fc" id="L202">        log.info(&quot;Fetching ledger for gift card with code: {}&quot;, code);</span>
+<span class="fc" id="L236">        log.info(&quot;Fetching ledger for gift card with code: {}&quot;, code);</span>
 
-<span class="fc" id="L204">        Long merchantId = currentUserContext.currentMerchantId();</span>
-<span class="fc" id="L205">        GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, code)</span>
-<span class="fc" id="L206">                .orElseThrow(() -&gt; new UnknownGiftCardException(&quot;Gift card not found&quot;));</span>
+<span class="fc" id="L238">        Long merchantId = currentUserContext.currentMerchantId();</span>
+<span class="fc" id="L239">        GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, code)</span>
+<span class="fc" id="L240">                .orElseThrow(() -&gt; new UnknownGiftCardException(&quot;Gift card not found&quot;));</span>
 
-<span class="fc" id="L208">        List&lt;LedgerEntry&gt; entries = ledgerService.getEntriesForCard(giftCard.getId());</span>
-<span class="fc" id="L209">        Map&lt;Long, String&gt; actorsByUserId = ledgerService.resolveActors(entries);</span>
+<span class="fc" id="L242">        List&lt;LedgerEntry&gt; entries = ledgerService.getEntriesForCard(giftCard.getId());</span>
+<span class="fc" id="L243">        Map&lt;Long, String&gt; actorsByUserId = ledgerService.resolveActors(entries);</span>
 
-<span class="fc" id="L211">        return entries.stream()</span>
-<span class="fc" id="L212">                .map(entry -&gt; new LedgerEntryResponse(</span>
-<span class="fc" id="L213">                        entry.getEntryType().name(),</span>
-<span class="fc" id="L214">                        entry.getAmount(),</span>
-<span class="fc" id="L215">                        entry.getBalanceAfter(),</span>
-<span class="fc" id="L216">                        entry.getHoldId(),</span>
-<span class="fc" id="L217">                        entry.getCreatedAt(),</span>
-<span class="fc" id="L218">                        resolveActorDisplay(entry.getActorUserId(), entry.isActorViaApiKey(), actorsByUserId),</span>
-<span class="fc" id="L219">                        entry.getReason()</span>
+<span class="fc" id="L245">        return entries.stream()</span>
+<span class="fc" id="L246">                .map(entry -&gt; new LedgerEntryResponse(</span>
+<span class="fc" id="L247">                        entry.getEntryType().name(),</span>
+<span class="fc" id="L248">                        entry.getAmount(),</span>
+<span class="fc" id="L249">                        entry.getBalanceAfter(),</span>
+<span class="fc" id="L250">                        entry.getHoldId(),</span>
+<span class="fc" id="L251">                        entry.getCreatedAt(),</span>
+<span class="fc" id="L252">                        resolveActorDisplay(entry.getActorUserId(), entry.isActorViaApiKey(), actorsByUserId),</span>
+<span class="fc" id="L253">                        entry.getReason()</span>
                 ))
-<span class="fc" id="L221">                .toList();</span>
+<span class="fc" id="L255">                .toList();</span>
     }
 
     private static String resolveActorDisplay(Long actorUserId, boolean actorViaApiKey, Map&lt;Long, String&gt; actorsByUserId) {
-<span class="fc bfc" id="L225" title="All 2 branches covered.">        if (actorUserId == null) {</span>
-<span class="pc bpc" id="L226" title="1 of 2 branches missed.">            return actorViaApiKey ? &quot;SYSTEM&quot; : &quot;Unknown&quot;;</span>
+<span class="fc bfc" id="L259" title="All 2 branches covered.">        if (actorUserId == null) {</span>
+<span class="pc bpc" id="L260" title="1 of 2 branches missed.">            return actorViaApiKey ? &quot;SYSTEM&quot; : &quot;Unknown&quot;;</span>
         }
-<span class="fc" id="L228">        return actorsByUserId.getOrDefault(actorUserId, &quot;Deleted user&quot;);</span>
+<span class="fc" id="L262">        return actorsByUserId.getOrDefault(actorUserId, &quot;Deleted user&quot;);</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

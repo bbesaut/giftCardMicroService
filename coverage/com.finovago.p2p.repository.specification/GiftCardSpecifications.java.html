@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GiftCardSpecifications.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.repository.specification</a> &gt; <span class="el_source">GiftCardSpecifications.java</span></div><h1>GiftCardSpecifications.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.repository.specification;
+
+import org.springframework.data.jpa.domain.Specification;
+
+import com.finovago.p2p.model.GiftCard;
+
+// Each method always returns a non-null Specification - Specification#and(other) rejects a null
+// &quot;other&quot; argument outright (Assert.notNull), so a filter that isn't set returns
+// Specification.unrestricted() (a no-op, always-true predicate) instead of null. That's what lets
+// the service chain every filter unconditionally without an if/else per optional query param.
+public final class GiftCardSpecifications {
+
+    private GiftCardSpecifications() {
+    }
+
+    public static Specification&lt;GiftCard&gt; belongsToMerchant(Long merchantId) {
+<span class="fc" id="L17">        return (root, query, cb) -&gt; cb.equal(root.get(&quot;merchant&quot;).get(&quot;id&quot;), merchantId);</span>
+    }
+
+    public static Specification&lt;GiftCard&gt; hasActive(Boolean active) {
+<span class="fc bfc" id="L21" title="All 2 branches covered.">        if (active == null) {</span>
+<span class="fc" id="L22">            return Specification.unrestricted();</span>
+        }
+<span class="fc" id="L24">        return (root, query, cb) -&gt; cb.equal(root.get(&quot;active&quot;), active);</span>
+    }
+
+    public static Specification&lt;GiftCard&gt; codeContains(String code) {
+<span class="fc bfc" id="L28" title="All 4 branches covered.">        if (code == null || code.isBlank()) {</span>
+<span class="fc" id="L29">            return Specification.unrestricted();</span>
+        }
+<span class="fc" id="L31">        String pattern = &quot;%&quot; + code.toLowerCase() + &quot;%&quot;;</span>
+<span class="fc" id="L32">        return (root, query, cb) -&gt; cb.like(cb.lower(root.get(&quot;cardCode&quot;)), pattern);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

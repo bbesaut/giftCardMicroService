@@ -20,7 +20,7 @@ import org.springdoc.core.models.GroupedOpenApi;
     GroupedOpenApi customerApi() {
 <span class="fc" id="L21">        return GroupedOpenApi.builder()</span>
 <span class="fc" id="L22">                .group(&quot;customer-api&quot;)</span>
-<span class="fc" id="L23">                .pathsToMatch(&quot;/&quot;, &quot;/api/v1/giftcards/create&quot;, &quot;/api/v1/giftcards/redeem&quot;, &quot;/api/v1/giftcards/lookup/**&quot;,</span>
+<span class="fc" id="L23">                .pathsToMatch(&quot;/&quot;, &quot;/api/v1/giftcards&quot;, &quot;/api/v1/giftcards/create&quot;, &quot;/api/v1/giftcards/redeem&quot;, &quot;/api/v1/giftcards/lookup/**&quot;,</span>
                         &quot;/api/v1/giftcards/reserve&quot;, &quot;/api/v1/giftcards/holds/**&quot;, &quot;/api/v1/giftcards/*/ledger&quot;,
                         &quot;/api/v1/giftcards/refund&quot;, &quot;/api/v1/giftcards/credit&quot;, &quot;/api/v1/auth/me/users&quot;,
                         &quot;/api/v1/auth/me/users/**&quot;, &quot;/api/v1/auth/me/api-key&quot;, &quot;/api/v1/auth/me/api-key/**&quot;,
