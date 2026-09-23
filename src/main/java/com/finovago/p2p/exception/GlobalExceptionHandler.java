@@ -136,7 +136,14 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Object> handleConstraintViolationException(ConstraintViolationException ex) { // @RequestParam/@PathVariable constraints (e.g. @Min/@Max), not @Valid @RequestBody
         String errorMessage = ex.getConstraintViolations().stream()
                 .findFirst()
-                .map(violation -> violation.getPropertyPath() + ": " + violation.getMessage())
+                .map(violation -> {
+                    // For a method-parameter constraint, propertyPath is "methodName.paramName"
+                    // (e.g. "listMyGiftCards.page") - callers only care about the parameter, not the
+                    // internal method that happens to declare it.
+                    String path = violation.getPropertyPath().toString();
+                    String paramName = path.substring(path.lastIndexOf('.') + 1);
+                    return paramName + ": " + violation.getMessage();
+                })
                 .orElse("Invalid request parameter");
 
         log.warn("Invalid request parameter blocked by validation: {}", errorMessage);
