@@ -3,6 +3,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.repository.query.Param;
@@ -10,7 +11,7 @@ import jakarta.persistence.LockModeType;
 
 import com.finovago.p2p.model.GiftCard;
 
-public interface GiftCardRepository extends JpaRepository<GiftCard, Long> {
+public interface GiftCardRepository extends JpaRepository<GiftCard, Long>, JpaSpecificationExecutor<GiftCard> {
     Optional<GiftCard> findByMerchantIdAndCardCode(Long merchantId, String cardCode);
     List<GiftCard> findAllByMerchantId(Long merchantId);
 
