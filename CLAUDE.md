@@ -116,6 +116,26 @@ Content-Type: application/json
 - `password`: Required, non-blank — the owner's password
 - `merchantName`: Required, non-blank — becomes the new Merchant's business name
 
+### GET /api/v1/auth/me
+**Description**: Returns the profile of the calling user, so a front-end can bootstrap its session after login/refresh (who is logged in, which screens to show — e.g. `owner` gates the `/me/users/**` and `/me/api-key` screens). Requires authentication (JWT token), any role (MERCHANT and ADMIN). Read from the database, **not** from the JWT claims: a user deactivated after their access token was issued gets `401` here instead of a stale profile, so the front can log them out immediately (unlike other endpoints, which honour that token until it expires — see the known limitation under `deactivate`). Rejected with `403` if the caller authenticated via API key, since a profile belongs to a human account.
+
+**Response** (CurrentUserResponse - HTTP 200):
+```json
+{
+  "userId": 5,
+  "email": "client@finovago.com",
+  "role": "MERCHANT",
+  "owner": true,
+  "merchant": { "id": 1, "name": "Finovago Demo Merchant" }
+}
+```
+`merchant` is `null` for an ADMIN (no merchant of its own). The password hash, API key and rate-limit quota are never exposed.
+
+**Error Responses**:
+- `401 Unauthorized`: Missing or invalid JWT token, or the account no longer exists / has been deactivated
+- `403 Forbidden`: Caller authenticated via API key, not a human account
+- `500 Internal Server Error`: Server error
+
 ### POST /api/v1/auth/me/api-key
 **Description**: Generates the caller's own merchant's API key for automated/backend integration use, or **rotates** it (previous secret stops working immediately) if one already exists. The key attaches directly to the merchant (`api_keys.merchant_id`) — no user account is created for it. Requires authentication (MERCHANT role) and the caller must be that merchant's owner — otherwise `403`.
 
@@ -526,6 +546,14 @@ Used for merchant registration (POST /api/v1/auth/register) — describes the ne
 - `email` (String): Owner's email, must be unique, validated with @Email
 - `password` (String): Owner's password, non-blank
 - `merchantName` (String): Business name for the new Merchant created alongside this user, non-blank
+
+### CurrentUserResponse
+Response for GET /api/v1/auth/me
+- `userId` (Long): Id of the authenticated user
+- `email` (String): Email of the authenticated user
+- `role` (String): `ADMIN` or `MERCHANT`
+- `owner` (boolean): Whether the user owns their merchant (always false for an ADMIN)
+- `merchant` (object, nullable): `{ "id": Long, "name": String }` of the user's merchant, null for an ADMIN
 
 ### ApiKeyResponse
 Response for generating/rotating the merchant's API key (POST /api/v1/auth/me/api-key)

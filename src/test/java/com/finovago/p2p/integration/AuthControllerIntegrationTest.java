@@ -22,8 +22,10 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.http.HttpHeaders.AUTHORIZATION;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -754,6 +756,85 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/v1/auth/me/password")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"currentPassword\":\"" + PASSWORD + "\",\"newPassword\":\"" + NEW_PASSWORD + "\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_returnOwnerProfileWithMerchant_when_getMeCalledByOwner() throws Exception {
+        String accessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+
+        mockMvc.perform(get("/api/v1/auth/me")
+                        .header(AUTHORIZATION, "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userId").value(ownerId))
+                .andExpect(jsonPath("$.email").value(OWNER_EMAIL))
+                .andExpect(jsonPath("$.role").value("MERCHANT"))
+                .andExpect(jsonPath("$.owner").value(true))
+                .andExpect(jsonPath("$.merchant.id").value(merchantId))
+                .andExpect(jsonPath("$.merchant.name").value("Test Merchant"))
+                .andExpect(jsonPath("$.password").doesNotExist());
+    }
+
+    @Test
+    void should_returnNonOwnerProfile_when_getMeCalledByEmployee() throws Exception {
+        String accessToken = loginAndGetAccessToken(EMAIL, PASSWORD);
+
+        mockMvc.perform(get("/api/v1/auth/me")
+                        .header(AUTHORIZATION, "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value(EMAIL))
+                .andExpect(jsonPath("$.role").value("MERCHANT"))
+                .andExpect(jsonPath("$.owner").value(false))
+                .andExpect(jsonPath("$.merchant.id").value(merchantId));
+    }
+
+    @Test
+    void should_returnProfileWithNullMerchant_when_getMeCalledByAdmin() throws Exception {
+        String accessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
+
+        mockMvc.perform(get("/api/v1/auth/me")
+                        .header(AUTHORIZATION, "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value(VALID_EMAIL))
+                .andExpect(jsonPath("$.role").value("ADMIN"))
+                .andExpect(jsonPath("$.owner").value(false))
+                .andExpect(jsonPath("$.merchant").value(nullValue()));
+    }
+
+    @Test
+    void should_returnUnauthorized_when_getMeCalledWithoutToken() throws Exception {
+        mockMvc.perform(get("/api/v1/auth/me"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_returnForbidden_when_getMeCalledViaApiKey() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+        MvcResult keyResult = mockMvc.perform(post("/api/v1/auth/me/api-key")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        String apiKeySecret = objectMapper.readValue(keyResult.getResponse().getContentAsString(), ApiKeyResponse.class)
+                .apiKeySecret();
+
+        mockMvc.perform(get("/api/v1/auth/me")
+                        .header("X-Api-Key", apiKeySecret))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void should_returnUnauthorized_when_getMeCalledByUserDeactivatedAfterTokenIssued() throws Exception {
+        String employeeAccessToken = loginAndGetAccessToken(EMAIL, PASSWORD);
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+        Long employeeId = userRepository.findByEmail(EMAIL).orElseThrow().getId();
+
+        mockMvc.perform(post("/api/v1/auth/me/users/" + employeeId + "/deactivate")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk());
+
+        // The access token is still unexpired, but /me must not honour it for a deactivated account.
+        mockMvc.perform(get("/api/v1/auth/me")
+                        .header(AUTHORIZATION, "Bearer " + employeeAccessToken))
                 .andExpect(status().isUnauthorized());
     }
 }
