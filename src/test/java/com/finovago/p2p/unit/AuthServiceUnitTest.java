@@ -22,6 +22,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.finovago.p2p.dto.AddMerchantUserRequest;
 import com.finovago.p2p.dto.ApiKeyResponse;
@@ -187,7 +188,7 @@ class AuthServiceUnitTest {
     void should_throwOwnerPrivilegeRequiredException_when_nonOwnerRequestsApiKey() {
         Merchant merchant = merchant();
         User employee = new User("employee@example.com", "hashed", Role.MERCHANT, merchant, false);
-        org.springframework.test.util.ReflectionTestUtils.setField(employee, "id", 2L);
+        ReflectionTestUtils.setField(employee, "id", 2L);
 
         when(userRepository.findById(2L)).thenReturn(Optional.of(employee));
 
@@ -220,7 +221,7 @@ class AuthServiceUnitTest {
 
     private User owner(Long id, Merchant merchant) {
         User owner = new User("owner@example.com", "hashed", Role.MERCHANT, merchant, true);
-        org.springframework.test.util.ReflectionTestUtils.setField(owner, "id", id);
+        ReflectionTestUtils.setField(owner, "id", id);
         return owner;
     }
 
@@ -246,7 +247,7 @@ class AuthServiceUnitTest {
     void should_throwOwnerPrivilegeRequiredException_when_callerIsNotOwner() {
         Merchant merchant = merchant();
         User employee = new User("employee@example.com", "hashed", Role.MERCHANT, merchant, false);
-        org.springframework.test.util.ReflectionTestUtils.setField(employee, "id", 2L);
+        ReflectionTestUtils.setField(employee, "id", 2L);
         AddMerchantUserRequest request = new AddMerchantUserRequest("newguy@example.com", "password123");
 
         when(userRepository.findById(2L)).thenReturn(Optional.of(employee));
@@ -259,7 +260,7 @@ class AuthServiceUnitTest {
         Merchant merchant = merchant();
         User owner = owner(1L, merchant);
         User employee = new User("employee@example.com", "hashed", Role.MERCHANT, merchant, false);
-        org.springframework.test.util.ReflectionTestUtils.setField(employee, "id", 2L);
+        ReflectionTestUtils.setField(employee, "id", 2L);
         employee.setActive(false);
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
@@ -276,7 +277,7 @@ class AuthServiceUnitTest {
     void should_throwOwnerPrivilegeRequiredException_when_nonOwnerListsUsers() {
         Merchant merchant = merchant();
         User employee = new User("employee@example.com", "hashed", Role.MERCHANT, merchant, false);
-        org.springframework.test.util.ReflectionTestUtils.setField(employee, "id", 2L);
+        ReflectionTestUtils.setField(employee, "id", 2L);
 
         when(userRepository.findById(2L)).thenReturn(Optional.of(employee));
 
@@ -288,7 +289,7 @@ class AuthServiceUnitTest {
         Merchant merchant = merchant();
         User owner = owner(1L, merchant);
         User employee = new User("employee@example.com", "hashed", Role.MERCHANT, merchant, false);
-        org.springframework.test.util.ReflectionTestUtils.setField(employee, "id", 2L);
+        ReflectionTestUtils.setField(employee, "id", 2L);
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
         when(userRepository.findByIdAndMerchant_Id(2L, null)).thenReturn(Optional.of(employee));
@@ -305,7 +306,7 @@ class AuthServiceUnitTest {
         Merchant merchant = merchant();
         User owner = owner(1L, merchant);
         User employee = new User("employee@example.com", "hashed", Role.MERCHANT, merchant, false);
-        org.springframework.test.util.ReflectionTestUtils.setField(employee, "id", 2L);
+        ReflectionTestUtils.setField(employee, "id", 2L);
         employee.setActive(false);
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
@@ -388,7 +389,7 @@ class AuthServiceUnitTest {
     @Test
     void should_returnOwnerProfileWithMerchant_when_getCurrentUserCalledByOwner() {
         Merchant merchant = merchant();
-        org.springframework.test.util.ReflectionTestUtils.setField(merchant, "id", 10L);
+        ReflectionTestUtils.setField(merchant, "id", 10L);
         User owner = owner(1L, merchant);
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
@@ -406,7 +407,7 @@ class AuthServiceUnitTest {
     void should_returnNonOwnerProfile_when_getCurrentUserCalledByEmployee() {
         Merchant merchant = merchant();
         User employee = new User("employee@example.com", "hashed", Role.MERCHANT, merchant, false);
-        org.springframework.test.util.ReflectionTestUtils.setField(employee, "id", 2L);
+        ReflectionTestUtils.setField(employee, "id", 2L);
 
         when(userRepository.findById(2L)).thenReturn(Optional.of(employee));
 
@@ -419,7 +420,7 @@ class AuthServiceUnitTest {
     @Test
     void should_returnProfileWithoutMerchant_when_getCurrentUserCalledByAdmin() {
         User admin = new User("admin@example.com", "hashed", Role.ADMIN, null);
-        org.springframework.test.util.ReflectionTestUtils.setField(admin, "id", 3L);
+        ReflectionTestUtils.setField(admin, "id", 3L);
 
         when(userRepository.findById(3L)).thenReturn(Optional.of(admin));
 
