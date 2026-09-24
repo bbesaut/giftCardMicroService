@@ -21,6 +21,7 @@ import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.model.Role;
 import com.finovago.p2p.model.User;
 import com.finovago.p2p.repository.GiftCardRepository;
+import com.finovago.p2p.repository.IdempotencyKeyRepository;
 import com.finovago.p2p.repository.MerchantRepository;
 import com.finovago.p2p.repository.RefreshTokenRepository;
 import com.finovago.p2p.repository.UserRepository;
@@ -51,6 +52,9 @@ class GiftCardListIntegrationTest extends AbstractIntegrationTest {
     private RefreshTokenRepository refreshTokenRepository;
 
     @Autowired
+    private IdempotencyKeyRepository idempotencyKeyRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @Autowired
@@ -60,6 +64,9 @@ class GiftCardListIntegrationTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        // Children before merchants (gift_card, idempotency_key and users all have a FK to merchants) -
+        // see GiftCardServiceIntegrationTest for the same pattern.
+        idempotencyKeyRepository.deleteAll();
         PostgresTestcontainerInitializer.executeAsMigrator("TRUNCATE TABLE gift_card_ledger RESTART IDENTITY");
         giftCardRepository.deleteAll();
         refreshTokenRepository.deleteAll();
