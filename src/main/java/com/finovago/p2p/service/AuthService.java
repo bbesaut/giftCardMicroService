@@ -13,6 +13,7 @@ import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.dto.ChangePasswordRequest;
 import com.finovago.p2p.dto.CurrentUserResponse;
 import com.finovago.p2p.dto.LoginRequest;
+import com.finovago.p2p.dto.MerchantUserResponse;
 import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
 import com.finovago.p2p.dto.UserStatusResponse;
@@ -153,6 +154,15 @@ public class AuthService {
         userRepository.save(user);
         log.info("Employee self-added by owner {} to merchantId: {}", caller.getEmail(), caller.getMerchant().getId());
         return issueTokens(user);
+    }
+
+    /** Lists the human user accounts of the caller's own merchant, for the owner's team-management page. */
+    public List<MerchantUserResponse> listMyUsers(Long callerId) {
+        User caller = requireOwner(callerId);
+
+        return userRepository.findAllByMerchant_IdOrderByIdAsc(caller.getMerchant().getId()).stream()
+                .map(user -> new MerchantUserResponse(user.getId(), user.getEmail(), user.isOwner(), user.isActive()))
+                .toList();
     }
 
     public UserStatusResponse setUserActive(Long callerId, Long userId, boolean active) {
