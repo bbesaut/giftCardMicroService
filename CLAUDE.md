@@ -34,6 +34,8 @@ Two Maven profiles for different workflows:
 - Requires: Docker installed and running
 - Best for: CI/CD pipelines, pre-deployment verification
 
+**Integration test cleanup order**: Testcontainers shares one Postgres container across the whole integration suite, so every `@BeforeEach setUp()` that wipes its own tables must delete children before parents - `gift_card`, `idempotency_key`, `refresh_token` and `user` all have a FK to `merchants`, so `merchantRepository.deleteAll()` fails with a FK violation if any of those still has rows (typically `idempotency_key`, since redeem/refund/credit tests create it via the `Idempotency-Key` header). This is easy to get wrong silently: it only breaks when some other test class that leaves rows behind happens to run before yours - already missed once in `GiftCardListIntegrationTest`. Copy the cleanup order from `GiftCardServiceIntegrationTest.setUp()` for any new integration test that touches merchants.
+
 ## 🗺️ Database Schema Diagram
 An up-to-date ER diagram is generated automatically by `.github/workflows/schema-diagram.yml` whenever a push to `develop` or `main` touches `src/main/resources/db/migration/**`. It spins up Postgres, applies Flyway migrations via the `flyway-maven-plugin` (see `pom.xml`), runs SchemaSpy against it, and publishes the result to GitHub Pages: https://bbesaut.github.io/giftCardMicroService/schema/
 
