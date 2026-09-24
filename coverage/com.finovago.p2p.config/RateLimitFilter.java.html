@@ -194,8 +194,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     @PreDestroy
     public void shutdown() {
-<span class="nc" id="L197">        cleanupExecutor.shutdown();</span>
-<span class="nc" id="L198">    }</span>
+<span class="fc" id="L197">        cleanupExecutor.shutdown();</span>
+<span class="fc" id="L198">    }</span>
 
     @Override
     protected boolean shouldNotFilterAsyncDispatch() {
