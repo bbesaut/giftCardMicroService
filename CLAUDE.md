@@ -183,6 +183,22 @@ Content-Type: application/json
 - `409 Conflict`: Email already registered
 - `500 Internal Server Error`: Server error
 
+### GET /api/v1/auth/me/users
+**Description**: The caller's own merchant **owner** lists every human user account under their merchant (including themselves), to build a team-management page alongside `POST /me/users` (create) and activate/deactivate below. Not paginated - a merchant's employee headcount is small by nature, unlike gift cards. Requires authentication (MERCHANT role) and the caller must be that merchant's owner - otherwise `403`.
+
+**Response** (List of MerchantUserResponse - HTTP 200):
+```json
+[
+  { "userId": 1, "email": "owner@example.com", "owner": true, "active": true },
+  { "userId": 2, "email": "employee@example.com", "owner": false, "active": true }
+]
+```
+
+**Error Responses**:
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Caller is not the merchant's owner account
+- `500 Internal Server Error`: Server error
+
 ### POST /api/v1/auth/me/users/{userId}/deactivate
 ### POST /api/v1/auth/me/users/{userId}/activate
 **Description**: Disable/re-enable a human employee account under the caller's own merchant, e.g. as an emergency response to leaked credentials (re-enabling doesn't restore a new password, the old one still applies once reactivated). Not used for cutting API key access - that's `POST /me/api-key/revoke` instead. Caller must be that merchant's owner; deactivating requires target user to belong to the caller's merchant (`404` otherwise, tenant existence never leaked), and the owner cannot deactivate their own account (`409`). Deactivating a user also revokes all of its active refresh tokens (immediate logout on next refresh/login attempt).
@@ -599,6 +615,13 @@ Response for revoking the merchant's API key (POST /api/v1/auth/me/api-key/revok
 Used to attach a human employee to a merchant, self-service by that merchant's owner (POST /api/v1/auth/me/users) — always creates a human account; API-key-style automated access is managed separately via POST /me/api-key
 - `email` (String): New employee's email, must be unique
 - `password` (String): New employee's password, non-blank
+
+### MerchantUserResponse
+A single user of GET /api/v1/auth/me/users's response list
+- `userId` (Long): Id of the user
+- `email` (String): Email of the user
+- `owner` (boolean): Whether this user owns the merchant (can manage its other users)
+- `active` (boolean): Whether the user is active
 
 ### ChangePasswordRequest
 Used for self-service password change (POST /api/v1/auth/me/password)

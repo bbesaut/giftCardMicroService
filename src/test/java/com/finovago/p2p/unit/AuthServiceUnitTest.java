@@ -1,5 +1,6 @@
 package com.finovago.p2p.unit;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -29,6 +30,7 @@ import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.dto.ChangePasswordRequest;
 import com.finovago.p2p.dto.CurrentUserResponse;
 import com.finovago.p2p.dto.LoginRequest;
+import com.finovago.p2p.dto.MerchantUserResponse;
 import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
 import com.finovago.p2p.dto.UserStatusResponse;
@@ -250,6 +252,35 @@ class AuthServiceUnitTest {
         when(userRepository.findById(2L)).thenReturn(Optional.of(employee));
 
         assertThrows(OwnerPrivilegeRequiredException.class, () -> authService.addUserToOwnMerchant(2L, request));
+    }
+
+    @Test
+    void should_returnMappedUsers_when_ownerListsOwnMerchant() {
+        Merchant merchant = merchant();
+        User owner = owner(1L, merchant);
+        User employee = new User("employee@example.com", "hashed", Role.MERCHANT, merchant, false);
+        org.springframework.test.util.ReflectionTestUtils.setField(employee, "id", 2L);
+        employee.setActive(false);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
+        when(userRepository.findAllByMerchant_IdOrderByIdAsc(null)).thenReturn(List.of(owner, employee));
+
+        List<MerchantUserResponse> response = authService.listMyUsers(1L);
+
+        assertEquals(2, response.size());
+        assertEquals(new MerchantUserResponse(1L, "owner@example.com", true, true), response.get(0));
+        assertEquals(new MerchantUserResponse(2L, "employee@example.com", false, false), response.get(1));
+    }
+
+    @Test
+    void should_throwOwnerPrivilegeRequiredException_when_nonOwnerListsUsers() {
+        Merchant merchant = merchant();
+        User employee = new User("employee@example.com", "hashed", Role.MERCHANT, merchant, false);
+        org.springframework.test.util.ReflectionTestUtils.setField(employee, "id", 2L);
+
+        when(userRepository.findById(2L)).thenReturn(Optional.of(employee));
+
+        assertThrows(OwnerPrivilegeRequiredException.class, () -> authService.listMyUsers(2L));
     }
 
     @Test

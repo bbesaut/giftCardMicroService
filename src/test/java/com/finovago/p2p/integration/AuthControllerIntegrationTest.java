@@ -4,6 +4,7 @@ import com.finovago.p2p.AbstractIntegrationTest;
 import com.finovago.p2p.config.PostgresTestcontainerInitializer;
 import com.finovago.p2p.dto.ApiKeyResponse;
 import com.finovago.p2p.dto.AuthResponse;
+import com.finovago.p2p.dto.MerchantUserResponse;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.model.Role;
 import com.finovago.p2p.model.User;
@@ -21,10 +22,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Arrays;
+
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.http.HttpHeaders.AUTHORIZATION;
@@ -556,6 +560,60 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/v1/auth/me/users")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"anonymous@example.com\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_returnAllUsersOfOwnMerchant_when_callerIsOwner() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+
+        MvcResult result = mockMvc.perform(get("/api/v1/auth/me/users")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        MerchantUserResponse[] users = objectMapper.readValue(result.getResponse().getContentAsString(), MerchantUserResponse[].class);
+
+        assertEquals(2, users.length);
+        assertTrue(Arrays.stream(users).anyMatch(u -> u.email().equals(OWNER_EMAIL) && u.owner() && u.active()));
+        assertTrue(Arrays.stream(users).anyMatch(u -> u.email().equals(EMAIL) && !u.owner() && u.active()));
+    }
+
+    @Test
+    void should_notIncludeOtherMerchantsUsers_when_listingMyUsers() throws Exception {
+        String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
+        String otherMerchantOwnerEmail = "other-merchant-owner@example.com";
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .header(AUTHORIZATION, "Bearer " + adminAccessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + otherMerchantOwnerEmail + "\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"Other Merchant\"}"))
+                .andExpect(status().isOk());
+
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+        MvcResult result = mockMvc.perform(get("/api/v1/auth/me/users")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        MerchantUserResponse[] users = objectMapper.readValue(result.getResponse().getContentAsString(), MerchantUserResponse[].class);
+
+        assertEquals(2, users.length);
+        assertTrue(Arrays.stream(users).noneMatch(u -> u.email().equals(otherMerchantOwnerEmail)));
+    }
+
+    @Test
+    void should_returnForbidden_when_listingUsers_callerIsNotOwner() throws Exception {
+        String clientAccessToken = loginAndGetAccessToken(EMAIL, PASSWORD);
+
+        mockMvc.perform(get("/api/v1/auth/me/users")
+                        .header(AUTHORIZATION, "Bearer " + clientAccessToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void should_returnUnauthorized_when_listingUsersWithoutToken() throws Exception {
+        mockMvc.perform(get("/api/v1/auth/me/users"))
                 .andExpect(status().isUnauthorized());
     }
 
