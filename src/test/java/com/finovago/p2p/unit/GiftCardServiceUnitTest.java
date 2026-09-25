@@ -287,19 +287,48 @@ class GiftCardServiceUnitTest
 
         when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.of(giftCard));
         List<LedgerEntry> entries = List.of(creation, redemption);
-        when(ledgerService.getEntriesForCard(giftCard.getId())).thenReturn(entries);
+        Page<LedgerEntry> repositoryPage = new PageImpl<>(entries, PageRequest.of(0, 20), 2);
+        when(ledgerService.getEntriesForCard(eq(giftCard.getId()), any(Pageable.class))).thenReturn(repositoryPage);
         when(ledgerService.resolveActors(entries)).thenReturn(java.util.Map.of(7L, "merchant@example.com"));
 
-        List<LedgerEntryResponse> response = giftCardService.getLedger(cardCode);
+        PagedResponse<LedgerEntryResponse> response = giftCardService.getLedger(cardCode, 0, 20);
 
-        assertEquals(2, response.size());
-        assertEquals("CREATION", response.get(0).entryType());
-        assertMoneyEquals(new BigDecimal("100.00"), response.get(0).amount());
-        assertEquals("merchant@example.com", response.get(0).actor());
-        assertEquals("REDEMPTION", response.get(1).entryType());
-        assertMoneyEquals(new BigDecimal("30.00"), response.get(1).amount());
-        assertMoneyEquals(new BigDecimal("70.00"), response.get(1).balanceAfter());
-        assertEquals("Unknown", response.get(1).actor());
+        assertEquals(2, response.content().size());
+        assertEquals("CREATION", response.content().get(0).entryType());
+        assertMoneyEquals(new BigDecimal("100.00"), response.content().get(0).amount());
+        assertEquals("merchant@example.com", response.content().get(0).actor());
+        assertEquals("REDEMPTION", response.content().get(1).entryType());
+        assertMoneyEquals(new BigDecimal("30.00"), response.content().get(1).amount());
+        assertMoneyEquals(new BigDecimal("70.00"), response.content().get(1).balanceAfter());
+        assertEquals("Unknown", response.content().get(1).actor());
+        assertEquals(0, response.page());
+        assertEquals(20, response.size());
+        assertEquals(2, response.totalElements());
+        assertEquals(1, response.totalPages());
+    }
+
+    @Test
+    void should_buildPageableWithChronologicalOrderAndIdTiebreaker_onGetLedger()
+    {
+        String cardCode = "LEDGER123";
+        GiftCard giftCard = new GiftCard(merchant, cardCode, BigDecimal.valueOf(70.0), true, LocalDate.now().plusDays(30));
+        when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.of(giftCard));
+        when(ledgerService.getEntriesForCard(eq(giftCard.getId()), any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+
+        giftCardService.getLedger(cardCode, 2, 5);
+
+        verify(ledgerService).getEntriesForCard(eq(giftCard.getId()), pageableCaptor.capture());
+        Pageable pageable = pageableCaptor.getValue();
+
+        assertEquals(2, pageable.getPageNumber());
+        assertEquals(5, pageable.getPageSize());
+        List<Sort.Order> orders = pageable.getSort().toList();
+        assertEquals(2, orders.size());
+        assertEquals("createdAt", orders.get(0).getProperty());
+        assertEquals(Sort.Direction.ASC, orders.get(0).getDirection());
+        assertEquals("id", orders.get(1).getProperty());
+        assertEquals(Sort.Direction.ASC, orders.get(1).getDirection());
     }
 
     @Test
@@ -308,8 +337,8 @@ class GiftCardServiceUnitTest
         String nonExistentCode = "NONEXISTENT";
         when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, nonExistentCode)).thenReturn(Optional.empty());
 
-        assertThrows(UnknownGiftCardException.class, () -> giftCardService.getLedger(nonExistentCode));
-        verify(ledgerService, never()).getEntriesForCard(any());
+        assertThrows(UnknownGiftCardException.class, () -> giftCardService.getLedger(nonExistentCode, 0, 20));
+        verify(ledgerService, never()).getEntriesForCard(any(), any());
     }
 
     @Test

@@ -394,34 +394,45 @@ All gift card endpoints below are scoped to the calling MERCHANT's own tenant �
 - `500 Internal Server Error`: Database or unexpected server error
 
 ### GET /api/v1/giftcards/{code}/ledger
-**Description**: Retrieve the full append-only history of balance-affecting operations (creation, redemptions, holds) for a specific gift card, oldest first, scoped to the caller's merchant. Useful for customer support ("why did my balance change") without querying the database directly. Requires authentication (MERCHANT role).
+**Description**: Retrieve a page of the append-only history of balance-affecting operations (creation, redemptions, holds) for a specific gift card, scoped to the caller's merchant. Useful for customer support ("why did my balance change") without querying the database directly. Entries are always returned oldest first — chronological order is fixed, not caller-selectable, since this is an audit trail (unlike `GET /giftcards`'s `sortBy`, there is no equivalent here). Requires authentication (MERCHANT role).
 
 **Path Parameters**:
 - `code` (String): The gift card code
 
-**Response** (List of LedgerEntryResponse - HTTP 200):
+**Query Parameters**:
+- `page` (int, optional, default `0`): 0-indexed page number
+- `size` (int, optional, default `20`, max `100`): items per page
+
+**Response** (PagedResponse<LedgerEntryResponse> - HTTP 200):
 ```json
-[
-  {
-    "entryType": "CREATION",
-    "amount": 100.00,
-    "balanceAfter": 100.00,
-    "holdId": null,
-    "createdAt": "2026-07-23T15:30:00",
-    "actor": "merchant@example.com"
-  },
-  {
-    "entryType": "REDEMPTION",
-    "amount": 30.00,
-    "balanceAfter": 70.00,
-    "holdId": null,
-    "createdAt": "2026-07-24T09:12:00",
-    "actor": "SYSTEM / integration@example.com"
-  }
-]
+{
+  "content": [
+    {
+      "entryType": "CREATION",
+      "amount": 100.00,
+      "balanceAfter": 100.00,
+      "holdId": null,
+      "createdAt": "2026-07-23T15:30:00",
+      "actor": "merchant@example.com"
+    },
+    {
+      "entryType": "REDEMPTION",
+      "amount": 30.00,
+      "balanceAfter": 70.00,
+      "holdId": null,
+      "createdAt": "2026-07-24T09:12:00",
+      "actor": "SYSTEM / integration@example.com"
+    }
+  ],
+  "page": 0,
+  "size": 20,
+  "totalElements": 2,
+  "totalPages": 1
+}
 ```
 
 **Error Responses**:
+- `400 Bad Request`: `page`/`size` out of range
 - `401 Unauthorized`: Missing or invalid JWT token
 - `404 Not Found`: Gift card with specified code does not exist for the caller's merchant
 - `429 Too Many Requests`: Rate limit exceeded (max 10 attempts/minute per IP)
@@ -667,7 +678,7 @@ Response containing gift card details
 - `expirationDate` (LocalDate): Expiration date
 
 ### PagedResponse<T>
-Generic wrapper for any paginated list response (e.g. GET /api/v1/giftcards)
+Generic wrapper for any paginated list response (e.g. GET /api/v1/giftcards, GET /api/v1/giftcards/{code}/ledger)
 - `content` (List<T>): The items in this page
 - `page` (int): Current page number (0-indexed)
 - `size` (int): Items per page
@@ -698,7 +709,7 @@ Response for redemption operations
 - `remainingToPay` (double): Amount still owed if balance was insufficient
 
 ### LedgerEntryResponse
-Response for a single gift card ledger entry (GET /api/v1/giftcards/{code}/ledger)
+A single entry in a `PagedResponse<LedgerEntryResponse>` (GET /api/v1/giftcards/{code}/ledger)
 - `entryType` (String): Kind of operation (CREATION, REDEMPTION, HOLD_PLACED, HOLD_CAPTURED, HOLD_RELEASED, REFUND, ADJUSTMENT)
 - `amount` (BigDecimal): Amount involved in this operation
 - `balanceAfter` (BigDecimal): Gift card balance immediately after this operation
@@ -774,6 +785,7 @@ The correlation ID is **not** duplicated in the body — it is already returned 
 - **Correlation id & response timing filters run before Spring Security** (`@Order(Ordered.HIGHEST_PRECEDENCE)` on `MdcFilter`/`ResponseTimeFilter`) so that even 401/403 responses rejected by Security itself carry `X-Correlation-Id`/`X-Response-Time` — don't remove that ordering.
 - **Tenant scoping**: never trust a client-supplied `merchantId` for gift card operations — it always comes from the authenticated principal's JWT/API key (`CurrentUserContext`).
 - **Swagger groups**: `OpenApiConfig`'s `public-api`/`customer-api`/`admin-api` groups are explicit path allowlists (`pathsToMatch`), separate from `@Operation`/`@ApiResponses` annotations on the controller method. A new endpoint can be fully annotated and still be invisible in Swagger UI if its path isn't added to the right group — this has already happened twice (`GET /auth/me`, `GET /giftcards`). Always add the new path to `OpenApiConfig` in the same commit as the endpoint.
+- **Swagger schema for `PagedResponse<T>` endpoints**: don't annotate the `200` `@ApiResponse` with an explicit `content = @Content(schema = @Schema(implementation = PagedResponse.class))` — that pins springdoc to the raw generic class, so `content` shows up in Swagger as `items: { type: object }` instead of the actual DTO's fields. Leave `content` off the `@ApiResponse` entirely (just `description`) and springdoc auto-resolves the concrete generic from the controller method's real return type (e.g. `PagedResponseLedgerEntryResponse`, with `content.items` correctly `$ref`-ing `LedgerEntryResponse`). Already happened once for `GET /giftcards` before the ledger pagination fixed both at once — check the live `/api-docs/customer-api` output, not just that the annotation compiles, when adding a new paginated endpoint.
 
 ## 👥 Admin User Setup
 

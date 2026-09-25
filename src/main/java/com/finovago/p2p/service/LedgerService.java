@@ -9,6 +9,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import com.finovago.p2p.model.GiftCard;
@@ -51,9 +53,9 @@ public class LedgerService {
         return ledgerEntryRepository.findBalanceDiscrepancies();
     }
 
-    /** Full history for a single card, oldest first. Caller is responsible for tenant scoping. */
-    public List<LedgerEntry> getEntriesForCard(Long giftCardId) {
-        return ledgerEntryRepository.findByGiftCardIdOrderByCreatedAtAsc(giftCardId);
+    /** One page of a single card's history. Caller is responsible for tenant scoping and for ordering via pageable. */
+    public Page<LedgerEntry> getEntriesForCard(Long giftCardId, Pageable pageable) {
+        return ledgerEntryRepository.findByGiftCardId(giftCardId, pageable);
     }
 
     /**

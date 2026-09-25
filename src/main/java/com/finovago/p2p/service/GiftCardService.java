@@ -232,27 +232,33 @@ public class GiftCardService {
     }
 
     @Transactional(readOnly = true)
-    public List<LedgerEntryResponse> getLedger(String code) {
-        log.info("Fetching ledger for gift card with code: {}", code);
+    public PagedResponse<LedgerEntryResponse> getLedger(String code, int page, int size) {
+        log.info("Fetching ledger for gift card with code: {}. page={}, size={}", code, page, size);
 
         Long merchantId = currentUserContext.currentMerchantId();
         GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, code)
                 .orElseThrow(() -> new UnknownGiftCardException("Gift card not found"));
 
-        List<LedgerEntry> entries = ledgerService.getEntriesForCard(giftCard.getId());
-        Map<Long, String> actorsByUserId = ledgerService.resolveActors(entries);
+        // Chronological order is the point of an audit trail, not a caller-chosen preference (unlike
+        // getMyGiftCards' sortBy) - id is a tie-breaker for entries sharing the same createdAt, same
+        // reasoning as getMyGiftCards above.
+        Sort sort = Sort.by(Sort.Direction.ASC, "createdAt").and(Sort.by("id"));
+        Pageable pageable = PageRequest.of(page, size, sort);
 
-        return entries.stream()
-                .map(entry -> new LedgerEntryResponse(
-                        entry.getEntryType().name(),
-                        entry.getAmount(),
-                        entry.getBalanceAfter(),
-                        entry.getHoldId(),
-                        entry.getCreatedAt(),
-                        resolveActorDisplay(entry.getActorUserId(), entry.isActorViaApiKey(), actorsByUserId),
-                        entry.getReason()
-                ))
-                .toList();
+        Page<LedgerEntry> entries = ledgerService.getEntriesForCard(giftCard.getId(), pageable);
+        Map<Long, String> actorsByUserId = ledgerService.resolveActors(entries.getContent());
+
+        Page<LedgerEntryResponse> mapped = entries.map(entry -> new LedgerEntryResponse(
+                entry.getEntryType().name(),
+                entry.getAmount(),
+                entry.getBalanceAfter(),
+                entry.getHoldId(),
+                entry.getCreatedAt(),
+                resolveActorDisplay(entry.getActorUserId(), entry.isActorViaApiKey(), actorsByUserId),
+                entry.getReason()
+        ));
+
+        return PagedResponse.from(mapped);
     }
 
     private static String resolveActorDisplay(Long actorUserId, boolean actorViaApiKey, Map<Long, String> actorsByUserId) {
