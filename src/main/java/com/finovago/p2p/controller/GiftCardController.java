@@ -214,14 +214,16 @@ public class GiftCardController
     }
 
     @Operation(
-        summary = "Get a gift card's ledger history",
-        description = "Retrieve the full append-only history of balance-affecting operations (creation, redemptions, holds) for a specific gift card. "
-                    + "Entries are returned oldest first. Useful for customer support investigations ('why did my balance change'). "
+        summary = "Get a gift card's ledger history (paginated)",
+        description = "Retrieve a page of the append-only history of balance-affecting operations (creation, redemptions, holds) for a specific gift card. "
+                    + "Entries are always returned oldest first - chronological order is fixed, not caller-selectable, since this is an audit trail. "
+                    + "Useful for customer support investigations ('why did my balance change'). "
                     + "Requires authentication (JWT token, MERCHANT role)."
     )
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "OK - Successfully retrieved the ledger history",
-            content = @Content(schema = @Schema(implementation = LedgerEntryResponse.class))),
+        @ApiResponse(responseCode = "200", description = "OK - Successfully retrieved a page of the ledger history"),
+        @ApiResponse(responseCode = "400", description = "Bad Request - page/size out of range",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"size: must be less than or equal to 100\"}"))),
         @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
         @ApiResponse(responseCode = "404", description = "Not Found - Gift card with specified code does not exist",
@@ -233,9 +235,12 @@ public class GiftCardController
     })
     @GetMapping("/{code}/ledger")
     @ResponseStatus(HttpStatus.OK)
-    public List<LedgerEntryResponse> getLedger(@PathVariable String code) {
-        log.info("Received gift card ledger request. Code: {}", code);
-        return giftCardService.getLedger(code);
+    public PagedResponse<LedgerEntryResponse> getLedger(
+            @PathVariable String code,
+            @Parameter(description = "0-indexed page number") @RequestParam(defaultValue = "0") @Min(0) int page,
+            @Parameter(description = "Items per page, capped at 100") @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        log.info("Received gift card ledger request. Code: {}, page={}, size={}", code, page, size);
+        return giftCardService.getLedger(code, page, size);
     }
 
     @Operation(
