@@ -135,8 +135,7 @@ public class GiftCardController
                     + "Requires authentication (JWT token, MERCHANT role)."
     )
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "OK - Successfully retrieved a page of gift cards",
-            content = @Content(schema = @Schema(implementation = PagedResponse.class))),
+        @ApiResponse(responseCode = "200", description = "OK - Successfully retrieved a page of gift cards"),
         @ApiResponse(responseCode = "400", description = "Bad Request - page/size out of range, or sortBy/sortDirection not a recognized value",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"size: must be less than or equal to 100\"}"))),
         @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
