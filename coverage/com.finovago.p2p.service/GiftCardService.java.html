@@ -232,34 +232,40 @@ public class GiftCardService {
     }
 
     @Transactional(readOnly = true)
-    public List&lt;LedgerEntryResponse&gt; getLedger(String code) {
-<span class="fc" id="L236">        log.info(&quot;Fetching ledger for gift card with code: {}&quot;, code);</span>
+    public PagedResponse&lt;LedgerEntryResponse&gt; getLedger(String code, int page, int size) {
+<span class="fc" id="L236">        log.info(&quot;Fetching ledger for gift card with code: {}. page={}, size={}&quot;, code, page, size);</span>
 
 <span class="fc" id="L238">        Long merchantId = currentUserContext.currentMerchantId();</span>
 <span class="fc" id="L239">        GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, code)</span>
 <span class="fc" id="L240">                .orElseThrow(() -&gt; new UnknownGiftCardException(&quot;Gift card not found&quot;));</span>
 
-<span class="fc" id="L242">        List&lt;LedgerEntry&gt; entries = ledgerService.getEntriesForCard(giftCard.getId());</span>
-<span class="fc" id="L243">        Map&lt;Long, String&gt; actorsByUserId = ledgerService.resolveActors(entries);</span>
+        // Chronological order is the point of an audit trail, not a caller-chosen preference (unlike
+        // getMyGiftCards' sortBy) - id is a tie-breaker for entries sharing the same createdAt, same
+        // reasoning as getMyGiftCards above.
+<span class="fc" id="L245">        Sort sort = Sort.by(Sort.Direction.ASC, &quot;createdAt&quot;).and(Sort.by(&quot;id&quot;));</span>
+<span class="fc" id="L246">        Pageable pageable = PageRequest.of(page, size, sort);</span>
 
-<span class="fc" id="L245">        return entries.stream()</span>
-<span class="fc" id="L246">                .map(entry -&gt; new LedgerEntryResponse(</span>
-<span class="fc" id="L247">                        entry.getEntryType().name(),</span>
-<span class="fc" id="L248">                        entry.getAmount(),</span>
-<span class="fc" id="L249">                        entry.getBalanceAfter(),</span>
-<span class="fc" id="L250">                        entry.getHoldId(),</span>
-<span class="fc" id="L251">                        entry.getCreatedAt(),</span>
-<span class="fc" id="L252">                        resolveActorDisplay(entry.getActorUserId(), entry.isActorViaApiKey(), actorsByUserId),</span>
-<span class="fc" id="L253">                        entry.getReason()</span>
-                ))
-<span class="fc" id="L255">                .toList();</span>
+<span class="fc" id="L248">        Page&lt;LedgerEntry&gt; entries = ledgerService.getEntriesForCard(giftCard.getId(), pageable);</span>
+<span class="fc" id="L249">        Map&lt;Long, String&gt; actorsByUserId = ledgerService.resolveActors(entries.getContent());</span>
+
+<span class="fc" id="L251">        Page&lt;LedgerEntryResponse&gt; mapped = entries.map(entry -&gt; new LedgerEntryResponse(</span>
+<span class="fc" id="L252">                entry.getEntryType().name(),</span>
+<span class="fc" id="L253">                entry.getAmount(),</span>
+<span class="fc" id="L254">                entry.getBalanceAfter(),</span>
+<span class="fc" id="L255">                entry.getHoldId(),</span>
+<span class="fc" id="L256">                entry.getCreatedAt(),</span>
+<span class="fc" id="L257">                resolveActorDisplay(entry.getActorUserId(), entry.isActorViaApiKey(), actorsByUserId),</span>
+<span class="fc" id="L258">                entry.getReason()</span>
+        ));
+
+<span class="fc" id="L261">        return PagedResponse.from(mapped);</span>
     }
 
     private static String resolveActorDisplay(Long actorUserId, boolean actorViaApiKey, Map&lt;Long, String&gt; actorsByUserId) {
-<span class="fc bfc" id="L259" title="All 2 branches covered.">        if (actorUserId == null) {</span>
-<span class="pc bpc" id="L260" title="1 of 2 branches missed.">            return actorViaApiKey ? &quot;SYSTEM&quot; : &quot;Unknown&quot;;</span>
+<span class="fc bfc" id="L265" title="All 2 branches covered.">        if (actorUserId == null) {</span>
+<span class="pc bpc" id="L266" title="1 of 2 branches missed.">            return actorViaApiKey ? &quot;SYSTEM&quot; : &quot;Unknown&quot;;</span>
         }
-<span class="fc" id="L262">        return actorsByUserId.getOrDefault(actorUserId, &quot;Deleted user&quot;);</span>
+<span class="fc" id="L268">        return actorsByUserId.getOrDefault(actorUserId, &quot;Deleted user&quot;);</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
