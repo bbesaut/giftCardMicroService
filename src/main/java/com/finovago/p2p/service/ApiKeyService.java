@@ -100,7 +100,13 @@ public class ApiKeyService {
         return new ApiKeyStatusResponse(key.getKeyPrefix(), false);
     }
 
-    /** Validates a presented "{prefix}.{secret}" key and returns the ApiKey it matches, if valid and active. */
+    /**
+     * Validates a presented "{prefix}.{secret}" key and returns the ApiKey it matches, if valid, active,
+     * and its merchant is active. Since the ApiKey (including its eagerly-fetched Merchant) is cached for
+     * app.api-key-cache.ttl-minutes, a merchant deactivated via POST /admin/merchants/{id}/deactivate can
+     * take up to that TTL to actually cut off API key access here - same class of trade-off already
+     * accepted for JWT access tokens staying valid until their own expiry.
+     */
     @Transactional
     public Optional<ApiKey> resolve(String presentedKey) {
         int separator = presentedKey.indexOf('.');
@@ -115,6 +121,7 @@ public class ApiKeyService {
 
         Optional<ApiKey> apiKey = Optional.ofNullable(cachedKey)
                 .filter(ApiKey::isActive)
+                .filter(key -> key.getMerchant().isActive())
                 .filter(key -> passwordEncoder.matches(secret, key.getHashedSecret()));
 
         apiKey.ifPresent(key -> apiKeyRepository.updateLastUsedAt(key.getId(), LocalDateTime.now()));

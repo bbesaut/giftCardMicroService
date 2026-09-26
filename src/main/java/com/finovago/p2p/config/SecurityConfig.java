@@ -45,7 +45,9 @@ public class SecurityConfig {
     private static final String[] ADMIN_ROUTES = {
             "/api/v1/auth/register",
             "/api/v1/giftcards/list",
-            "/api/v1/giftcards/list/**"
+            "/api/v1/giftcards/list/**",
+            "/api/v1/admin/merchants",
+            "/api/v1/admin/merchants/**"
     };
 
     private static final String[] MERCHANT_ROUTES = {

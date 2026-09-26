@@ -51,6 +51,7 @@ Two ways to see it without running Maven yourself:
 ## 🏗️ Architecture Summary
 - **Multi-tenancy**: every gift card belongs to exactly one `Merchant`. `ADMIN` is the platform owner (manages merchants, sees all cards via `/list`); `MERCHANT` is a merchant account, scoped to its own cards only. Tenant scoping is derived server-side from the JWT/API key (`merchantId` claim), never from client input.
 - **Merchant users**: a `Merchant` has N `User`s (all role MERCHANT, all human), distinguished by an `owner` flag (can manage the merchant's other users: create via `POST /auth/me/users`, activate/deactivate via `POST /auth/me/users/{userId}/(de)activate`). `/register` creates exactly one owner per new merchant — `owner` is never client-settable outside `/register`, so no endpoint can create a second one. Every other user is added via the owner's self-service routes — there is no admin-side equivalent. Deactivated users are blocked at login/refresh and their refresh tokens are revoked, but an access token already issued before deactivation stays valid until its own ~15 min expiry (stateless JWT, no per-request DB check by design).
+- **Merchant lifecycle (ADMIN-side)**: an ADMIN lists every merchant and can activate/deactivate one via `POST /admin/merchants/{id}/(de)activate`, and override its rate limit via `POST /admin/merchants/{id}/rate-limit-capacity` (see `MerchantService`). Deactivating a merchant is enforced in three separate places — easy to miss one if `Merchant` gains a new consumer later: `AuthService.login`/`.refresh` reject when `user.getMerchant().isActive()` is false, and `ApiKeyService.resolve` rejects when the key's merchant is inactive. It also revokes every one of the merchant's users' active refresh tokens, but does **not** touch each `User.active` individually (`GET /admin/merchants/{id}/users`, or the merchant's own `GET /me/users`, still shows every employee as `active: true`) — that's deliberate, so reactivating the merchant doesn't silently un-deactivate an employee who was already disabled by their owner beforehand. Same stateless-JWT trade-off as user deactivation (already-issued access token stays valid until its own ~15 min expiry), plus an already-cached API key can take up to `app.api-key-cache.ttl-minutes` to be cut off.
 - **JWT auth**: JJWT-based, stateless, roles (ADMIN/MERCHANT), JWT carries a `merchantId` claim (null for ADMIN). Always a human `User` — a merchant's automated/integration access goes through an API key instead (see below), never a JWT.
 - **API key auth**: a merchant's automated/backend integration authenticates with a `X-Api-Key: {keyPrefix}.{secret}` header instead of a Bearer JWT (`ApiKeyAuthenticationFilter`, wired alongside `JwtAuthenticationFilter` in `SecurityConfig`). An API key is its own identity directly on `api_keys.merchant_id` — **not** a stand-in "service account" `User` (no fake email/password to manage) — so the resulting `AuthenticatedUser` principal has `merchantId` and `role=MERCHANT` but no `userId`. Tenant scoping and rate limiting work identically either way (both key off `merchantId`); anything that needs a real human (`/credit`, `/me/users/**`, `/me/api-key` itself) naturally rejects a null `userId`. Ledger entries written by an API-key-authenticated call are attributed to `"SYSTEM"` (`LedgerEntry.actorViaApiKey`), not an email. `ApiKeyService` stores only a bcrypt hash of the secret (`api_keys.hashed_secret`) plus a non-secret `key_prefix` used for lookup; the plaintext secret is shown exactly once, at generation/rotation time, and cannot be retrieved again. `resolve()` caches the `key_prefix -> ApiKey` DB lookup in-process (Caffeine, `app.api-key-cache.ttl-minutes`, default 2 min) to avoid a `SELECT` on every API-key-authenticated request — BCrypt verification against the cached hash still runs on every call, and `generateOrRotate()`/`revoke()` invalidate the cache explicitly so a rotated/revoked key stops working immediately rather than waiting out the TTL. One key per merchant (`api_keys.merchant_id` is `UNIQUE`) — generating again rotates (invalidates the previous secret) rather than creating a second one.
 - **Service layer**: GiftCardService with async redemption (CompletableFuture)
@@ -598,6 +599,67 @@ Header: `Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000`
 - `403 Forbidden`: User role not permitted to list gift cards
 - `500 Internal Server Error`: Database or unexpected server error
 
+## 🏢 Admin - Merchant Management Endpoints
+
+All endpoints below require authentication (ADMIN role) and are unpaginated, like `GET /me/users` — see Architecture Summary for the enforcement details of activate/deactivate.
+
+### GET /api/v1/admin/merchants
+**Description**: Lists every merchant across the platform, for the ADMIN merchant-management screen.
+
+**Response** (List of MerchantResponse - HTTP 200):
+```json
+[
+  { "merchantId": 1, "name": "Finovago Demo Merchant", "contactEmail": "client@finovago.com", "active": true, "rateLimitCapacity": null }
+]
+```
+
+**Error Responses**:
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Insufficient permissions (ADMIN role required)
+- `500 Internal Server Error`: Server error
+
+### GET /api/v1/admin/merchants/{merchantId}/users
+**Description**: Lists the human user accounts belonging to a given merchant, for the ADMIN merchant-detail screen (alongside its activate/deactivate/rate-limit controls). Same response shape as `GET /me/users`.
+
+**Response** (List of MerchantUserResponse - HTTP 200): see `GET /me/users` above.
+
+**Error Responses**:
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Insufficient permissions (ADMIN role required)
+- `404 Not Found`: Merchant does not exist
+- `500 Internal Server Error`: Server error
+
+### POST /api/v1/admin/merchants/{merchantId}/deactivate
+### POST /api/v1/admin/merchants/{merchantId}/activate
+**Description**: Disable/re-enable a merchant. Deactivating blocks login and refresh for all of its users, blocks its API key, and revokes all of its users' active refresh tokens — see Architecture Summary for the exact enforcement points and known limitations (stateless JWT expiry, API key cache TTL).
+
+**Response** (MerchantStatusResponse - HTTP 200): `{ "merchantId": 1, "name": "Finovago Demo Merchant", "active": false }`
+
+**Error Responses**:
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Insufficient permissions (ADMIN role required)
+- `404 Not Found`: Merchant does not exist
+- `500 Internal Server Error`: Server error
+
+### POST /api/v1/admin/merchants/{merchantId}/rate-limit-capacity
+**Description**: Overrides the requests/minute capacity used for that merchant's redeem/lookup/reserve/refund/credit rate limit (see `RateLimitFilter`). A `null` `rateLimitCapacity` clears the override, falling back to the app-wide default (`app.rate-limit.merchant-capacity`).
+
+**Request** (SetRateLimitCapacityRequest):
+```json
+{
+  "rateLimitCapacity": 500
+}
+```
+
+**Response** (RateLimitCapacityResponse - HTTP 200): `{ "merchantId": 1, "rateLimitCapacity": 500 }`
+
+**Error Responses**:
+- `400 Bad Request`: `rateLimitCapacity` is not null and not greater than zero
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Insufficient permissions (ADMIN role required)
+- `404 Not Found`: Merchant does not exist
+- `500 Internal Server Error`: Server error
+
 ## 📦 DTOs
 
 ### RegisterRequest
@@ -630,11 +692,34 @@ Used to attach a human employee to a merchant, self-service by that merchant's o
 - `password` (String): New employee's password, non-blank
 
 ### MerchantUserResponse
-A single user of GET /api/v1/auth/me/users's response list
+A single user of GET /api/v1/auth/me/users's response list (also reused by GET /api/v1/admin/merchants/{merchantId}/users)
 - `userId` (Long): Id of the user
 - `email` (String): Email of the user
 - `owner` (boolean): Whether this user owns the merchant (can manage its other users)
 - `active` (boolean): Whether the user is active
+
+### MerchantResponse
+A single merchant of GET /api/v1/admin/merchants's response list
+- `merchantId` (Long): Id of the merchant
+- `name` (String): Business name of the merchant
+- `contactEmail` (String, nullable): Contact email of the merchant
+- `active` (boolean): Whether the merchant is active (see Architecture Summary for what that blocks)
+- `rateLimitCapacity` (Integer, nullable): Requests/minute override, null means the app-wide default applies
+
+### MerchantStatusResponse
+Response for POST /api/v1/admin/merchants/{merchantId}/activate and .../deactivate
+- `merchantId` (Long): Id of the affected merchant
+- `name` (String): Business name of the affected merchant
+- `active` (boolean): The merchant's active status after this call
+
+### SetRateLimitCapacityRequest
+Used to override a merchant's rate limit capacity (POST /api/v1/admin/merchants/{merchantId}/rate-limit-capacity)
+- `rateLimitCapacity` (Integer, nullable): Requests/minute override, must be greater than zero if provided; null clears the override
+
+### RateLimitCapacityResponse
+Response for POST /api/v1/admin/merchants/{merchantId}/rate-limit-capacity
+- `merchantId` (Long): Id of the affected merchant
+- `rateLimitCapacity` (Integer, nullable): The override now in effect, null means the app-wide default applies
 
 ### ChangePasswordRequest
 Used for self-service password change (POST /api/v1/auth/me/password)

@@ -41,4 +41,17 @@ class OpenApiGroupsIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath(CURRENT_USER_PATH + ".summary").value("Get my profile"));
     }
+
+    @Test
+    @DisplayName("Should document the admin merchant-management endpoints in the admin-api group")
+    void shouldDocumentAdminMerchantEndpoints_inAdminApiGroup() throws Exception {
+        mockMvc.perform(get("/api-docs/admin-api"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paths['/api/v1/admin/merchants'].get.summary").value("List every merchant"))
+                .andExpect(jsonPath("$.paths['/api/v1/admin/merchants/{merchantId}/users'].get.summary").value("List a merchant's users"))
+                .andExpect(jsonPath("$.paths['/api/v1/admin/merchants/{merchantId}/activate'].post.summary").value("Reactivate a merchant"))
+                .andExpect(jsonPath("$.paths['/api/v1/admin/merchants/{merchantId}/deactivate'].post.summary").value("Deactivate a merchant"))
+                .andExpect(jsonPath("$.paths['/api/v1/admin/merchants/{merchantId}/rate-limit-capacity'].post.summary")
+                        .value("Set a merchant's rate limit capacity override"));
+    }
 }
