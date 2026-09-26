@@ -166,6 +166,16 @@ Content-Type: application/json
 - `403 Forbidden`: Caller is not the merchant's owner account
 - `500 Internal Server Error`: Server error
 
+### GET /api/v1/auth/me/api-key
+**Description**: Returns the current status of the caller's own merchant's API key (non-secret prefix, whether it's active, and when it was created/last rotated), for the key-management screen to render without any side effect — unlike `POST /me/api-key` (generates/rotates) or `POST /me/api-key/revoke`. The secret itself is **never** returned here; it is only ever shown once, in the response of `POST /me/api-key`. All fields are null/false if the merchant has no key yet. Requires authentication (MERCHANT role) and the caller must be that merchant's owner.
+
+**Response** (ApiKeyInfoResponse - HTTP 200): `{ "keyPrefix": "fovak_7f3d9c2b1a4e", "active": true, "createdAt": "2026-09-26T15:30:00" }` (or `{ "keyPrefix": null, "active": false, "createdAt": null }` if no key exists).
+
+**Error Responses**:
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Caller is not the merchant's owner account
+- `500 Internal Server Error`: Server error
+
 ### POST /api/v1/auth/me/users
 **Description**: The caller's own merchant **owner** attaches a human employee account to their own merchant, self-service, no admin involved. `merchantId` is derived from the caller's JWT, never from the request. Requires authentication (MERCHANT role) **and** the caller must be that merchant's owner (not an employee, and not authenticated via API key) — otherwise `403`. There is no admin-side equivalent: if a merchant's owner account is ever unusable, restoring access requires direct DB intervention (not implemented as an endpoint).
 
@@ -673,6 +683,12 @@ Response for generating/rotating the merchant's API key (POST /api/v1/auth/me/ap
 Response for revoking the merchant's API key (POST /api/v1/auth/me/api-key/revoke)
 - `keyPrefix` (String, nullable): Prefix of the affected key, null if none existed
 - `active` (boolean): Always false after this call
+
+### ApiKeyInfoResponse
+Response for reading the merchant's API key status (GET /api/v1/auth/me/api-key) — never includes the secret
+- `keyPrefix` (String, nullable): Non-secret prefix of the key, null if no key exists
+- `active` (boolean): Whether the key is currently active, false if no key exists
+- `createdAt` (LocalDateTime, nullable): When the key was generated or last rotated, null if no key exists
 
 ### AddMerchantUserRequest
 Used to attach a human employee to a merchant, self-service by that merchant's owner (POST /api/v1/auth/me/users) — always creates a human account; API-key-style automated access is managed separately via POST /me/api-key

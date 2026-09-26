@@ -7,6 +7,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.finovago.p2p.dto.AddMerchantUserRequest;
+import com.finovago.p2p.dto.ApiKeyInfoResponse;
 import com.finovago.p2p.dto.ApiKeyResponse;
 import com.finovago.p2p.dto.ApiKeyStatusResponse;
 import com.finovago.p2p.dto.AuthResponse;
@@ -149,6 +150,12 @@ public class AuthService {
     public ApiKeyStatusResponse revokeApiKey(Long callerId) {
         User caller = requireOwner(callerId);
         return apiKeyService.revoke(caller.getMerchant());
+    }
+
+    /** Read-only status of the merchant's API key, for the key-management screen. */
+    public ApiKeyInfoResponse getApiKeyStatus(Long callerId) {
+        User caller = requireOwner(callerId);
+        return apiKeyService.getStatus(caller.getMerchant());
     }
 
     public AuthResponse addUserToOwnMerchant(Long callerId, AddMerchantUserRequest request) {

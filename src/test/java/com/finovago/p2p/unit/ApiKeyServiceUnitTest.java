@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import com.finovago.p2p.dto.ApiKeyInfoResponse;
 import com.finovago.p2p.dto.ApiKeyResponse;
 import com.finovago.p2p.dto.ApiKeyStatusResponse;
 import com.finovago.p2p.model.ApiKey;
@@ -96,6 +97,37 @@ class ApiKeyServiceUnitTest {
         assertFalse(response.active());
         assertEquals(null, response.keyPrefix());
         verify(repo, never()).save(any(ApiKey.class));
+    }
+
+    @Test
+    void should_returnPrefixActiveAndCreatedAt_when_merchantHasAnExistingKey() {
+        ApiKeyRepository repo = org.mockito.Mockito.mock(ApiKeyRepository.class);
+        ApiKeyService service = new ApiKeyService(repo, new BCryptPasswordEncoder(), CACHE_TTL_MINUTES);
+        Merchant merchant = merchant(42L);
+        ApiKey existing = new ApiKey(merchant, "fovak_abc", "hash");
+
+        when(repo.findByMerchant_Id(42L)).thenReturn(Optional.of(existing));
+
+        ApiKeyInfoResponse response = service.getStatus(merchant);
+
+        assertEquals("fovak_abc", response.keyPrefix());
+        assertTrue(response.active());
+        assertEquals(existing.getCreatedAt(), response.createdAt());
+    }
+
+    @Test
+    void should_returnInactiveNullFields_when_merchantHasNoKey() {
+        ApiKeyRepository repo = org.mockito.Mockito.mock(ApiKeyRepository.class);
+        ApiKeyService service = new ApiKeyService(repo, new BCryptPasswordEncoder(), CACHE_TTL_MINUTES);
+        Merchant merchant = merchant(42L);
+
+        when(repo.findByMerchant_Id(42L)).thenReturn(Optional.empty());
+
+        ApiKeyInfoResponse response = service.getStatus(merchant);
+
+        assertEquals(null, response.keyPrefix());
+        assertFalse(response.active());
+        assertEquals(null, response.createdAt());
     }
 
     @Test
