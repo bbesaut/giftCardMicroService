@@ -81,6 +81,11 @@ public class AuthService {
             throw new BadCredentialsException("Invalid credentials");
         }
 
+        if (user.getMerchant() != null && !user.getMerchant().isActive()) {
+            log.warn("Login failed - merchant deactivated for user: {}", user.getEmail());
+            throw new BadCredentialsException("Invalid credentials");
+        }
+
         AuthResponse response = issueTokens(user);
         log.info("Tokens issued for user: {} (role: {})", user.getEmail(), user.getRole());
         return response;
@@ -92,6 +97,10 @@ public class AuthService {
             if (!user.isActive()) {
                 log.warn("Token rotation failed - account deactivated for user: {}", user.getEmail());
                 throw new InvalidRefreshTokenException("Account has been deactivated");
+            }
+            if (user.getMerchant() != null && !user.getMerchant().isActive()) {
+                log.warn("Token rotation failed - merchant deactivated for user: {}", user.getEmail());
+                throw new InvalidRefreshTokenException("Merchant has been deactivated");
             }
             log.info("Token rotation successful for user: {}", user.getEmail());
             return issueTokens(user);

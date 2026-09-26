@@ -33,7 +33,7 @@ public class OpenApiConfig {
         return GroupedOpenApi.builder()
                 .group("admin-api")
                 .pathsToMatch("/api/v1/auth/register", "/api/v1/giftcards/list", "/api/v1/auth/me/password",
-                        "/api/v1/auth/me")
+                        "/api/v1/auth/me", "/api/v1/admin/merchants", "/api/v1/admin/merchants/**")
                 .build();
     }
 }
