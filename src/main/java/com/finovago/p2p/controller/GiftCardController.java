@@ -1,6 +1,5 @@
 package com.finovago.p2p.controller;
 
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import org.slf4j.Logger;
@@ -106,32 +105,11 @@ public class GiftCardController
     }
 
     @Operation(
-        summary = "List all gift cards",
-        description = "Retrieve a list of all available gift cards with their details (code, balance, creation date, etc.). "
-                    + "Requires authentication (JWT token)."
-    )
-    @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "OK - Successfully retrieved the list of gift cards",
-            content = @Content(schema = @Schema(implementation = GiftCardResponse.class))),
-        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
-            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
-        @ApiResponse(responseCode = "403", description = "Forbidden - User role not permitted to list gift cards",
-            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Forbidden\",\"message\":\"Insufficient permissions for this resource\"}"))),
-        @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error",
-            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
-    })
-    @GetMapping("/list")
-    @ResponseStatus(HttpStatus.OK)
-    public List<GiftCardResponse> listGiftCards() {
-        log.info("Received request to list all gift cards");
-        return giftCardService.getAllGiftCards();
-    }
-
-    @Operation(
         summary = "List the caller's own gift cards (paginated, filterable)",
         description = "Retrieve a page of the caller merchant's own gift cards, optionally filtered by active status and/or a "
                     + "partial code match. Intended for a merchant-facing 'my gift cards' screen. Scoped to the caller's own "
-                    + "merchant (from the JWT) - unlike /list, which is ADMIN-only and returns every merchant's cards, unpaginated. "
+                    + "merchant (from the JWT). For an ADMIN's cross-merchant view, see "
+                    + "GET /admin/merchants/{merchantId}/giftcards instead. "
                     + "Requires authentication (JWT token, MERCHANT role)."
     )
     @ApiResponses({
