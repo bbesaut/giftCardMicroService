@@ -26,6 +26,7 @@ public class Merchant {
 
     private String contactEmail;
 
+    @Setter
     @Column(nullable = false)
     private boolean active;
 
@@ -37,11 +38,11 @@ public class Merchant {
     @Column(name = &quot;rate_limit_capacity&quot;)
     private Integer rateLimitCapacity;
 
-<span class="fc" id="L40">    public Merchant(String name, String contactEmail) {</span>
-<span class="fc" id="L41">        this.name = name;</span>
-<span class="fc" id="L42">        this.contactEmail = contactEmail;</span>
-<span class="fc" id="L43">        this.active = true;</span>
-<span class="fc" id="L44">        this.createdAt = Instant.now();</span>
-<span class="fc" id="L45">    }</span>
+<span class="fc" id="L41">    public Merchant(String name, String contactEmail) {</span>
+<span class="fc" id="L42">        this.name = name;</span>
+<span class="fc" id="L43">        this.contactEmail = contactEmail;</span>
+<span class="fc" id="L44">        this.active = true;</span>
+<span class="fc" id="L45">        this.createdAt = Instant.now();</span>
+<span class="fc" id="L46">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

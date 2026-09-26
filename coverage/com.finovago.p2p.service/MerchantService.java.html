@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MerchantService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.service</a> &gt; <span class="el_source">MerchantService.java</span></div><h1>MerchantService.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.service;
+
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.finovago.p2p.dto.MerchantResponse;
+import com.finovago.p2p.dto.MerchantStatusResponse;
+import com.finovago.p2p.dto.MerchantUserResponse;
+import com.finovago.p2p.dto.RateLimitCapacityResponse;
+import com.finovago.p2p.exception.MerchantNotFoundException;
+import com.finovago.p2p.model.Merchant;
+import com.finovago.p2p.repository.MerchantRepository;
+import com.finovago.p2p.repository.UserRepository;
+
+import lombok.extern.slf4j.Slf4j;
+
+/** ADMIN-side merchant management: listing every tenant, activating/deactivating one, and overriding its rate limit. */
+<span class="fc" id="L20">@Slf4j</span>
+@Service
+public class MerchantService {
+
+    private final MerchantRepository merchantRepository;
+    private final UserRepository userRepository;
+    private final RefreshTokenService refreshTokenService;
+
+    public MerchantService(
+            MerchantRepository merchantRepository,
+            UserRepository userRepository,
+<span class="fc" id="L31">            RefreshTokenService refreshTokenService) {</span>
+<span class="fc" id="L32">        this.merchantRepository = merchantRepository;</span>
+<span class="fc" id="L33">        this.userRepository = userRepository;</span>
+<span class="fc" id="L34">        this.refreshTokenService = refreshTokenService;</span>
+<span class="fc" id="L35">    }</span>
+
+    @Transactional(readOnly = true)
+    public List&lt;MerchantResponse&gt; listMerchants() {
+<span class="fc" id="L39">        return merchantRepository.findAllByOrderByIdAsc().stream()</span>
+<span class="fc" id="L40">                .map(merchant -&gt; new MerchantResponse(</span>
+<span class="fc" id="L41">                        merchant.getId(), merchant.getName(), merchant.getContactEmail(),</span>
+<span class="fc" id="L42">                        merchant.isActive(), merchant.getRateLimitCapacity()))</span>
+<span class="fc" id="L43">                .toList();</span>
+    }
+
+    /**
+     * Deactivating also revokes every one of the merchant's users' active refresh tokens (immediate logout
+     * on their next refresh attempt) and blocks new logins/API-key authentication (see AuthService.login,
+     * AuthService.refresh, ApiKeyService.resolve). An access token already issued before deactivation stays
+     * valid until its own ~15 min expiry - same trade-off already accepted for user-level deactivation.
+     */
+    @Transactional
+    public MerchantStatusResponse setMerchantActive(Long merchantId, boolean active) {
+<span class="fc" id="L54">        Merchant merchant = findMerchantOrThrow(merchantId);</span>
+
+<span class="fc" id="L56">        merchant.setActive(active);</span>
+<span class="fc" id="L57">        merchantRepository.save(merchant);</span>
+
+<span class="fc bfc" id="L59" title="All 2 branches covered.">        if (!active) {</span>
+<span class="fc" id="L60">            userRepository.findAllByMerchant_IdOrderByIdAsc(merchantId)</span>
+<span class="fc" id="L61">                    .forEach(refreshTokenService::revokeAllForUser);</span>
+        }
+
+<span class="fc bfc" id="L64" title="All 2 branches covered.">        log.info(&quot;Merchant {} (id: {}) {}&quot;, merchant.getName(), merchant.getId(), active ? &quot;reactivated&quot; : &quot;deactivated&quot;);</span>
+
+<span class="fc" id="L66">        return new MerchantStatusResponse(merchant.getId(), merchant.getName(), merchant.isActive());</span>
+    }
+
+    /** Lists a given merchant's human user accounts, for the ADMIN merchant-detail screen. */
+    @Transactional(readOnly = true)
+    public List&lt;MerchantUserResponse&gt; listMerchantUsers(Long merchantId) {
+<span class="fc" id="L72">        findMerchantOrThrow(merchantId);</span>
+
+<span class="fc" id="L74">        return userRepository.findAllByMerchant_IdOrderByIdAsc(merchantId).stream()</span>
+<span class="fc" id="L75">                .map(user -&gt; new MerchantUserResponse(user.getId(), user.getEmail(), user.isOwner(), user.isActive()))</span>
+<span class="fc" id="L76">                .toList();</span>
+    }
+
+    /** Null clears the override, falling back to app.rate-limit.merchant-capacity. */
+    @Transactional
+    public RateLimitCapacityResponse setRateLimitCapacity(Long merchantId, Integer rateLimitCapacity) {
+<span class="fc" id="L82">        Merchant merchant = findMerchantOrThrow(merchantId);</span>
+
+<span class="fc" id="L84">        merchant.setRateLimitCapacity(rateLimitCapacity);</span>
+<span class="fc" id="L85">        merchantRepository.save(merchant);</span>
+
+<span class="fc" id="L87">        log.info(&quot;Rate limit capacity for merchant {} (id: {}) set to {}&quot;, merchant.getName(), merchant.getId(), rateLimitCapacity);</span>
+
+<span class="fc" id="L89">        return new RateLimitCapacityResponse(merchant.getId(), merchant.getRateLimitCapacity());</span>
+    }
+
+    private Merchant findMerchantOrThrow(Long merchantId) {
+<span class="fc" id="L93">        return merchantRepository.findById(merchantId)</span>
+<span class="fc" id="L94">                .orElseThrow(() -&gt; new MerchantNotFoundException(&quot;Merchant not found: &quot; + merchantId));</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

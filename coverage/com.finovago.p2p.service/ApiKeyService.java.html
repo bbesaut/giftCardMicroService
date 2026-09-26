@@ -100,26 +100,33 @@ public class ApiKeyService {
 <span class="fc" id="L100">        return new ApiKeyStatusResponse(key.getKeyPrefix(), false);</span>
     }
 
-    /** Validates a presented &quot;{prefix}.{secret}&quot; key and returns the ApiKey it matches, if valid and active. */
+    /**
+     * Validates a presented &quot;{prefix}.{secret}&quot; key and returns the ApiKey it matches, if valid, active,
+     * and its merchant is active. Since the ApiKey (including its eagerly-fetched Merchant) is cached for
+     * app.api-key-cache.ttl-minutes, a merchant deactivated via POST /admin/merchants/{id}/deactivate can
+     * take up to that TTL to actually cut off API key access here - same class of trade-off already
+     * accepted for JWT access tokens staying valid until their own expiry.
+     */
     @Transactional
     public Optional&lt;ApiKey&gt; resolve(String presentedKey) {
-<span class="fc" id="L106">        int separator = presentedKey.indexOf('.');</span>
-<span class="fc bfc" id="L107" title="All 4 branches covered.">        if (separator &lt;= 0 || separator == presentedKey.length() - 1) {</span>
-<span class="fc" id="L108">            return Optional.empty();</span>
+<span class="fc" id="L112">        int separator = presentedKey.indexOf('.');</span>
+<span class="fc bfc" id="L113" title="All 4 branches covered.">        if (separator &lt;= 0 || separator == presentedKey.length() - 1) {</span>
+<span class="fc" id="L114">            return Optional.empty();</span>
         }
 
-<span class="fc" id="L111">        String keyPrefix = presentedKey.substring(0, separator);</span>
-<span class="fc" id="L112">        String secret = presentedKey.substring(separator + 1);</span>
+<span class="fc" id="L117">        String keyPrefix = presentedKey.substring(0, separator);</span>
+<span class="fc" id="L118">        String secret = presentedKey.substring(separator + 1);</span>
 
-<span class="fc" id="L114">        ApiKey cachedKey = keyPrefixCache.get(keyPrefix, prefix -&gt; apiKeyRepository.findByKeyPrefix(prefix).orElse(null));</span>
+<span class="fc" id="L120">        ApiKey cachedKey = keyPrefixCache.get(keyPrefix, prefix -&gt; apiKeyRepository.findByKeyPrefix(prefix).orElse(null));</span>
 
-<span class="fc" id="L116">        Optional&lt;ApiKey&gt; apiKey = Optional.ofNullable(cachedKey)</span>
-<span class="fc" id="L117">                .filter(ApiKey::isActive)</span>
-<span class="fc" id="L118">                .filter(key -&gt; passwordEncoder.matches(secret, key.getHashedSecret()));</span>
+<span class="fc" id="L122">        Optional&lt;ApiKey&gt; apiKey = Optional.ofNullable(cachedKey)</span>
+<span class="fc" id="L123">                .filter(ApiKey::isActive)</span>
+<span class="fc" id="L124">                .filter(key -&gt; key.getMerchant().isActive())</span>
+<span class="fc" id="L125">                .filter(key -&gt; passwordEncoder.matches(secret, key.getHashedSecret()));</span>
 
-<span class="fc" id="L120">        apiKey.ifPresent(key -&gt; apiKeyRepository.updateLastUsedAt(key.getId(), LocalDateTime.now()));</span>
+<span class="fc" id="L127">        apiKey.ifPresent(key -&gt; apiKeyRepository.updateLastUsedAt(key.getId(), LocalDateTime.now()));</span>
 
-<span class="fc" id="L122">        return apiKey;</span>
+<span class="fc" id="L129">        return apiKey;</span>
     }
 
     /**
@@ -130,22 +137,22 @@ public class ApiKeyService {
      * immediate invalidation outside a transaction (e.g. unit tests calling the service directly).
      */
     private void invalidateCacheAfterCommit(String keyPrefix) {
-<span class="fc bfc" id="L133" title="All 2 branches covered.">        if (!TransactionSynchronizationManager.isSynchronizationActive()) {</span>
-<span class="fc" id="L134">            keyPrefixCache.invalidate(keyPrefix);</span>
-<span class="fc" id="L135">            return;</span>
+<span class="fc bfc" id="L140" title="All 2 branches covered.">        if (!TransactionSynchronizationManager.isSynchronizationActive()) {</span>
+<span class="fc" id="L141">            keyPrefixCache.invalidate(keyPrefix);</span>
+<span class="fc" id="L142">            return;</span>
         }
-<span class="fc" id="L137">        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {</span>
+<span class="fc" id="L144">        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {</span>
             @Override
             public void afterCommit() {
-<span class="nc" id="L140">                keyPrefixCache.invalidate(keyPrefix);</span>
-<span class="nc" id="L141">            }</span>
+<span class="nc" id="L147">                keyPrefixCache.invalidate(keyPrefix);</span>
+<span class="nc" id="L148">            }</span>
         });
-<span class="fc" id="L143">    }</span>
+<span class="fc" id="L150">    }</span>
 
     private String randomUrlSafe(int numBytes) {
-<span class="fc" id="L146">        byte[] randomBytes = new byte[numBytes];</span>
-<span class="fc" id="L147">        SECURE_RANDOM.nextBytes(randomBytes);</span>
-<span class="fc" id="L148">        return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);</span>
+<span class="fc" id="L153">        byte[] randomBytes = new byte[numBytes];</span>
+<span class="fc" id="L154">        SECURE_RANDOM.nextBytes(randomBytes);</span>
+<span class="fc" id="L155">        return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

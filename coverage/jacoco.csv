@@ -3,16 +3,20 @@ p2p,com.finovago.p2p.dto,RefundRequest,0,15,0,0,0,1,0,1,0,1
 p2p,com.finovago.p2p.dto,GiftCardResponse,0,18,0,0,0,1,0,1,0,1
 p2p,com.finovago.p2p.dto,PasswordResetConfirmRequest,0,9,0,0,0,1,0,1,0,1
 p2p,com.finovago.p2p.dto,HoldResponse,0,15,0,0,0,1,0,1,0,1
+p2p,com.finovago.p2p.dto,MerchantResponse,0,18,0,0,0,1,0,1,0,1
 p2p,com.finovago.p2p.dto,MerchantUserResponse,0,15,0,0,0,1,0,1,0,1
 p2p,com.finovago.p2p.dto,RedemptionRequest,0,9,0,0,0,1,0,1,0,1
 p2p,com.finovago.p2p.dto,RedemptionResponse,0,15,0,0,0,1,0,1,0,1
 p2p,com.finovago.p2p.dto,CreditRequest,0,12,0,0,0,1,0,1,0,1
+p2p,com.finovago.p2p.dto,SetRateLimitCapacityRequest,0,6,0,0,0,1,0,1,0,1
 p2p,com.finovago.p2p.dto,ReserveRequest,0,9,0,0,0,1,0,1,0,1
 p2p,com.finovago.p2p.dto,PagedResponse,0,32,0,0,0,7,0,2,0,2
 p2p,com.finovago.p2p.dto,LedgerEntryResponse,0,24,0,0,0,1,0,1,0,1
+p2p,com.finovago.p2p.dto,MerchantStatusResponse,0,12,0,0,0,1,0,1,0,1
 p2p,com.finovago.p2p.dto,ApiKeyStatusResponse,0,9,0,0,0,1,0,1,0,1
 p2p,com.finovago.p2p.dto,RefundResponse,0,12,0,0,0,1,0,1,0,1
 p2p,com.finovago.p2p.dto,GiftCardCreateRequest,0,15,0,0,0,1,0,1,0,1
+p2p,com.finovago.p2p.dto,RateLimitCapacityResponse,0,9,0,0,0,1,0,1,0,1
 p2p,com.finovago.p2p.dto,RegisterRequest,0,12,0,0,0,1,0,1,0,1
 p2p,com.finovago.p2p.dto,ApiKeyResponse,0,9,0,0,0,1,0,1,0,1
 p2p,com.finovago.p2p.dto,AddMerchantUserRequest,0,9,0,0,0,1,0,1,0,1
@@ -29,7 +33,7 @@ p2p,com.finovago.p2p.dto,CurrentUserResponse.MerchantSummary,0,9,0,0,0,1,0,1,0,1
 p2p,com.finovago.p2p.exception,UnknownGiftCardException,0,4,0,0,0,2,0,1,0,1
 p2p,com.finovago.p2p.exception,LedgerEntryNotFoundException,0,4,0,0,0,2,0,1,0,1
 p2p,com.finovago.p2p.exception,InvalidRefreshTokenException,0,4,0,0,0,2,0,1,0,1
-p2p,com.finovago.p2p.exception,GlobalExceptionHandler,42,391,0,0,15,133,3,28,3,28
+p2p,com.finovago.p2p.exception,GlobalExceptionHandler,42,405,0,0,15,138,3,29,3,29
 p2p,com.finovago.p2p.exception,InvalidResetTokenException,0,4,0,0,0,2,0,1,0,1
 p2p,com.finovago.p2p.exception,UserAlreadyExistsException,0,4,0,0,0,2,0,1,0,1
 p2p,com.finovago.p2p.exception,OwnerPrivilegeRequiredException,0,4,0,0,0,2,0,1,0,1
@@ -42,6 +46,7 @@ p2p,com.finovago.p2p.exception,InvalidRefundTargetException,0,4,0,0,0,2,0,1,0,1
 p2p,com.finovago.p2p.exception,SamePasswordException,0,4,0,0,0,2,0,1,0,1
 p2p,com.finovago.p2p.exception,InsufficientAvailableBalanceException,0,4,0,0,0,2,0,1,0,1
 p2p,com.finovago.p2p.exception,SelfDeactivationException,0,4,0,0,0,2,0,1,0,1
+p2p,com.finovago.p2p.exception,MerchantNotFoundException,0,4,0,0,0,2,0,1,0,1
 p2p,com.finovago.p2p.exception,UserNotFoundException,0,4,0,0,0,2,0,1,0,1
 p2p,com.finovago.p2p.exception,IdempotencyKeyInProgressException,0,4,0,0,0,2,0,1,0,1
 p2p,com.finovago.p2p.exception,RefundExceedsOriginalAmountException,0,4,0,0,0,2,0,1,0,1
@@ -63,10 +68,12 @@ p2p,com.finovago.p2p.security,AuthenticatedUser,0,29,0,0,0,4,0,3,0,3
 p2p,com.finovago.p2p.security,JwtAuthenticationFilter,32,122,9,11,8,31,8,6,0,4
 p2p,com.finovago.p2p.security,JwtAuthenticationEntryPoint,0,26,0,0,0,8,0,2,0,2
 p2p,com.finovago.p2p,P2pApplication,5,3,0,0,2,1,1,1,1,1
+p2p,com.finovago.p2p.controller,AdminMerchantController,0,82,0,2,0,18,0,9,0,8
 p2p,com.finovago.p2p.controller,PasswordResetController,0,31,0,0,0,10,0,4,0,4
 p2p,com.finovago.p2p.controller,HealthController,3,3,0,0,1,1,1,1,1,1
 p2p,com.finovago.p2p.controller,GiftCardController,110,127,0,0,15,18,6,7,6,7
 p2p,com.finovago.p2p.controller,AuthController,8,283,3,5,2,67,3,17,0,16
+p2p,com.finovago.p2p.service,MerchantService,0,175,0,4,0,30,0,12,0,10
 p2p,com.finovago.p2p.service,LedgerService,0,89,0,2,0,20,0,9,0,8
 p2p,com.finovago.p2p.service,RefreshTokenService,7,176,0,4,2,43,0,12,0,10
 p2p,com.finovago.p2p.service,GiftCardCreditService,0,190,0,6,0,37,0,9,0,6
@@ -74,8 +81,8 @@ p2p,com.finovago.p2p.service,GiftCardService,2,602,2,18,0,109,2,26,0,18
 p2p,com.finovago.p2p.service,IdempotencyKeyService,16,179,0,6,4,40,1,14,1,11
 p2p,com.finovago.p2p.service,UserService,0,26,0,0,0,6,0,3,0,3
 p2p,com.finovago.p2p.service,SmtpEmailSender,0,40,0,0,0,13,0,3,0,3
-p2p,com.finovago.p2p.service,ApiKeyService,0,241,0,14,0,52,0,17,0,10
-p2p,com.finovago.p2p.service,AuthService,22,561,5,35,4,104,5,34,0,19
+p2p,com.finovago.p2p.service,ApiKeyService,0,247,0,14,0,53,0,18,0,11
+p2p,com.finovago.p2p.service,AuthService,22,595,6,42,4,110,6,37,0,19
 p2p,com.finovago.p2p.service,GiftCardRefundService,0,224,0,6,0,40,0,9,0,6
 p2p,com.finovago.p2p.service,BrevoApiEmailSender,79,0,0,0,19,0,3,0,3,0
 p2p,com.finovago.p2p.service,ApiKeyService.new TransactionSynchronization() {...},7,9,0,0,2,1,1,1,1,1
@@ -92,9 +99,9 @@ p2p,com.finovago.p2p.config,AsyncConfig.MdcTaskDecorator,0,17,0,2,0,8,0,4,0,3
 p2p,com.finovago.p2p.config,RateLimitFilter.BucketEntry,0,9,0,0,0,1,0,1,0,1
 p2p,com.finovago.p2p.config,ResponseTimeFilter.TimingResponseWrapper,0,46,1,3,0,14,1,6,0,5
 p2p,com.finovago.p2p.config,AsyncConfig,0,25,0,0,0,8,0,2,0,2
-p2p,com.finovago.p2p.config,OpenApiConfig,0,127,0,0,0,13,0,4,0,4
+p2p,com.finovago.p2p.config,OpenApiConfig,0,135,0,0,0,13,0,4,0,4
 p2p,com.finovago.p2p.config,ResponseTimeFilter,0,60,0,6,0,15,0,7,0,4
-p2p,com.finovago.p2p.config,SecurityConfig,0,219,0,0,0,28,0,11,0,11
+p2p,com.finovago.p2p.config,SecurityConfig,0,227,0,0,0,28,0,11,0,11
 p2p,com.finovago.p2p.config,CorsConfig,0,186,3,27,0,40,3,19,0,7
 p2p,com.finovago.p2p.model,User,0,29,0,0,0,10,0,2,0,2
 p2p,com.finovago.p2p.model,ApiKey,0,31,0,0,0,12,0,2,0,2

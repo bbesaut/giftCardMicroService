@@ -328,49 +328,61 @@ import jakarta.validation.ConstraintViolationException;
                 ));
     }
 
-    @ExceptionHandler(SamePasswordException.class)
-    public ResponseEntity&lt;Object&gt; handleSamePasswordException(SamePasswordException ex) {
+    @ExceptionHandler(MerchantNotFoundException.class)
+    public ResponseEntity&lt;Object&gt; handleMerchantNotFoundException(MerchantNotFoundException ex) {
 <span class="fc" id="L333">        log.warn(ex.getMessage());</span>
 
 <span class="fc" id="L335">        return ResponseEntity</span>
-<span class="fc" id="L336">                .status(HttpStatus.UNPROCESSABLE_ENTITY)</span>
+<span class="fc" id="L336">                .status(HttpStatus.NOT_FOUND)</span>
 <span class="fc" id="L337">                .body(Map.of(</span>
-                    &quot;error&quot;, &quot;Unprocessable Entity&quot;,
+                    &quot;error&quot;, &quot;Not Found&quot;,
 <span class="fc" id="L339">                    &quot;message&quot;, ex.getMessage()</span>
+                ));
+    }
+
+    @ExceptionHandler(SamePasswordException.class)
+    public ResponseEntity&lt;Object&gt; handleSamePasswordException(SamePasswordException ex) {
+<span class="fc" id="L345">        log.warn(ex.getMessage());</span>
+
+<span class="fc" id="L347">        return ResponseEntity</span>
+<span class="fc" id="L348">                .status(HttpStatus.UNPROCESSABLE_ENTITY)</span>
+<span class="fc" id="L349">                .body(Map.of(</span>
+                    &quot;error&quot;, &quot;Unprocessable Entity&quot;,
+<span class="fc" id="L351">                    &quot;message&quot;, ex.getMessage()</span>
                 ));
     }
 
     @ExceptionHandler(InvalidResetTokenException.class)
     public ResponseEntity&lt;Object&gt; handleInvalidResetTokenException(InvalidResetTokenException ex) {
-<span class="fc" id="L345">        log.warn(ex.getMessage());</span>
+<span class="fc" id="L357">        log.warn(ex.getMessage());</span>
 
-<span class="fc" id="L347">        return ResponseEntity</span>
-<span class="fc" id="L348">                .status(HttpStatus.BAD_REQUEST)</span>
-<span class="fc" id="L349">                .body(Map.of(</span>
+<span class="fc" id="L359">        return ResponseEntity</span>
+<span class="fc" id="L360">                .status(HttpStatus.BAD_REQUEST)</span>
+<span class="fc" id="L361">                .body(Map.of(</span>
                     &quot;error&quot;, &quot;Bad Request&quot;,
-<span class="fc" id="L351">                    &quot;message&quot;, ex.getMessage()</span>
+<span class="fc" id="L363">                    &quot;message&quot;, ex.getMessage()</span>
                 ));
     }
 
     @ExceptionHandler(InactiveAccountException.class)
     public ResponseEntity&lt;Object&gt; handleInactiveAccountException(InactiveAccountException ex) {
-<span class="fc" id="L357">        log.warn(ex.getMessage());</span>
+<span class="fc" id="L369">        log.warn(ex.getMessage());</span>
 
-<span class="fc" id="L359">        return ResponseEntity</span>
-<span class="fc" id="L360">                .status(HttpStatus.UNAUTHORIZED)</span>
-<span class="fc" id="L361">                .body(Map.of(</span>
+<span class="fc" id="L371">        return ResponseEntity</span>
+<span class="fc" id="L372">                .status(HttpStatus.UNAUTHORIZED)</span>
+<span class="fc" id="L373">                .body(Map.of(</span>
                     &quot;error&quot;, &quot;Unauthorized&quot;,
-<span class="fc" id="L363">                    &quot;message&quot;, ex.getMessage()</span>
+<span class="fc" id="L375">                    &quot;message&quot;, ex.getMessage()</span>
                 ));
     }
 
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity&lt;Object&gt; handleBadCredentialsException(BadCredentialsException ex) {
-<span class="fc" id="L369">        log.warn(&quot;Authentication failed - invalid credentials&quot;);</span>
+<span class="fc" id="L381">        log.warn(&quot;Authentication failed - invalid credentials&quot;);</span>
 
-<span class="fc" id="L371">        return ResponseEntity</span>
-<span class="fc" id="L372">                .status(HttpStatus.UNAUTHORIZED)</span>
-<span class="fc" id="L373">                .body(Map.of(</span>
+<span class="fc" id="L383">        return ResponseEntity</span>
+<span class="fc" id="L384">                .status(HttpStatus.UNAUTHORIZED)</span>
+<span class="fc" id="L385">                .body(Map.of(</span>
                     &quot;error&quot;, &quot;Unauthorized&quot;,
                     &quot;message&quot;, &quot;Invalid email or password&quot;
                 ));
