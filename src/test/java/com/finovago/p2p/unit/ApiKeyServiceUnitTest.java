@@ -149,6 +149,23 @@ class ApiKeyServiceUnitTest {
     }
 
     @Test
+    void should_returnEmpty_when_merchantIsInactive() {
+        ApiKeyRepository repo = org.mockito.Mockito.mock(ApiKeyRepository.class);
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+        ApiKeyService service = new ApiKeyService(repo, encoder, CACHE_TTL_MINUTES);
+        Merchant merchant = merchant(42L);
+        merchant.setActive(false);
+        String secret = "the-secret";
+        ApiKey key = new ApiKey(merchant, "fovak_abc", encoder.encode(secret));
+
+        when(repo.findByKeyPrefix("fovak_abc")).thenReturn(Optional.of(key));
+
+        Optional<ApiKey> resolved = service.resolve("fovak_abc." + secret);
+
+        assertTrue(resolved.isEmpty());
+    }
+
+    @Test
     void should_returnEmpty_when_presentedKeyIsMalformed() {
         ApiKeyRepository repo = org.mockito.Mockito.mock(ApiKeyRepository.class);
         ApiKeyService service = new ApiKeyService(repo, new BCryptPasswordEncoder(), CACHE_TTL_MINUTES);

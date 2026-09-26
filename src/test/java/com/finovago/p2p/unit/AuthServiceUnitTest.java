@@ -36,6 +36,7 @@ import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
 import com.finovago.p2p.dto.UserStatusResponse;
 import com.finovago.p2p.exception.InactiveAccountException;
+import com.finovago.p2p.exception.InvalidRefreshTokenException;
 import com.finovago.p2p.exception.OwnerPrivilegeRequiredException;
 import com.finovago.p2p.exception.SamePasswordException;
 import com.finovago.p2p.exception.SelfDeactivationException;
@@ -128,6 +129,19 @@ class AuthServiceUnitTest {
     }
 
     @Test
+    void should_throwBadCredentialsException_when_merchantDeactivated() {
+        Merchant merchant = merchant();
+        merchant.setActive(false);
+        User user = new User("client@example.com", "hashed", Role.MERCHANT, merchant);
+        LoginRequest request = new LoginRequest("client@example.com", "password123");
+
+        when(userRepository.findByEmail("client@example.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password123", "hashed")).thenReturn(true);
+
+        assertThrows(BadCredentialsException.class, () -> authService.login(request));
+    }
+
+    @Test
     void should_returnNewAuthResponse_when_refreshSucceeds() {
         User user = new User("client@example.com", "hashed", Role.MERCHANT, merchant());
         RefreshTokenRequest request = new RefreshTokenRequest("old-refresh-token");
@@ -140,6 +154,18 @@ class AuthServiceUnitTest {
 
         assertEquals("new-access-token", response.accessToken());
         assertEquals("new-refresh-token", response.refreshToken());
+    }
+
+    @Test
+    void should_throwInvalidRefreshTokenException_when_refreshMerchantDeactivated() {
+        Merchant merchant = merchant();
+        merchant.setActive(false);
+        User user = new User("client@example.com", "hashed", Role.MERCHANT, merchant);
+        RefreshTokenRequest request = new RefreshTokenRequest("old-refresh-token");
+
+        when(refreshTokenService.validateAndRotate("old-refresh-token")).thenReturn(user);
+
+        assertThrows(InvalidRefreshTokenException.class, () -> authService.refresh(request));
     }
 
     @Test
