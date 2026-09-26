@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import com.finovago.p2p.dto.ApiKeyInfoResponse;
 import com.finovago.p2p.dto.ApiKeyResponse;
 import com.finovago.p2p.dto.ApiKeyStatusResponse;
 import com.finovago.p2p.model.ApiKey;
@@ -98,6 +99,14 @@ public class ApiKeyService {
 
         log.info("API key {} revoked for merchantId: {}", key.getKeyPrefix(), merchant.getId());
         return new ApiKeyStatusResponse(key.getKeyPrefix(), false);
+    }
+
+    /** Read-only status for the merchant's key screen - never returns the secret, only the non-secret prefix. */
+    @Transactional(readOnly = true)
+    public ApiKeyInfoResponse getStatus(Merchant merchant) {
+        return apiKeyRepository.findByMerchant_Id(merchant.getId())
+                .map(key -> new ApiKeyInfoResponse(key.getKeyPrefix(), key.isActive(), key.getCreatedAt()))
+                .orElse(new ApiKeyInfoResponse(null, false, null));
     }
 
     /**
