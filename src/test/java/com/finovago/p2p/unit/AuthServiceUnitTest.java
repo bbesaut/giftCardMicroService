@@ -25,6 +25,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.finovago.p2p.dto.AddMerchantUserRequest;
+import com.finovago.p2p.dto.ApiKeyInfoResponse;
 import com.finovago.p2p.dto.ApiKeyResponse;
 import com.finovago.p2p.dto.ApiKeyStatusResponse;
 import com.finovago.p2p.dto.AuthResponse;
@@ -233,6 +234,31 @@ class AuthServiceUnitTest {
         ApiKeyStatusResponse response = authService.revokeApiKey(1L);
 
         assertEquals(expected, response);
+    }
+
+    @Test
+    void should_returnApiKeyStatusForOwnersMerchant_when_ownerRequestsIt() {
+        Merchant merchant = merchant();
+        User owner = owner(1L, merchant);
+        ApiKeyInfoResponse expected = new ApiKeyInfoResponse("fovak_abc", true, java.time.LocalDateTime.now());
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
+        when(apiKeyService.getStatus(merchant)).thenReturn(expected);
+
+        ApiKeyInfoResponse response = authService.getApiKeyStatus(1L);
+
+        assertEquals(expected, response);
+    }
+
+    @Test
+    void should_throwOwnerPrivilegeRequiredException_when_nonOwnerRequestsApiKeyStatus() {
+        Merchant merchant = merchant();
+        User employee = new User("employee@example.com", "hashed", Role.MERCHANT, merchant, false);
+        ReflectionTestUtils.setField(employee, "id", 2L);
+
+        when(userRepository.findById(2L)).thenReturn(Optional.of(employee));
+
+        assertThrows(OwnerPrivilegeRequiredException.class, () -> authService.getApiKeyStatus(2L));
     }
 
     @Test
