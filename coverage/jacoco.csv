@@ -14,6 +14,7 @@ p2p,com.finovago.p2p.dto,PagedResponse,0,32,0,0,0,7,0,2,0,2
 p2p,com.finovago.p2p.dto,LedgerEntryResponse,0,24,0,0,0,1,0,1,0,1
 p2p,com.finovago.p2p.dto,MerchantStatusResponse,0,12,0,0,0,1,0,1,0,1
 p2p,com.finovago.p2p.dto,ApiKeyStatusResponse,0,9,0,0,0,1,0,1,0,1
+p2p,com.finovago.p2p.dto,ApiKeyInfoResponse,0,12,0,0,0,1,0,1,0,1
 p2p,com.finovago.p2p.dto,RefundResponse,0,12,0,0,0,1,0,1,0,1
 p2p,com.finovago.p2p.dto,GiftCardCreateRequest,0,15,0,0,0,1,0,1,0,1
 p2p,com.finovago.p2p.dto,RateLimitCapacityResponse,0,9,0,0,0,1,0,1,0,1
@@ -72,7 +73,7 @@ p2p,com.finovago.p2p.controller,AdminMerchantController,0,127,0,2,0,22,0,10,0,9
 p2p,com.finovago.p2p.controller,PasswordResetController,0,31,0,0,0,10,0,4,0,4
 p2p,com.finovago.p2p.controller,HealthController,3,3,0,0,1,1,1,1,1,1
 p2p,com.finovago.p2p.controller,GiftCardController,103,127,0,0,13,18,5,7,5,7
-p2p,com.finovago.p2p.controller,AuthController,8,283,3,5,2,67,3,17,0,16
+p2p,com.finovago.p2p.controller,AuthController,8,291,3,5,2,68,3,18,0,17
 p2p,com.finovago.p2p.service,MerchantService,0,175,0,4,0,30,0,12,0,10
 p2p,com.finovago.p2p.service,LedgerService,0,89,0,2,0,20,0,9,0,8
 p2p,com.finovago.p2p.service,RefreshTokenService,7,176,0,4,2,43,0,12,0,10
@@ -81,8 +82,8 @@ p2p,com.finovago.p2p.service,GiftCardService,2,621,2,18,0,106,2,26,0,18
 p2p,com.finovago.p2p.service,IdempotencyKeyService,16,179,0,6,4,40,1,14,1,11
 p2p,com.finovago.p2p.service,UserService,0,26,0,0,0,6,0,3,0,3
 p2p,com.finovago.p2p.service,SmtpEmailSender,0,40,0,0,0,13,0,3,0,3
-p2p,com.finovago.p2p.service,ApiKeyService,0,247,0,14,0,53,0,18,0,11
-p2p,com.finovago.p2p.service,AuthService,22,595,6,42,4,110,6,37,0,19
+p2p,com.finovago.p2p.service,ApiKeyService,0,273,0,14,0,56,0,20,0,13
+p2p,com.finovago.p2p.service,AuthService,22,605,6,42,4,112,6,38,0,20
 p2p,com.finovago.p2p.service,GiftCardRefundService,0,224,0,6,0,40,0,9,0,6
 p2p,com.finovago.p2p.service,BrevoApiEmailSender,79,0,0,0,19,0,3,0,3,0
 p2p,com.finovago.p2p.service,ApiKeyService.new TransactionSynchronization() {...},7,9,0,0,2,1,1,1,1,1

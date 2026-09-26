@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AuthController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.controller</a> &gt; <span class="el_source">AuthController.java</span></div><h1>AuthController.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.controller;
 
 import com.finovago.p2p.dto.AddMerchantUserRequest;
+import com.finovago.p2p.dto.ApiKeyInfoResponse;
 import com.finovago.p2p.dto.ApiKeyResponse;
 import com.finovago.p2p.dto.ApiKeyStatusResponse;
 import com.finovago.p2p.dto.AuthResponse;
@@ -36,7 +37,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.annotation.*;
 
-<span class="fc" id="L39">@Slf4j</span>
+<span class="fc" id="L40">@Slf4j</span>
 @RestController
 @RequestMapping(&quot;/api/v1/auth&quot;)
 @Tag(name = &quot;Authentication&quot;, description = &quot;Authentication endpoints.&quot;)
@@ -45,10 +46,10 @@ public class AuthController {
     private final AuthService authService;
     private final CurrentUserContext currentUserContext;
 
-<span class="fc" id="L48">    public AuthController(AuthService authService, CurrentUserContext currentUserContext) {</span>
-<span class="fc" id="L49">        this.authService = authService;</span>
-<span class="fc" id="L50">        this.currentUserContext = currentUserContext;</span>
-<span class="fc" id="L51">    }</span>
+<span class="fc" id="L49">    public AuthController(AuthService authService, CurrentUserContext currentUserContext) {</span>
+<span class="fc" id="L50">        this.authService = authService;</span>
+<span class="fc" id="L51">        this.currentUserContext = currentUserContext;</span>
+<span class="fc" id="L52">    }</span>
 
     @Operation(
         summary = &quot;User login&quot;,
@@ -68,15 +69,15 @@ public class AuthController {
     })
     @PostMapping(&quot;/login&quot;)
     public ResponseEntity&lt;AuthResponse&gt; login(@Valid @RequestBody LoginRequest request) {
-<span class="fc" id="L71">        log.info(&quot;Login attempt for email: {}&quot;, sanitizeEmail(request.email()));</span>
+<span class="fc" id="L72">        log.info(&quot;Login attempt for email: {}&quot;, sanitizeEmail(request.email()));</span>
 
         try {
-<span class="fc" id="L74">            AuthResponse response = authService.login(request);</span>
-<span class="fc" id="L75">            log.info(&quot;Login successful for email: {}&quot;, sanitizeEmail(request.email()));</span>
-<span class="fc" id="L76">            return ResponseEntity.ok(response);</span>
-<span class="fc" id="L77">        } catch (BadCredentialsException e) {</span>
-<span class="fc" id="L78">            log.warn(&quot;Login failed - invalid credentials for email: {}&quot;, sanitizeEmail(request.email()));</span>
-<span class="fc" id="L79">            throw e;</span>
+<span class="fc" id="L75">            AuthResponse response = authService.login(request);</span>
+<span class="fc" id="L76">            log.info(&quot;Login successful for email: {}&quot;, sanitizeEmail(request.email()));</span>
+<span class="fc" id="L77">            return ResponseEntity.ok(response);</span>
+<span class="fc" id="L78">        } catch (BadCredentialsException e) {</span>
+<span class="fc" id="L79">            log.warn(&quot;Login failed - invalid credentials for email: {}&quot;, sanitizeEmail(request.email()));</span>
+<span class="fc" id="L80">            throw e;</span>
         }
     }
 
@@ -103,15 +104,15 @@ public class AuthController {
     })
     @PostMapping(&quot;/register&quot;)
     public ResponseEntity&lt;AuthResponse&gt; register(@Valid @RequestBody RegisterRequest request) {
-<span class="fc" id="L106">        log.info(&quot;Registration attempt for email: {}&quot;, sanitizeEmail(request.email()));</span>
+<span class="fc" id="L107">        log.info(&quot;Registration attempt for email: {}&quot;, sanitizeEmail(request.email()));</span>
 
         try {
-<span class="fc" id="L109">            AuthResponse response = authService.register(request);</span>
-<span class="fc" id="L110">            log.info(&quot;Registration successful for email: {}&quot;, sanitizeEmail(request.email()));</span>
-<span class="fc" id="L111">            return ResponseEntity.ok(response);</span>
-<span class="fc" id="L112">        } catch (UserAlreadyExistsException e) {</span>
-<span class="fc" id="L113">            log.warn(&quot;Registration failed - email already exists: {}&quot;, sanitizeEmail(request.email()));</span>
-<span class="fc" id="L114">            throw e;</span>
+<span class="fc" id="L110">            AuthResponse response = authService.register(request);</span>
+<span class="fc" id="L111">            log.info(&quot;Registration successful for email: {}&quot;, sanitizeEmail(request.email()));</span>
+<span class="fc" id="L112">            return ResponseEntity.ok(response);</span>
+<span class="fc" id="L113">        } catch (UserAlreadyExistsException e) {</span>
+<span class="fc" id="L114">            log.warn(&quot;Registration failed - email already exists: {}&quot;, sanitizeEmail(request.email()));</span>
+<span class="fc" id="L115">            throw e;</span>
         }
     }
 
@@ -137,7 +138,7 @@ public class AuthController {
     })
     @GetMapping(&quot;/me&quot;)
     public ResponseEntity&lt;CurrentUserResponse&gt; getCurrentUser() {
-<span class="fc" id="L140">        return ResponseEntity.ok(authService.getCurrentUser(currentUserContext.currentUserIdOrNull()));</span>
+<span class="fc" id="L141">        return ResponseEntity.ok(authService.getCurrentUser(currentUserContext.currentUserIdOrNull()));</span>
     }
 
     @Operation(
@@ -159,9 +160,31 @@ public class AuthController {
     })
     @PostMapping(&quot;/me/api-key&quot;)
     public ResponseEntity&lt;ApiKeyResponse&gt; generateApiKey() {
-<span class="fc" id="L162">        ApiKeyResponse response = authService.generateApiKey(currentUserContext.currentUserIdOrNull());</span>
-<span class="fc" id="L163">        log.info(&quot;API key generated/rotated via self-service&quot;);</span>
-<span class="fc" id="L164">        return ResponseEntity.ok(response);</span>
+<span class="fc" id="L163">        ApiKeyResponse response = authService.generateApiKey(currentUserContext.currentUserIdOrNull());</span>
+<span class="fc" id="L164">        log.info(&quot;API key generated/rotated via self-service&quot;);</span>
+<span class="fc" id="L165">        return ResponseEntity.ok(response);</span>
+    }
+
+    @Operation(
+        summary = &quot;Get my merchant's API key status&quot;,
+        description = &quot;Returns the current status of the caller's own merchant's API key (non-secret prefix, &quot;
+                    + &quot;whether it's active, and when it was created/last rotated), for the key-management screen &quot;
+                    + &quot;to render without any side effect - unlike POST /me/api-key (which generates or rotates) &quot;
+                    + &quot;or its /revoke counterpart. The secret itself is never returned here; it is only ever shown &quot;
+                    + &quot;once, in the response of POST /me/api-key. All fields are null/false if the merchant has no &quot;
+                    + &quot;key yet. Requires authentication (JWT token), MERCHANT role, and the caller must be that &quot;
+                    + &quot;merchant's owner.&quot;
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = &quot;200&quot;, description = &quot;Current API key status&quot;,
+            content = @Content(schema = @Schema(implementation = ApiKeyInfoResponse.class))),
+        @ApiResponse(responseCode = &quot;401&quot;, description = &quot;Missing or invalid JWT token&quot;),
+        @ApiResponse(responseCode = &quot;403&quot;, description = &quot;Insufficient permissions (caller must be the merchant's owner)&quot;),
+        @ApiResponse(responseCode = &quot;500&quot;, description = &quot;Internal server error&quot;)
+    })
+    @GetMapping(&quot;/me/api-key&quot;)
+    public ResponseEntity&lt;ApiKeyInfoResponse&gt; getApiKeyStatus() {
+<span class="fc" id="L187">        return ResponseEntity.ok(authService.getApiKeyStatus(currentUserContext.currentUserIdOrNull()));</span>
     }
 
     @Operation(
@@ -179,9 +202,9 @@ public class AuthController {
     })
     @PostMapping(&quot;/me/api-key/revoke&quot;)
     public ResponseEntity&lt;ApiKeyStatusResponse&gt; revokeApiKey() {
-<span class="fc" id="L182">        ApiKeyStatusResponse response = authService.revokeApiKey(currentUserContext.currentUserIdOrNull());</span>
-<span class="fc" id="L183">        log.info(&quot;API key revoked via self-service&quot;);</span>
-<span class="fc" id="L184">        return ResponseEntity.ok(response);</span>
+<span class="fc" id="L205">        ApiKeyStatusResponse response = authService.revokeApiKey(currentUserContext.currentUserIdOrNull());</span>
+<span class="fc" id="L206">        log.info(&quot;API key revoked via self-service&quot;);</span>
+<span class="fc" id="L207">        return ResponseEntity.ok(response);</span>
     }
 
     @Operation(
@@ -208,15 +231,15 @@ public class AuthController {
     })
     @PostMapping(&quot;/me/users&quot;)
     public ResponseEntity&lt;AuthResponse&gt; addUserToOwnMerchant(@Valid @RequestBody AddMerchantUserRequest request) {
-<span class="fc" id="L211">        log.info(&quot;Self-service add-user attempt for email: {}&quot;, sanitizeEmail(request.email()));</span>
+<span class="fc" id="L234">        log.info(&quot;Self-service add-user attempt for email: {}&quot;, sanitizeEmail(request.email()));</span>
 
         try {
-<span class="fc" id="L214">            AuthResponse response = authService.addUserToOwnMerchant(currentUserContext.currentUserIdOrNull(), request);</span>
-<span class="fc" id="L215">            log.info(&quot;Self-service user added successfully: {}&quot;, sanitizeEmail(request.email()));</span>
-<span class="fc" id="L216">            return ResponseEntity.ok(response);</span>
-<span class="fc" id="L217">        } catch (UserAlreadyExistsException | OwnerPrivilegeRequiredException e) {</span>
-<span class="fc" id="L218">            log.warn(&quot;Self-service add-user failed: {}&quot;, e.getMessage());</span>
-<span class="fc" id="L219">            throw e;</span>
+<span class="fc" id="L237">            AuthResponse response = authService.addUserToOwnMerchant(currentUserContext.currentUserIdOrNull(), request);</span>
+<span class="fc" id="L238">            log.info(&quot;Self-service user added successfully: {}&quot;, sanitizeEmail(request.email()));</span>
+<span class="fc" id="L239">            return ResponseEntity.ok(response);</span>
+<span class="fc" id="L240">        } catch (UserAlreadyExistsException | OwnerPrivilegeRequiredException e) {</span>
+<span class="fc" id="L241">            log.warn(&quot;Self-service add-user failed: {}&quot;, e.getMessage());</span>
+<span class="fc" id="L242">            throw e;</span>
         }
     }
 
@@ -236,9 +259,9 @@ public class AuthController {
     })
     @GetMapping(&quot;/me/users&quot;)
     public ResponseEntity&lt;List&lt;MerchantUserResponse&gt;&gt; listMyUsers() {
-<span class="fc" id="L239">        List&lt;MerchantUserResponse&gt; response = authService.listMyUsers(currentUserContext.currentUserIdOrNull());</span>
-<span class="fc" id="L240">        log.info(&quot;Listed {} users via self-service&quot;, response.size());</span>
-<span class="fc" id="L241">        return ResponseEntity.ok(response);</span>
+<span class="fc" id="L262">        List&lt;MerchantUserResponse&gt; response = authService.listMyUsers(currentUserContext.currentUserIdOrNull());</span>
+<span class="fc" id="L263">        log.info(&quot;Listed {} users via self-service&quot;, response.size());</span>
+<span class="fc" id="L264">        return ResponseEntity.ok(response);</span>
     }
 
     @Operation(
@@ -259,7 +282,7 @@ public class AuthController {
     })
     @PostMapping(&quot;/me/users/{userId}/deactivate&quot;)
     public ResponseEntity&lt;UserStatusResponse&gt; deactivateUser(@PathVariable Long userId) {
-<span class="fc" id="L262">        return setUserActive(userId, false);</span>
+<span class="fc" id="L285">        return setUserActive(userId, false);</span>
     }
 
     @Operation(
@@ -277,17 +300,17 @@ public class AuthController {
     })
     @PostMapping(&quot;/me/users/{userId}/activate&quot;)
     public ResponseEntity&lt;UserStatusResponse&gt; activateUser(@PathVariable Long userId) {
-<span class="fc" id="L280">        return setUserActive(userId, true);</span>
+<span class="fc" id="L303">        return setUserActive(userId, true);</span>
     }
 
     private ResponseEntity&lt;UserStatusResponse&gt; setUserActive(Long userId, boolean active) {
         try {
-<span class="fc" id="L285">            UserStatusResponse response = authService.setUserActive(currentUserContext.currentUserIdOrNull(), userId, active);</span>
-<span class="fc bfc" id="L286" title="All 2 branches covered.">            log.info(&quot;User {} {} via self-service&quot;, userId, active ? &quot;reactivated&quot; : &quot;deactivated&quot;);</span>
-<span class="fc" id="L287">            return ResponseEntity.ok(response);</span>
-<span class="fc" id="L288">        } catch (OwnerPrivilegeRequiredException | SelfDeactivationException | UserNotFoundException e) {</span>
-<span class="fc" id="L289">            log.warn(&quot;Self-service set-active failed for userId {}: {}&quot;, userId, e.getMessage());</span>
-<span class="fc" id="L290">            throw e;</span>
+<span class="fc" id="L308">            UserStatusResponse response = authService.setUserActive(currentUserContext.currentUserIdOrNull(), userId, active);</span>
+<span class="fc bfc" id="L309" title="All 2 branches covered.">            log.info(&quot;User {} {} via self-service&quot;, userId, active ? &quot;reactivated&quot; : &quot;deactivated&quot;);</span>
+<span class="fc" id="L310">            return ResponseEntity.ok(response);</span>
+<span class="fc" id="L311">        } catch (OwnerPrivilegeRequiredException | SelfDeactivationException | UserNotFoundException e) {</span>
+<span class="fc" id="L312">            log.warn(&quot;Self-service set-active failed for userId {}: {}&quot;, userId, e.getMessage());</span>
+<span class="fc" id="L313">            throw e;</span>
         }
     }
 
@@ -317,12 +340,12 @@ public class AuthController {
     @PostMapping(&quot;/me/password&quot;)
     public ResponseEntity&lt;Void&gt; changePassword(@Valid @RequestBody ChangePasswordRequest request) {
         try {
-<span class="fc" id="L320">            authService.changePassword(currentUserContext.currentUserIdOrNull(), request);</span>
-<span class="fc" id="L321">            log.info(&quot;Password changed via self-service&quot;);</span>
-<span class="fc" id="L322">            return ResponseEntity.noContent().build();</span>
-<span class="fc" id="L323">        } catch (BadCredentialsException | SamePasswordException | ServiceAccountNotAllowedException e) {</span>
-<span class="fc" id="L324">            log.warn(&quot;Self-service password change failed: {}&quot;, e.getMessage());</span>
-<span class="fc" id="L325">            throw e;</span>
+<span class="fc" id="L343">            authService.changePassword(currentUserContext.currentUserIdOrNull(), request);</span>
+<span class="fc" id="L344">            log.info(&quot;Password changed via self-service&quot;);</span>
+<span class="fc" id="L345">            return ResponseEntity.noContent().build();</span>
+<span class="fc" id="L346">        } catch (BadCredentialsException | SamePasswordException | ServiceAccountNotAllowedException e) {</span>
+<span class="fc" id="L347">            log.warn(&quot;Self-service password change failed: {}&quot;, e.getMessage());</span>
+<span class="fc" id="L348">            throw e;</span>
         }
     }
 
@@ -343,15 +366,15 @@ public class AuthController {
     })
     @PostMapping(&quot;/refresh&quot;)
     public ResponseEntity&lt;AuthResponse&gt; refresh(@Valid @RequestBody RefreshTokenRequest request) {
-<span class="fc" id="L346">        log.debug(&quot;Refresh token attempt&quot;);</span>
+<span class="fc" id="L369">        log.debug(&quot;Refresh token attempt&quot;);</span>
 
         try {
-<span class="fc" id="L349">            AuthResponse response = authService.refresh(request);</span>
-<span class="fc" id="L350">            log.info(&quot;Token refreshed successfully&quot;);</span>
-<span class="fc" id="L351">            return ResponseEntity.ok(response);</span>
-<span class="fc" id="L352">        } catch (Exception e) {</span>
-<span class="fc" id="L353">            log.warn(&quot;Refresh failed: {}&quot;, e.getMessage());</span>
-<span class="fc" id="L354">            throw e;</span>
+<span class="fc" id="L372">            AuthResponse response = authService.refresh(request);</span>
+<span class="fc" id="L373">            log.info(&quot;Token refreshed successfully&quot;);</span>
+<span class="fc" id="L374">            return ResponseEntity.ok(response);</span>
+<span class="fc" id="L375">        } catch (Exception e) {</span>
+<span class="fc" id="L376">            log.warn(&quot;Refresh failed: {}&quot;, e.getMessage());</span>
+<span class="fc" id="L377">            throw e;</span>
         }
     }
 
@@ -372,24 +395,24 @@ public class AuthController {
     @PostMapping(&quot;/logout&quot;)
     public ResponseEntity&lt;Void&gt; logout(@Valid @RequestBody RefreshTokenRequest request) {
         try {
-<span class="fc" id="L375">            authService.logout(request);</span>
-<span class="fc" id="L376">            log.info(&quot;User logged out successfully&quot;);</span>
-<span class="fc" id="L377">            return ResponseEntity.noContent().build();</span>
-<span class="fc" id="L378">        } catch (Exception e) {</span>
-<span class="fc" id="L379">            log.warn(&quot;Logout failed: {}&quot;, e.getMessage());</span>
-<span class="fc" id="L380">            throw e;</span>
+<span class="fc" id="L398">            authService.logout(request);</span>
+<span class="fc" id="L399">            log.info(&quot;User logged out successfully&quot;);</span>
+<span class="fc" id="L400">            return ResponseEntity.noContent().build();</span>
+<span class="fc" id="L401">        } catch (Exception e) {</span>
+<span class="fc" id="L402">            log.warn(&quot;Logout failed: {}&quot;, e.getMessage());</span>
+<span class="fc" id="L403">            throw e;</span>
         }
     }
 
     private String sanitizeEmail(String email) {
-<span class="pc bpc" id="L385" title="2 of 4 branches missed.">        if (email == null || email.length() &lt; 3) {</span>
-<span class="nc" id="L386">            return &quot;***&quot;;</span>
+<span class="pc bpc" id="L408" title="2 of 4 branches missed.">        if (email == null || email.length() &lt; 3) {</span>
+<span class="nc" id="L409">            return &quot;***&quot;;</span>
         }
-<span class="fc" id="L388">        int atIndex = email.indexOf('@');</span>
-<span class="pc bpc" id="L389" title="1 of 2 branches missed.">        if (atIndex &lt;= 1) {</span>
-<span class="nc" id="L390">            return email.substring(0, 1) + &quot;***&quot;;</span>
+<span class="fc" id="L411">        int atIndex = email.indexOf('@');</span>
+<span class="pc bpc" id="L412" title="1 of 2 branches missed.">        if (atIndex &lt;= 1) {</span>
+<span class="nc" id="L413">            return email.substring(0, 1) + &quot;***&quot;;</span>
         }
-<span class="fc" id="L392">        return email.substring(0, 1) + &quot;***&quot; + email.substring(atIndex);</span>
+<span class="fc" id="L415">        return email.substring(0, 1) + &quot;***&quot; + email.substring(atIndex);</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
