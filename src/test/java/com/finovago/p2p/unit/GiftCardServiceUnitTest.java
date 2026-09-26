@@ -40,6 +40,7 @@ import com.finovago.p2p.dto.RedemptionRequest;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.exception.ExpiredGiftCardException;
 import com.finovago.p2p.exception.InactiveGiftCardException;
+import com.finovago.p2p.exception.MerchantNotFoundException;
 import com.finovago.p2p.exception.UnknownGiftCardException;
 import com.finovago.p2p.model.GiftCard;
 import com.finovago.p2p.model.LedgerEntry;
@@ -342,36 +343,6 @@ class GiftCardServiceUnitTest
     }
 
     @Test
-    void should_list_cards_across_all_merchants_when_caller_is_admin()
-    {
-        when(currentUserContext.isAdmin()).thenReturn(true);
-        GiftCard cardA = new GiftCard(merchant, "GC-A", BigDecimal.valueOf(100.0), true, LocalDate.now().plusDays(30));
-        GiftCard cardB = new GiftCard(merchant, "GC-B", BigDecimal.valueOf(200.0), true, LocalDate.now().plusDays(30));
-        when(giftCardRepository.findAll()).thenReturn(List.of(cardA, cardB));
-
-        List<GiftCardResponse> response = giftCardService.getAllGiftCards();
-
-        assertEquals(2, response.size());
-        assertEquals("GC-A", response.get(0).giftCardCode());
-        assertEquals("GC-B", response.get(1).giftCardCode());
-        verify(giftCardRepository, never()).findAllByMerchantId(any());
-    }
-
-    @Test
-    void should_list_only_own_cards_when_caller_is_merchant()
-    {
-        when(currentUserContext.isAdmin()).thenReturn(false);
-        GiftCard card = new GiftCard(merchant, "GC-OWN", BigDecimal.valueOf(50.0), true, LocalDate.now().plusDays(30));
-        when(giftCardRepository.findAllByMerchantId(MERCHANT_ID)).thenReturn(List.of(card));
-
-        List<GiftCardResponse> response = giftCardService.getAllGiftCards();
-
-        assertEquals(1, response.size());
-        assertEquals("GC-OWN", response.get(0).giftCardCode());
-        verify(giftCardRepository, never()).findAll();
-    }
-
-    @Test
     void getMyGiftCards_mapsRepositoryPageIntoPagedResponse() {
         GiftCard cardA = new GiftCard(merchant, "GC-A", BigDecimal.valueOf(100.0), true, LocalDate.now().plusDays(30));
         GiftCard cardB = new GiftCard(merchant, "GC-B", BigDecimal.valueOf(200.0), false, LocalDate.now().plusDays(60));
@@ -411,5 +382,33 @@ class GiftCardServiceUnitTest
         assertEquals(Sort.Direction.DESC, orders.get(0).getDirection());
         assertEquals("id", orders.get(1).getProperty());
         assertEquals(Sort.Direction.ASC, orders.get(1).getDirection());
+    }
+
+    @Test
+    void getGiftCardsForMerchant_mapsRepositoryPageForTheGivenMerchant_notTheCaller() {
+        Long otherMerchantId = 2L;
+        when(merchantRepository.existsById(otherMerchantId)).thenReturn(true);
+        GiftCard card = new GiftCard(merchant, "GC-OTHER", BigDecimal.valueOf(75.0), true, LocalDate.now().plusDays(30));
+        Page<GiftCard> repositoryPage = new PageImpl<>(List.of(card), PageRequest.of(0, 20), 1);
+        when(giftCardRepository.findAll(ArgumentMatchers.<Specification<GiftCard>>any(), any(Pageable.class)))
+                .thenReturn(repositoryPage);
+
+        PagedResponse<GiftCardResponse> response = giftCardService.getGiftCardsForMerchant(
+                otherMerchantId, null, null, 0, 20, GiftCardSortField.CARD_CODE, Sort.Direction.ASC);
+
+        assertEquals(1, response.content().size());
+        assertEquals("GC-OTHER", response.content().get(0).giftCardCode());
+        assertEquals(otherMerchantId, response.content().get(0).merchantId());
+        verify(currentUserContext, never()).currentMerchantId();
+    }
+
+    @Test
+    void getGiftCardsForMerchant_throwsMerchantNotFound_when_merchantDoesNotExist() {
+        Long unknownMerchantId = 999L;
+        when(merchantRepository.existsById(unknownMerchantId)).thenReturn(false);
+
+        assertThrows(MerchantNotFoundException.class, () -> giftCardService.getGiftCardsForMerchant(
+                unknownMerchantId, null, null, 0, 20, GiftCardSortField.CARD_CODE, Sort.Direction.ASC));
+        verify(giftCardRepository, never()).findAll(ArgumentMatchers.<Specification<GiftCard>>any(), any(Pageable.class));
     }
 }

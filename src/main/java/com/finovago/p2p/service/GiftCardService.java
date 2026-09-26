@@ -1,7 +1,6 @@
 package com.finovago.p2p.service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -26,6 +25,7 @@ import com.finovago.p2p.dto.LedgerEntryResponse;
 import com.finovago.p2p.dto.PagedResponse;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.dto.RedemptionRequest;
+import com.finovago.p2p.exception.MerchantNotFoundException;
 import com.finovago.p2p.exception.UnknownGiftCardException;
 import com.finovago.p2p.model.GiftCard;
 import com.finovago.p2p.model.LedgerEntry;
@@ -175,26 +175,32 @@ public class GiftCardService {
     }
 
     @Transactional(readOnly = true)
-    public List<GiftCardResponse> getAllGiftCards() {
-        log.info("Fetching all gift cards from database");
-
-        List<GiftCard> cards = currentUserContext.isAdmin()
-                ? giftCardRepository.findAll()
-                : giftCardRepository.findAllByMerchantId(currentUserContext.currentMerchantId());
-
-        return cards
-                .stream()
-                .map(card -> new GiftCardResponse(card.getCardCode(), card.getBalance(), card.isActive(), card.getExpirationDate(), card.getMerchant().getId()))
-                .toList();
-    }
-
-    @Transactional(readOnly = true)
     public PagedResponse<GiftCardResponse> getMyGiftCards(Boolean active, String code, int page, int size, GiftCardSortField sortBy, Sort.Direction sortDirection) {
         Long merchantId = currentUserContext.currentMerchantId();
 
         log.info("Listing gift cards for merchant {}. page={}, size={}, active={}, code={}", merchantId, page, size, active, code);
 
-        Specification<GiftCard> spec = Specification 
+        return listGiftCardsForMerchant(merchantId, active, code, page, size, sortBy, sortDirection);
+    }
+
+    /**
+     * ADMIN-side equivalent of getMyGiftCards: same pagination/filtering/sorting, but for an arbitrary
+     * merchant given by id rather than the caller's own - an ADMIN has no merchantId of its own to derive
+     * it from a JWT.
+     */
+    @Transactional(readOnly = true)
+    public PagedResponse<GiftCardResponse> getGiftCardsForMerchant(Long merchantId, Boolean active, String code, int page, int size, GiftCardSortField sortBy, Sort.Direction sortDirection) {
+        if (!merchantRepository.existsById(merchantId)) {
+            throw new MerchantNotFoundException("Merchant not found: " + merchantId);
+        }
+
+        log.info("Listing gift cards for merchant {} via admin. page={}, size={}, active={}, code={}", merchantId, page, size, active, code);
+
+        return listGiftCardsForMerchant(merchantId, active, code, page, size, sortBy, sortDirection);
+    }
+
+    private PagedResponse<GiftCardResponse> listGiftCardsForMerchant(Long merchantId, Boolean active, String code, int page, int size, GiftCardSortField sortBy, Sort.Direction sortDirection) {
+        Specification<GiftCard> spec = Specification
                 .where(GiftCardSpecifications.belongsToMerchant(merchantId))
                 .and(GiftCardSpecifications.hasActive(active))
                 .and(GiftCardSpecifications.codeContains(code)); // Object that builds the WHERE (standart for ORM filtering)
@@ -204,7 +210,7 @@ public class GiftCardService {
         // be skipped or repeated between two page requests depending on how Postgres happens to
         // order ties internally.
         Sort sort = Sort.by(sortDirection, sortBy.getPropertyName()).and(Sort.by("id")); // Object that builds the ORDER BY, (here sort by the param and his direction, AND always id (tie-breaker) to avoid to see one line twice or maybe never)
-        Pageable pageable = PageRequest.of(page, size, sort); // object that groups the controller's page, size, and the sort object we built) (interface) 
+        Pageable pageable = PageRequest.of(page, size, sort); // object that groups the controller's page, size, and the sort object we built) (interface)
 
         Page<GiftCard> result = giftCardRepository.findAll(spec, pageable); // now get the result with our spec object and our pageable object
 

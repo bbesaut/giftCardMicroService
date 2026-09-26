@@ -1,5 +1,4 @@
 package com.finovago.p2p.repository;
-import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -13,7 +12,6 @@ import com.finovago.p2p.model.GiftCard;
 
 public interface GiftCardRepository extends JpaRepository<GiftCard, Long>, JpaSpecificationExecutor<GiftCard> {
     Optional<GiftCard> findByMerchantIdAndCardCode(Long merchantId, String cardCode);
-    List<GiftCard> findAllByMerchantId(Long merchantId);
 
     // Locks the gift card row for the duration of the transaction; used by reserve/capture to
     // serialize concurrent hold operations against the same card's balance.
