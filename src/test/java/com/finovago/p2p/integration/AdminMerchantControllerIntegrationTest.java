@@ -6,6 +6,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +22,7 @@ import com.finovago.p2p.AbstractIntegrationTest;
 import com.finovago.p2p.config.PostgresTestcontainerInitializer;
 import com.finovago.p2p.dto.ApiKeyResponse;
 import com.finovago.p2p.dto.AuthResponse;
+import com.finovago.p2p.model.GiftCard;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.model.Role;
 import com.finovago.p2p.model.User;
@@ -41,6 +45,8 @@ class AdminMerchantControllerIntegrationTest extends AbstractIntegrationTest {
     private static final String OWNER_EMAIL = "ownerA@example.com";
     private static final String EMPLOYEE_EMAIL = "employeeA@example.com";
 
+    private Merchant merchantA;
+    private Merchant merchantB;
     private Long merchantAId;
     private Long merchantBId;
 
@@ -77,8 +83,8 @@ class AdminMerchantControllerIntegrationTest extends AbstractIntegrationTest {
         giftCardRepository.deleteAll();
         merchantRepository.deleteAll();
 
-        Merchant merchantA = merchantRepository.save(new Merchant("Merchant A", "a@example.com"));
-        Merchant merchantB = merchantRepository.save(new Merchant("Merchant B", "b@example.com"));
+        merchantA = merchantRepository.save(new Merchant("Merchant A", "a@example.com"));
+        merchantB = merchantRepository.save(new Merchant("Merchant B", "b@example.com"));
         merchantAId = merchantA.getId();
         merchantBId = merchantB.getId();
 
@@ -156,6 +162,57 @@ class AdminMerchantControllerIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(get("/api/v1/admin/merchants/" + merchantAId + "/users").header(AUTHORIZATION, "Bearer " + ownerToken))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void should_listMerchantGiftCards_scopedToThatMerchantOnly_when_callerIsAdmin() throws Exception {
+        giftCardRepository.save(new GiftCard(merchantA, "GC-A1", BigDecimal.valueOf(100.0), true, LocalDate.now().plusYears(1)));
+        giftCardRepository.save(new GiftCard(merchantA, "GC-A2", BigDecimal.valueOf(50.0), true, LocalDate.now().plusYears(1)));
+        giftCardRepository.save(new GiftCard(merchantB, "GC-B1", BigDecimal.valueOf(999.0), true, LocalDate.now().plusYears(1)));
+        String adminToken = loginAndGetAccessToken(ADMIN_EMAIL);
+
+        mockMvc.perform(get("/api/v1/admin/merchants/" + merchantAId + "/giftcards").header(AUTHORIZATION, "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.content[0].giftCardCode").value("GC-A1"))
+                .andExpect(jsonPath("$.content[0].merchantId").value(merchantAId))
+                .andExpect(jsonPath("$.content[1].giftCardCode").value("GC-A2"));
+    }
+
+    @Test
+    void should_filterMerchantGiftCardsByActiveStatus_when_callerIsAdmin() throws Exception {
+        giftCardRepository.save(new GiftCard(merchantA, "GC-ACTIVE", BigDecimal.valueOf(100.0), true, LocalDate.now().plusYears(1)));
+        giftCardRepository.save(new GiftCard(merchantA, "GC-INACTIVE", BigDecimal.valueOf(50.0), false, LocalDate.now().plusYears(1)));
+        String adminToken = loginAndGetAccessToken(ADMIN_EMAIL);
+
+        mockMvc.perform(get("/api/v1/admin/merchants/" + merchantAId + "/giftcards")
+                        .param("active", "true")
+                        .header(AUTHORIZATION, "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].giftCardCode").value("GC-ACTIVE"));
+    }
+
+    @Test
+    void should_returnNotFound_when_listingGiftCardsOfUnknownMerchant() throws Exception {
+        String adminToken = loginAndGetAccessToken(ADMIN_EMAIL);
+
+        mockMvc.perform(get("/api/v1/admin/merchants/999999/giftcards").header(AUTHORIZATION, "Bearer " + adminToken))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void should_returnForbidden_when_nonAdminListsMerchantGiftCards() throws Exception {
+        String ownerToken = loginAndGetAccessToken(OWNER_EMAIL);
+
+        mockMvc.perform(get("/api/v1/admin/merchants/" + merchantAId + "/giftcards").header(AUTHORIZATION, "Bearer " + ownerToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void should_returnUnauthorized_when_listingMerchantGiftCardsWithoutToken() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/merchants/" + merchantAId + "/giftcards"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
