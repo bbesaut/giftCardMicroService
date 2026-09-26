@@ -5,6 +5,8 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -13,7 +15,15 @@ import com.finovago.p2p.model.LedgerEntry;
 
 public interface LedgerEntryRepository extends JpaRepository<LedgerEntry, Long> {
 
+    // Full unpaginated history for a card, oldest first - used directly by integration tests to
+    // assert business outcomes (balance progression, entry sequencing) without going through the
+    // paginated /ledger endpoint. Keep this even though LedgerService's own callers use the
+    // paginated finder below instead.
     List<LedgerEntry> findByGiftCardIdOrderByCreatedAtAsc(Long giftCardId);
+
+    // Ordering is applied by the caller's Pageable (chronological, oldest first - see
+    // LedgerService#getEntriesForCard), not baked into this method name.
+    Page<LedgerEntry> findByGiftCardId(Long giftCardId, Pageable pageable);
 
     // Scoped by giftCardId + merchantId so a refund can only ever target an entry that belongs to
     // the caller's own tenant, not merely an entry id that happens to exist somewhere in the table.

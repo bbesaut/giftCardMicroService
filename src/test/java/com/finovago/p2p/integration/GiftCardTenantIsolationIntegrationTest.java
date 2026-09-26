@@ -192,11 +192,71 @@ class GiftCardTenantIsolationIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(get("/api/v1/giftcards/" + SHARED_CODE + "/ledger")
                         .header(AUTHORIZATION, "Bearer " + merchantAToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2))
-                .andExpect(jsonPath("$[0].entryType").value("CREATION"))
-                .andExpect(jsonPath("$[0].balanceAfter").value(100.0))
-                .andExpect(jsonPath("$[1].entryType").value("REDEMPTION"))
-                .andExpect(jsonPath("$[1].balanceAfter").value(90.0));
+                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.content[0].entryType").value("CREATION"))
+                .andExpect(jsonPath("$.content[0].balanceAfter").value(100.0))
+                .andExpect(jsonPath("$.content[1].entryType").value("REDEMPTION"))
+                .andExpect(jsonPath("$.content[1].balanceAfter").value(90.0))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.totalPages").value(1));
+    }
+
+    @Test
+    void should_paginateLedgerHistory_whenSizeSmallerThanEntryCount() throws Exception {
+        mockMvc.perform(post("/api/v1/giftcards/create")
+                        .header(AUTHORIZATION, "Bearer " + merchantAToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"giftCardCode\":\"" + SHARED_CODE + "\",\"balance\":100.0,\"active\":true}"))
+                .andExpect(status().isCreated());
+
+        MvcResult redeemResult = mockMvc.perform(post("/api/v1/giftcards/redeem")
+                        .header(AUTHORIZATION, "Bearer " + merchantAToken)
+                        .header("Idempotency-Key", java.util.UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"giftCardCode\":\"" + SHARED_CODE + "\",\"amount\":10.0}"))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        mockMvc.perform(asyncDispatch(redeemResult)).andExpect(status().isAccepted());
+
+        // Two entries exist (CREATION, REDEMPTION); size=1 forces two pages - proves page boundaries
+        // are respected, not just that pagination metadata is echoed back unused.
+        mockMvc.perform(get("/api/v1/giftcards/" + SHARED_CODE + "/ledger")
+                        .header(AUTHORIZATION, "Bearer " + merchantAToken)
+                        .param("page", "0")
+                        .param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].entryType").value("CREATION"))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(1))
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.totalPages").value(2));
+
+        mockMvc.perform(get("/api/v1/giftcards/" + SHARED_CODE + "/ledger")
+                        .header(AUTHORIZATION, "Bearer " + merchantAToken)
+                        .param("page", "1")
+                        .param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].entryType").value("REDEMPTION"))
+                .andExpect(jsonPath("$.page").value(1))
+                .andExpect(jsonPath("$.totalPages").value(2));
+    }
+
+    @Test
+    void should_rejectLedgerRequest_whenSizeExceedsMax() throws Exception {
+        mockMvc.perform(post("/api/v1/giftcards/create")
+                        .header(AUTHORIZATION, "Bearer " + merchantAToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"giftCardCode\":\"" + SHARED_CODE + "\",\"balance\":100.0,\"active\":true}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/giftcards/" + SHARED_CODE + "/ledger")
+                        .header(AUTHORIZATION, "Bearer " + merchantAToken)
+                        .param("size", "101"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

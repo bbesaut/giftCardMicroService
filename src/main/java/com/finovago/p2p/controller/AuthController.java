@@ -7,6 +7,7 @@ import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.dto.ChangePasswordRequest;
 import com.finovago.p2p.dto.CurrentUserResponse;
 import com.finovago.p2p.dto.LoginRequest;
+import com.finovago.p2p.dto.MerchantUserResponse;
 import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
 import com.finovago.p2p.dto.UserStatusResponse;
@@ -20,6 +21,7 @@ import com.finovago.p2p.security.CurrentUserContext;
 import com.finovago.p2p.service.AuthService;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -27,6 +29,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
+
+import java.util.List;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -214,6 +218,27 @@ public class AuthController {
             log.warn("Self-service add-user failed: {}", e.getMessage());
             throw e;
         }
+    }
+
+    @Operation(
+        summary = "List my own merchant's users",
+        description = "Lets the caller's own merchant owner list every human user account under their merchant "
+                    + "(including themselves), to build a team-management page (list + create + activate/deactivate). "
+                    + "Not paginated - a merchant's employee headcount is small by nature. Requires authentication "
+                    + "(JWT token), MERCHANT role, and the caller must be that merchant's owner."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Users of the caller's merchant",
+            content = @Content(array = @ArraySchema(schema = @Schema(implementation = MerchantUserResponse.class)))),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token"),
+        @ApiResponse(responseCode = "403", description = "Insufficient permissions (caller must be the merchant's owner)"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @GetMapping("/me/users")
+    public ResponseEntity<List<MerchantUserResponse>> listMyUsers() {
+        List<MerchantUserResponse> response = authService.listMyUsers(currentUserContext.currentUserIdOrNull());
+        log.info("Listed {} users via self-service", response.size());
+        return ResponseEntity.ok(response);
     }
 
     @Operation(

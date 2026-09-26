@@ -12,6 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -23,10 +24,18 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.GiftCardResponse;
+import com.finovago.p2p.dto.GiftCardSortField;
 import com.finovago.p2p.dto.LedgerEntryResponse;
+import com.finovago.p2p.dto.PagedResponse;
 import com.finovago.p2p.dto.RedemptionRequest;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.exception.ExpiredGiftCardException;
@@ -278,19 +287,48 @@ class GiftCardServiceUnitTest
 
         when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.of(giftCard));
         List<LedgerEntry> entries = List.of(creation, redemption);
-        when(ledgerService.getEntriesForCard(giftCard.getId())).thenReturn(entries);
+        Page<LedgerEntry> repositoryPage = new PageImpl<>(entries, PageRequest.of(0, 20), 2);
+        when(ledgerService.getEntriesForCard(eq(giftCard.getId()), any(Pageable.class))).thenReturn(repositoryPage);
         when(ledgerService.resolveActors(entries)).thenReturn(java.util.Map.of(7L, "merchant@example.com"));
 
-        List<LedgerEntryResponse> response = giftCardService.getLedger(cardCode);
+        PagedResponse<LedgerEntryResponse> response = giftCardService.getLedger(cardCode, 0, 20);
 
-        assertEquals(2, response.size());
-        assertEquals("CREATION", response.get(0).entryType());
-        assertMoneyEquals(new BigDecimal("100.00"), response.get(0).amount());
-        assertEquals("merchant@example.com", response.get(0).actor());
-        assertEquals("REDEMPTION", response.get(1).entryType());
-        assertMoneyEquals(new BigDecimal("30.00"), response.get(1).amount());
-        assertMoneyEquals(new BigDecimal("70.00"), response.get(1).balanceAfter());
-        assertEquals("Unknown", response.get(1).actor());
+        assertEquals(2, response.content().size());
+        assertEquals("CREATION", response.content().get(0).entryType());
+        assertMoneyEquals(new BigDecimal("100.00"), response.content().get(0).amount());
+        assertEquals("merchant@example.com", response.content().get(0).actor());
+        assertEquals("REDEMPTION", response.content().get(1).entryType());
+        assertMoneyEquals(new BigDecimal("30.00"), response.content().get(1).amount());
+        assertMoneyEquals(new BigDecimal("70.00"), response.content().get(1).balanceAfter());
+        assertEquals("Unknown", response.content().get(1).actor());
+        assertEquals(0, response.page());
+        assertEquals(20, response.size());
+        assertEquals(2, response.totalElements());
+        assertEquals(1, response.totalPages());
+    }
+
+    @Test
+    void should_buildPageableWithChronologicalOrderAndIdTiebreaker_onGetLedger()
+    {
+        String cardCode = "LEDGER123";
+        GiftCard giftCard = new GiftCard(merchant, cardCode, BigDecimal.valueOf(70.0), true, LocalDate.now().plusDays(30));
+        when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.of(giftCard));
+        when(ledgerService.getEntriesForCard(eq(giftCard.getId()), any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+
+        giftCardService.getLedger(cardCode, 2, 5);
+
+        verify(ledgerService).getEntriesForCard(eq(giftCard.getId()), pageableCaptor.capture());
+        Pageable pageable = pageableCaptor.getValue();
+
+        assertEquals(2, pageable.getPageNumber());
+        assertEquals(5, pageable.getPageSize());
+        List<Sort.Order> orders = pageable.getSort().toList();
+        assertEquals(2, orders.size());
+        assertEquals("createdAt", orders.get(0).getProperty());
+        assertEquals(Sort.Direction.ASC, orders.get(0).getDirection());
+        assertEquals("id", orders.get(1).getProperty());
+        assertEquals(Sort.Direction.ASC, orders.get(1).getDirection());
     }
 
     @Test
@@ -299,8 +337,8 @@ class GiftCardServiceUnitTest
         String nonExistentCode = "NONEXISTENT";
         when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, nonExistentCode)).thenReturn(Optional.empty());
 
-        assertThrows(UnknownGiftCardException.class, () -> giftCardService.getLedger(nonExistentCode));
-        verify(ledgerService, never()).getEntriesForCard(any());
+        assertThrows(UnknownGiftCardException.class, () -> giftCardService.getLedger(nonExistentCode, 0, 20));
+        verify(ledgerService, never()).getEntriesForCard(any(), any());
     }
 
     @Test
@@ -331,5 +369,47 @@ class GiftCardServiceUnitTest
         assertEquals(1, response.size());
         assertEquals("GC-OWN", response.get(0).giftCardCode());
         verify(giftCardRepository, never()).findAll();
+    }
+
+    @Test
+    void getMyGiftCards_mapsRepositoryPageIntoPagedResponse() {
+        GiftCard cardA = new GiftCard(merchant, "GC-A", BigDecimal.valueOf(100.0), true, LocalDate.now().plusDays(30));
+        GiftCard cardB = new GiftCard(merchant, "GC-B", BigDecimal.valueOf(200.0), false, LocalDate.now().plusDays(60));
+        Page<GiftCard> repositoryPage = new PageImpl<>(List.of(cardA, cardB), PageRequest.of(1, 2), 37);
+
+        when(giftCardRepository.findAll(ArgumentMatchers.<Specification<GiftCard>>any(), any(Pageable.class)))
+                .thenReturn(repositoryPage);
+
+        PagedResponse<GiftCardResponse> response = giftCardService.getMyGiftCards(
+                null, null, 1, 2, GiftCardSortField.CARD_CODE, Sort.Direction.ASC);
+
+        assertEquals(2, response.content().size());
+        assertEquals("GC-A", response.content().get(0).giftCardCode());
+        assertEquals(MERCHANT_ID, response.content().get(0).merchantId());
+        assertEquals(1, response.page());
+        assertEquals(2, response.size());
+        assertEquals(37, response.totalElements());
+        assertEquals(19, response.totalPages()); // ceil(37/2)
+    }
+
+    @Test
+    void getMyGiftCards_buildsPageableWithRequestedSortAndIdTiebreaker() {
+        when(giftCardRepository.findAll(ArgumentMatchers.<Specification<GiftCard>>any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+
+        giftCardService.getMyGiftCards(true, "GC", 3, 10, GiftCardSortField.BALANCE, Sort.Direction.DESC);
+
+        verify(giftCardRepository).findAll(ArgumentMatchers.<Specification<GiftCard>>any(), pageableCaptor.capture());
+        Pageable pageable = pageableCaptor.getValue();
+
+        assertEquals(3, pageable.getPageNumber());
+        assertEquals(10, pageable.getPageSize());
+        List<Sort.Order> orders = pageable.getSort().toList();
+        assertEquals(2, orders.size());
+        assertEquals("balance", orders.get(0).getProperty());
+        assertEquals(Sort.Direction.DESC, orders.get(0).getDirection());
+        assertEquals("id", orders.get(1).getProperty());
+        assertEquals(Sort.Direction.ASC, orders.get(1).getDirection());
     }
 }

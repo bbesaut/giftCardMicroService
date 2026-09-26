@@ -34,6 +34,8 @@ Two Maven profiles for different workflows:
 - Requires: Docker installed and running
 - Best for: CI/CD pipelines, pre-deployment verification
 
+**Integration test cleanup order**: Testcontainers shares one Postgres container across the whole integration suite, so every `@BeforeEach setUp()` that wipes its own tables must delete children before parents - `gift_card`, `idempotency_key`, `refresh_token` and `user` all have a FK to `merchants`, so `merchantRepository.deleteAll()` fails with a FK violation if any of those still has rows (typically `idempotency_key`, since redeem/refund/credit tests create it via the `Idempotency-Key` header). This is easy to get wrong silently: it only breaks when some other test class that leaves rows behind happens to run before yours - already missed once in `GiftCardListIntegrationTest`. Copy the cleanup order from `GiftCardServiceIntegrationTest.setUp()` for any new integration test that touches merchants.
+
 ## 🗺️ Database Schema Diagram
 An up-to-date ER diagram is generated automatically by `.github/workflows/schema-diagram.yml` whenever a push to `develop` or `main` touches `src/main/resources/db/migration/**`. It spins up Postgres, applies Flyway migrations via the `flyway-maven-plugin` (see `pom.xml`), runs SchemaSpy against it, and publishes the result to GitHub Pages: https://bbesaut.github.io/giftCardMicroService/schema/
 
@@ -183,6 +185,22 @@ Content-Type: application/json
 - `409 Conflict`: Email already registered
 - `500 Internal Server Error`: Server error
 
+### GET /api/v1/auth/me/users
+**Description**: The caller's own merchant **owner** lists every human user account under their merchant (including themselves), to build a team-management page alongside `POST /me/users` (create) and activate/deactivate below. Not paginated - a merchant's employee headcount is small by nature, unlike gift cards. Requires authentication (MERCHANT role) and the caller must be that merchant's owner - otherwise `403`.
+
+**Response** (List of MerchantUserResponse - HTTP 200):
+```json
+[
+  { "userId": 1, "email": "owner@example.com", "owner": true, "active": true },
+  { "userId": 2, "email": "employee@example.com", "owner": false, "active": true }
+]
+```
+
+**Error Responses**:
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Caller is not the merchant's owner account
+- `500 Internal Server Error`: Server error
+
 ### POST /api/v1/auth/me/users/{userId}/deactivate
 ### POST /api/v1/auth/me/users/{userId}/activate
 **Description**: Disable/re-enable a human employee account under the caller's own merchant, e.g. as an emergency response to leaked credentials (re-enabling doesn't restore a new password, the old one still applies once reactivated). Not used for cutting API key access - that's `POST /me/api-key/revoke` instead. Caller must be that merchant's owner; deactivating requires target user to belong to the caller's merchant (`404` otherwise, tenant existence never leaked), and the owner cannot deactivate their own account (`409`). Deactivating a user also revokes all of its active refresh tokens (immediate logout on next refresh/login attempt).
@@ -323,6 +341,36 @@ Content-Type: application/json
 
 All gift card endpoints below are scoped to the calling MERCHANT's own tenant — `merchantId` is derived from the JWT, never accepted from the client. A gift card code only needs to be unique **within a merchant** (`UNIQUE(merchant_id, card_code)`); two different merchants may use the same code without collision. Looking up or redeeming another merchant's card returns `404 Not Found` (not `403`), so tenant existence is never leaked.
 
+### GET /api/v1/giftcards
+**Description**: Retrieve a paginated, filterable page of the caller's own gift cards ("my gift cards"), scoped to the caller's merchant. Requires authentication (MERCHANT role). Distinct from `GET /giftcards/list` below, which is ADMIN-only, unpaginated, and returns every merchant's cards.
+
+**Query Parameters**:
+- `page` (int, optional, default `0`): 0-indexed page number
+- `size` (int, optional, default `20`, max `100`): items per page
+- `active` (boolean, optional): filter by active status
+- `code` (String, optional): case-insensitive partial match on the gift card code
+- `sortBy` (GiftCardSortField, optional, default `CARD_CODE`): one of `CARD_CODE`, `BALANCE`, `EXPIRATION_DATE`
+- `sortDirection` (String, optional, default `ASC`): `ASC` or `DESC`
+
+**Response** (PagedResponse<GiftCardResponse> - HTTP 200):
+```json
+{
+  "content": [
+    { "giftCardCode": "GC-12345", "balance": 150.0, "active": true, "expirationDate": "2025-12-31" }
+  ],
+  "page": 0,
+  "size": 20,
+  "totalElements": 1,
+  "totalPages": 1
+}
+```
+
+**Error Responses**:
+- `400 Bad Request`: `page`/`size` out of range, or `sortBy`/`sortDirection` not a recognized value
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Insufficient permissions (MERCHANT role required)
+- `500 Internal Server Error`: Database or unexpected server error
+
 ### GET /api/v1/giftcards/lookup/{code}
 **Description**: Retrieve detailed information about a specific gift card by its code, scoped to the caller's merchant. Returns the card's current balance, active status, and expiration date. Requires authentication (MERCHANT role).
 
@@ -346,34 +394,45 @@ All gift card endpoints below are scoped to the calling MERCHANT's own tenant �
 - `500 Internal Server Error`: Database or unexpected server error
 
 ### GET /api/v1/giftcards/{code}/ledger
-**Description**: Retrieve the full append-only history of balance-affecting operations (creation, redemptions, holds) for a specific gift card, oldest first, scoped to the caller's merchant. Useful for customer support ("why did my balance change") without querying the database directly. Requires authentication (MERCHANT role).
+**Description**: Retrieve a page of the append-only history of balance-affecting operations (creation, redemptions, holds) for a specific gift card, scoped to the caller's merchant. Useful for customer support ("why did my balance change") without querying the database directly. Entries are always returned oldest first — chronological order is fixed, not caller-selectable, since this is an audit trail (unlike `GET /giftcards`'s `sortBy`, there is no equivalent here). Requires authentication (MERCHANT role).
 
 **Path Parameters**:
 - `code` (String): The gift card code
 
-**Response** (List of LedgerEntryResponse - HTTP 200):
+**Query Parameters**:
+- `page` (int, optional, default `0`): 0-indexed page number
+- `size` (int, optional, default `20`, max `100`): items per page
+
+**Response** (PagedResponse<LedgerEntryResponse> - HTTP 200):
 ```json
-[
-  {
-    "entryType": "CREATION",
-    "amount": 100.00,
-    "balanceAfter": 100.00,
-    "holdId": null,
-    "createdAt": "2026-07-23T15:30:00",
-    "actor": "merchant@example.com"
-  },
-  {
-    "entryType": "REDEMPTION",
-    "amount": 30.00,
-    "balanceAfter": 70.00,
-    "holdId": null,
-    "createdAt": "2026-07-24T09:12:00",
-    "actor": "SYSTEM / integration@example.com"
-  }
-]
+{
+  "content": [
+    {
+      "entryType": "CREATION",
+      "amount": 100.00,
+      "balanceAfter": 100.00,
+      "holdId": null,
+      "createdAt": "2026-07-23T15:30:00",
+      "actor": "merchant@example.com"
+    },
+    {
+      "entryType": "REDEMPTION",
+      "amount": 30.00,
+      "balanceAfter": 70.00,
+      "holdId": null,
+      "createdAt": "2026-07-24T09:12:00",
+      "actor": "SYSTEM / integration@example.com"
+    }
+  ],
+  "page": 0,
+  "size": 20,
+  "totalElements": 2,
+  "totalPages": 1
+}
 ```
 
 **Error Responses**:
+- `400 Bad Request`: `page`/`size` out of range
 - `401 Unauthorized`: Missing or invalid JWT token
 - `404 Not Found`: Gift card with specified code does not exist for the caller's merchant
 - `429 Too Many Requests`: Rate limit exceeded (max 10 attempts/minute per IP)
@@ -570,6 +629,13 @@ Used to attach a human employee to a merchant, self-service by that merchant's o
 - `email` (String): New employee's email, must be unique
 - `password` (String): New employee's password, non-blank
 
+### MerchantUserResponse
+A single user of GET /api/v1/auth/me/users's response list
+- `userId` (Long): Id of the user
+- `email` (String): Email of the user
+- `owner` (boolean): Whether this user owns the merchant (can manage its other users)
+- `active` (boolean): Whether the user is active
+
 ### ChangePasswordRequest
 Used for self-service password change (POST /api/v1/auth/me/password)
 - `currentPassword` (String): Caller's current password, non-blank, for confirmation
@@ -611,6 +677,18 @@ Response containing gift card details
 - `active` (boolean): Indicates if the gift card is active
 - `expirationDate` (LocalDate): Expiration date
 
+### PagedResponse<T>
+Generic wrapper for any paginated list response (e.g. GET /api/v1/giftcards, GET /api/v1/giftcards/{code}/ledger)
+- `content` (List<T>): The items in this page
+- `page` (int): Current page number (0-indexed)
+- `size` (int): Items per page
+- `totalElements` (long): Total number of items across all pages
+- `totalPages` (int): Total number of pages
+
+### GiftCardSortField
+Enum of sortable fields for GET /api/v1/giftcards's `sortBy` parameter
+- `CARD_CODE`, `BALANCE`, `EXPIRATION_DATE`
+
 ### GiftCardCreateRequest
 Used for creating new gift cards (POST /api/v1/giftcards/create)
 - `giftCardCode` (String): Unique gift card code
@@ -631,7 +709,7 @@ Response for redemption operations
 - `remainingToPay` (double): Amount still owed if balance was insufficient
 
 ### LedgerEntryResponse
-Response for a single gift card ledger entry (GET /api/v1/giftcards/{code}/ledger)
+A single entry in a `PagedResponse<LedgerEntryResponse>` (GET /api/v1/giftcards/{code}/ledger)
 - `entryType` (String): Kind of operation (CREATION, REDEMPTION, HOLD_PLACED, HOLD_CAPTURED, HOLD_RELEASED, REFUND, ADJUSTMENT)
 - `amount` (BigDecimal): Amount involved in this operation
 - `balanceAfter` (BigDecimal): Gift card balance immediately after this operation
@@ -706,6 +784,8 @@ The correlation ID is **not** duplicated in the body — it is already returned 
 - **Response timing**: All responses include `X-Response-Time` header (milliseconds). This is HTTP metadata only—never add timing to DTOs.
 - **Correlation id & response timing filters run before Spring Security** (`@Order(Ordered.HIGHEST_PRECEDENCE)` on `MdcFilter`/`ResponseTimeFilter`) so that even 401/403 responses rejected by Security itself carry `X-Correlation-Id`/`X-Response-Time` — don't remove that ordering.
 - **Tenant scoping**: never trust a client-supplied `merchantId` for gift card operations — it always comes from the authenticated principal's JWT/API key (`CurrentUserContext`).
+- **Swagger groups**: `OpenApiConfig`'s `public-api`/`customer-api`/`admin-api` groups are explicit path allowlists (`pathsToMatch`), separate from `@Operation`/`@ApiResponses` annotations on the controller method. A new endpoint can be fully annotated and still be invisible in Swagger UI if its path isn't added to the right group — this has already happened twice (`GET /auth/me`, `GET /giftcards`). Always add the new path to `OpenApiConfig` in the same commit as the endpoint.
+- **Swagger schema for `PagedResponse<T>` endpoints**: don't annotate the `200` `@ApiResponse` with an explicit `content = @Content(schema = @Schema(implementation = PagedResponse.class))` — that pins springdoc to the raw generic class, so `content` shows up in Swagger as `items: { type: object }` instead of the actual DTO's fields. Leave `content` off the `@ApiResponse` entirely (just `description`) and springdoc auto-resolves the concrete generic from the controller method's real return type (e.g. `PagedResponseLedgerEntryResponse`, with `content.items` correctly `$ref`-ing `LedgerEntryResponse`). Already happened once for `GET /giftcards` before the ledger pagination fixed both at once — check the live `/api-docs/customer-api` output, not just that the annotation compiles, when adding a new paginated endpoint.
 
 ## 👥 Admin User Setup
 

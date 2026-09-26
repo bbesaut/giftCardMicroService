@@ -5,7 +5,9 @@ import java.util.concurrent.CompletableFuture;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -20,8 +23,10 @@ import com.finovago.p2p.dto.CreditRequest;
 import com.finovago.p2p.dto.CreditResponse;
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.GiftCardResponse;
+import com.finovago.p2p.dto.GiftCardSortField;
 import com.finovago.p2p.dto.HoldResponse;
 import com.finovago.p2p.dto.LedgerEntryResponse;
+import com.finovago.p2p.dto.PagedResponse;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.dto.RedemptionRequest;
 import com.finovago.p2p.dto.RefundRequest;
@@ -33,18 +38,22 @@ import com.finovago.p2p.service.GiftCardRefundService;
 import com.finovago.p2p.service.GiftCardService;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 
 
 @RestController
 @RequestMapping("/api/v1/giftcards")
 @CrossOrigin(origins = "http://localhost:3000")
 @Tag(name = "Gift Cards", description = "Gift card management endpoints.")
+@Validated
 public class GiftCardController
 {
     private static final Logger log = LoggerFactory.getLogger(GiftCardController.class);
@@ -119,6 +128,38 @@ public class GiftCardController
     }
 
     @Operation(
+        summary = "List the caller's own gift cards (paginated, filterable)",
+        description = "Retrieve a page of the caller merchant's own gift cards, optionally filtered by active status and/or a "
+                    + "partial code match. Intended for a merchant-facing 'my gift cards' screen. Scoped to the caller's own "
+                    + "merchant (from the JWT) - unlike /list, which is ADMIN-only and returns every merchant's cards, unpaginated. "
+                    + "Requires authentication (JWT token, MERCHANT role)."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "OK - Successfully retrieved a page of gift cards"),
+        @ApiResponse(responseCode = "400", description = "Bad Request - page/size out of range, or sortBy/sortDirection not a recognized value",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"size: must be less than or equal to 100\"}"))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
+        @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions (MERCHANT role required)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Forbidden\",\"message\":\"Insufficient permissions for this resource\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
+    })
+    @GetMapping
+    @ResponseStatus(HttpStatus.OK)
+    public PagedResponse<GiftCardResponse> listMyGiftCards(
+            @Parameter(description = "0-indexed page number") @RequestParam(defaultValue = "0") @Min(0) int page,
+            @Parameter(description = "Items per page, capped at 100") @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
+            @Parameter(description = "Filter by active status") @RequestParam(required = false) Boolean active,
+            @Parameter(description = "Case-insensitive partial match on the gift card code") @RequestParam(required = false) String code,
+            @Parameter(description = "Field to sort by") @RequestParam(defaultValue = "CARD_CODE") GiftCardSortField sortBy,
+            @Parameter(description = "Sort direction") @RequestParam(defaultValue = "ASC") Sort.Direction sortDirection) {
+        log.info("Received request to list own gift cards. page={}, size={}, active={}, code={}, sortBy={}, sortDirection={}",
+                page, size, active, code, sortBy, sortDirection);
+        return giftCardService.getMyGiftCards(active, code, page, size, sortBy, sortDirection);
+    }
+
+    @Operation(
         summary = "Create a new gift card",
         description = "Create a new gift card with the specified code and initial balance. "
                     + "Requires authentication (JWT token) and ADMIN role. "
@@ -173,14 +214,16 @@ public class GiftCardController
     }
 
     @Operation(
-        summary = "Get a gift card's ledger history",
-        description = "Retrieve the full append-only history of balance-affecting operations (creation, redemptions, holds) for a specific gift card. "
-                    + "Entries are returned oldest first. Useful for customer support investigations ('why did my balance change'). "
+        summary = "Get a gift card's ledger history (paginated)",
+        description = "Retrieve a page of the append-only history of balance-affecting operations (creation, redemptions, holds) for a specific gift card. "
+                    + "Entries are always returned oldest first - chronological order is fixed, not caller-selectable, since this is an audit trail. "
+                    + "Useful for customer support investigations ('why did my balance change'). "
                     + "Requires authentication (JWT token, MERCHANT role)."
     )
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "OK - Successfully retrieved the ledger history",
-            content = @Content(schema = @Schema(implementation = LedgerEntryResponse.class))),
+        @ApiResponse(responseCode = "200", description = "OK - Successfully retrieved a page of the ledger history"),
+        @ApiResponse(responseCode = "400", description = "Bad Request - page/size out of range",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"size: must be less than or equal to 100\"}"))),
         @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
         @ApiResponse(responseCode = "404", description = "Not Found - Gift card with specified code does not exist",
@@ -192,9 +235,12 @@ public class GiftCardController
     })
     @GetMapping("/{code}/ledger")
     @ResponseStatus(HttpStatus.OK)
-    public List<LedgerEntryResponse> getLedger(@PathVariable String code) {
-        log.info("Received gift card ledger request. Code: {}", code);
-        return giftCardService.getLedger(code);
+    public PagedResponse<LedgerEntryResponse> getLedger(
+            @PathVariable String code,
+            @Parameter(description = "0-indexed page number") @RequestParam(defaultValue = "0") @Min(0) int page,
+            @Parameter(description = "Items per page, capped at 100") @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        log.info("Received gift card ledger request. Code: {}, page={}, size={}", code, page, size);
+        return giftCardService.getLedger(code, page, size);
     }
 
     @Operation(

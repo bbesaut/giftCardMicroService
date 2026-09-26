@@ -12,10 +12,12 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.MalformedJwtException;
 import io.jsonwebtoken.security.SignatureException;
+import jakarta.validation.ConstraintViolationException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -127,6 +129,42 @@ public class GlobalExceptionHandler {
                 .body(Map.of(
                     "error", "Bad Request",
                     "message", "The " + ex.getHeaderName() + " header is required"
+                ));
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<Object> handleConstraintViolationException(ConstraintViolationException ex) { // @RequestParam/@PathVariable constraints (e.g. @Min/@Max), not @Valid @RequestBody
+        String errorMessage = ex.getConstraintViolations().stream()
+                .findFirst()
+                .map(violation -> {
+                    // For a method-parameter constraint, propertyPath is "methodName.paramName"
+                    // (e.g. "listMyGiftCards.page") - callers only care about the parameter, not the
+                    // internal method that happens to declare it.
+                    String path = violation.getPropertyPath().toString();
+                    String paramName = path.substring(path.lastIndexOf('.') + 1);
+                    return paramName + ": " + violation.getMessage();
+                })
+                .orElse("Invalid request parameter");
+
+        log.warn("Invalid request parameter blocked by validation: {}", errorMessage);
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(Map.of(
+                    "error", "Bad Request",
+                    "message", errorMessage
+                ));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<Object> handleMethodArgumentTypeMismatchException(MethodArgumentTypeMismatchException ex) { // e.g. an enum query param that doesn't match any constant
+        log.warn("Invalid value for parameter '{}': {}", ex.getName(), ex.getValue());
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(Map.of(
+                    "error", "Bad Request",
+                    "message", "Invalid value for parameter '" + ex.getName() + "'"
                 ));
     }
 
