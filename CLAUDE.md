@@ -343,7 +343,7 @@ Content-Type: application/json
 All gift card endpoints below are scoped to the calling MERCHANT's own tenant — `merchantId` is derived from the JWT, never accepted from the client. A gift card code only needs to be unique **within a merchant** (`UNIQUE(merchant_id, card_code)`); two different merchants may use the same code without collision. Looking up or redeeming another merchant's card returns `404 Not Found` (not `403`), so tenant existence is never leaked.
 
 ### GET /api/v1/giftcards
-**Description**: Retrieve a paginated, filterable page of the caller's own gift cards ("my gift cards"), scoped to the caller's merchant. Requires authentication (MERCHANT role). Distinct from `GET /giftcards/list` below, which is ADMIN-only, unpaginated, and returns every merchant's cards.
+**Description**: Retrieve a paginated, filterable page of the caller's own gift cards ("my gift cards"), scoped to the caller's merchant. Requires authentication (MERCHANT role). For an ADMIN's cross-merchant view, see `GET /admin/merchants/{merchantId}/giftcards` instead (Admin - Merchant Management Endpoints below), which uses the same pagination/filtering/sorting but takes the merchant from the path rather than the JWT.
 
 **Query Parameters**:
 - `page` (int, optional, default `0`): 0-indexed page number
@@ -573,32 +573,6 @@ Header: `Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000`
 - `409 Conflict`: Gift card code already exists for this merchant
 - `500 Internal Server Error`: Database or unexpected server error
 
-### GET /api/v1/giftcards/list
-**Description**: Retrieve a list of all available gift cards with their details. Requires authentication (ADMIN role) — this is the only gift card endpoint ADMIN can access, and it returns cards across **all** merchants (not scoped).
-
-**Response** (List of GiftCardResponse - HTTP 200):
-```json
-[
-  {
-    "giftCardCode": "GC-12345",
-    "balance": 150.0,
-    "active": true,
-    "expirationDate": "2025-12-31"
-  },
-  {
-    "giftCardCode": "GC-67890",
-    "balance": 500.0,
-    "active": true,
-    "expirationDate": "2025-11-30"
-  }
-]
-```
-
-**Error Responses**:
-- `401 Unauthorized`: Missing or invalid JWT token
-- `403 Forbidden`: User role not permitted to list gift cards
-- `500 Internal Server Error`: Database or unexpected server error
-
 ## 🏢 Admin - Merchant Management Endpoints
 
 All endpoints below require authentication (ADMIN role) and are unpaginated, like `GET /me/users` — see Architecture Summary for the enforcement details of activate/deactivate.
@@ -624,6 +598,20 @@ All endpoints below require authentication (ADMIN role) and are unpaginated, lik
 **Response** (List of MerchantUserResponse - HTTP 200): see `GET /me/users` above.
 
 **Error Responses**:
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Insufficient permissions (ADMIN role required)
+- `404 Not Found`: Merchant does not exist
+- `500 Internal Server Error`: Server error
+
+### GET /api/v1/admin/merchants/{merchantId}/giftcards
+**Description**: Retrieve a page of a given merchant's gift cards, optionally filtered by active status and/or a partial code match, for the ADMIN merchant-detail screen. Same pagination/filtering/sorting as `GET /giftcards` ("my gift cards") — see that endpoint for the query parameters — except `merchantId` comes from the path instead of the JWT, since an ADMIN has no merchant of its own to derive it from. Replaces the old unpaginated `GET /giftcards/list` (removed), which dumped every merchant's cards at once and didn't scale.
+
+**Query Parameters**: same as `GET /giftcards` (`page`, `size`, `active`, `code`, `sortBy`, `sortDirection`).
+
+**Response** (PagedResponse<GiftCardResponse> - HTTP 200): same shape as `GET /giftcards`.
+
+**Error Responses**:
+- `400 Bad Request`: `page`/`size` out of range, or `sortBy`/`sortDirection` not a recognized value
 - `401 Unauthorized`: Missing or invalid JWT token
 - `403 Forbidden`: Insufficient permissions (ADMIN role required)
 - `404 Not Found`: Merchant does not exist
@@ -761,6 +749,7 @@ Response containing gift card details
 - `balance` (double): Current balance
 - `active` (boolean): Indicates if the gift card is active
 - `expirationDate` (LocalDate): Expiration date
+- `merchantId` (Long): Id of the merchant that owns this gift card
 
 ### PagedResponse<T>
 Generic wrapper for any paginated list response (e.g. GET /api/v1/giftcards, GET /api/v1/giftcards/{code}/ledger)
