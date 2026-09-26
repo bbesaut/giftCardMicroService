@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GiftCardController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.controller</a> &gt; <span class="el_source">GiftCardController.java</span></div><h1>GiftCardController.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.controller;
 
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import org.slf4j.Logger;
@@ -56,18 +55,18 @@ import jakarta.validation.constraints.Min;
 @Validated
 public class GiftCardController
 {
-<span class="fc" id="L59">    private static final Logger log = LoggerFactory.getLogger(GiftCardController.class);</span>
+<span class="fc" id="L58">    private static final Logger log = LoggerFactory.getLogger(GiftCardController.class);</span>
     private final GiftCardService giftCardService;
     private final GiftCardHoldService giftCardHoldService;
     private final GiftCardRefundService giftCardRefundService;
     private final GiftCardCreditService giftCardCreditService;
 
-<span class="fc" id="L65">    public GiftCardController(GiftCardService giftCardService, GiftCardHoldService giftCardHoldService, GiftCardRefundService giftCardRefundService, GiftCardCreditService giftCardCreditService) {</span>
-<span class="fc" id="L66">        this.giftCardService = giftCardService;</span>
-<span class="fc" id="L67">        this.giftCardHoldService = giftCardHoldService;</span>
-<span class="fc" id="L68">        this.giftCardRefundService = giftCardRefundService;</span>
-<span class="fc" id="L69">        this.giftCardCreditService = giftCardCreditService;</span>
-<span class="fc" id="L70">    }</span>
+<span class="fc" id="L64">    public GiftCardController(GiftCardService giftCardService, GiftCardHoldService giftCardHoldService, GiftCardRefundService giftCardRefundService, GiftCardCreditService giftCardCreditService) {</span>
+<span class="fc" id="L65">        this.giftCardService = giftCardService;</span>
+<span class="fc" id="L66">        this.giftCardHoldService = giftCardHoldService;</span>
+<span class="fc" id="L67">        this.giftCardRefundService = giftCardRefundService;</span>
+<span class="fc" id="L68">        this.giftCardCreditService = giftCardCreditService;</span>
+<span class="fc" id="L69">    }</span>
 
     @Operation(
         summary = &quot;Redeem a gift card&quot;,
@@ -100,38 +99,17 @@ public class GiftCardController
     public CompletableFuture&lt;RedemptionResponse&gt; redeemGiftCard(
             @Valid @RequestBody RedemptionRequest request,
             @RequestHeader(&quot;Idempotency-Key&quot;) String idempotencyKey) {
-<span class="fc" id="L103">        log.info(&quot;Received redemption request. Code: {}, Amount: {}, IdempotencyKey: {}&quot;, request.giftCardCode(), request.amount(), idempotencyKey);</span>
+<span class="fc" id="L102">        log.info(&quot;Received redemption request. Code: {}, Amount: {}, IdempotencyKey: {}&quot;, request.giftCardCode(), request.amount(), idempotencyKey);</span>
 
-<span class="fc" id="L105">        return giftCardService.redeemGiftCardAsync(request, idempotencyKey);</span>
-    }
-
-    @Operation(
-        summary = &quot;List all gift cards&quot;,
-        description = &quot;Retrieve a list of all available gift cards with their details (code, balance, creation date, etc.). &quot;
-                    + &quot;Requires authentication (JWT token).&quot;
-    )
-    @ApiResponses({
-        @ApiResponse(responseCode = &quot;200&quot;, description = &quot;OK - Successfully retrieved the list of gift cards&quot;,
-            content = @Content(schema = @Schema(implementation = GiftCardResponse.class))),
-        @ApiResponse(responseCode = &quot;401&quot;, description = &quot;Unauthorized - Missing or invalid JWT token&quot;,
-            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Unauthorized\&quot;,\&quot;message\&quot;:\&quot;Invalid or missing JWT token\&quot;}&quot;))),
-        @ApiResponse(responseCode = &quot;403&quot;, description = &quot;Forbidden - User role not permitted to list gift cards&quot;,
-            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Forbidden\&quot;,\&quot;message\&quot;:\&quot;Insufficient permissions for this resource\&quot;}&quot;))),
-        @ApiResponse(responseCode = &quot;500&quot;, description = &quot;Internal Server Error - Database or unexpected server error&quot;,
-            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Internal Server Error\&quot;,\&quot;message\&quot;:\&quot;Database error occurred\&quot;}&quot;)))
-    })
-    @GetMapping(&quot;/list&quot;)
-    @ResponseStatus(HttpStatus.OK)
-    public List&lt;GiftCardResponse&gt; listGiftCards() {
-<span class="nc" id="L126">        log.info(&quot;Received request to list all gift cards&quot;);</span>
-<span class="nc" id="L127">        return giftCardService.getAllGiftCards();</span>
+<span class="fc" id="L104">        return giftCardService.redeemGiftCardAsync(request, idempotencyKey);</span>
     }
 
     @Operation(
         summary = &quot;List the caller's own gift cards (paginated, filterable)&quot;,
         description = &quot;Retrieve a page of the caller merchant's own gift cards, optionally filtered by active status and/or a &quot;
                     + &quot;partial code match. Intended for a merchant-facing 'my gift cards' screen. Scoped to the caller's own &quot;
-                    + &quot;merchant (from the JWT) - unlike /list, which is ADMIN-only and returns every merchant's cards, unpaginated. &quot;
+                    + &quot;merchant (from the JWT). For an ADMIN's cross-merchant view, see &quot;
+                    + &quot;GET /admin/merchants/{merchantId}/giftcards instead. &quot;
                     + &quot;Requires authentication (JWT token, MERCHANT role).&quot;
     )
     @ApiResponses({
@@ -154,9 +132,9 @@ public class GiftCardController
             @Parameter(description = &quot;Case-insensitive partial match on the gift card code&quot;) @RequestParam(required = false) String code,
             @Parameter(description = &quot;Field to sort by&quot;) @RequestParam(defaultValue = &quot;CARD_CODE&quot;) GiftCardSortField sortBy,
             @Parameter(description = &quot;Sort direction&quot;) @RequestParam(defaultValue = &quot;ASC&quot;) Sort.Direction sortDirection) {
-<span class="fc" id="L157">        log.info(&quot;Received request to list own gift cards. page={}, size={}, active={}, code={}, sortBy={}, sortDirection={}&quot;,</span>
-<span class="fc" id="L158">                page, size, active, code, sortBy, sortDirection);</span>
-<span class="fc" id="L159">        return giftCardService.getMyGiftCards(active, code, page, size, sortBy, sortDirection);</span>
+<span class="fc" id="L135">        log.info(&quot;Received request to list own gift cards. page={}, size={}, active={}, code={}, sortBy={}, sortDirection={}&quot;,</span>
+<span class="fc" id="L136">                page, size, active, code, sortBy, sortDirection);</span>
+<span class="fc" id="L137">        return giftCardService.getMyGiftCards(active, code, page, size, sortBy, sortDirection);</span>
     }
 
     @Operation(
@@ -182,10 +160,10 @@ public class GiftCardController
     @PostMapping(&quot;/create&quot;)
     @ResponseStatus(HttpStatus.CREATED)
     public GiftCardResponse createGiftCard(@Valid @RequestBody GiftCardCreateRequest request) {
-<span class="fc" id="L185">        log.info(&quot;Received gift card creation request. Code: {}, Balance: {}&quot;,</span>
-<span class="fc" id="L186">                request.giftCardCode(), request.balance());</span>
+<span class="fc" id="L163">        log.info(&quot;Received gift card creation request. Code: {}, Balance: {}&quot;,</span>
+<span class="fc" id="L164">                request.giftCardCode(), request.balance());</span>
 
-<span class="fc" id="L188">        return giftCardService.createGiftCard(request);</span>
+<span class="fc" id="L166">        return giftCardService.createGiftCard(request);</span>
     }
 
     @Operation(
@@ -209,8 +187,8 @@ public class GiftCardController
     @GetMapping(&quot;/lookup/{code}&quot;)
     @ResponseStatus(HttpStatus.OK)
     public GiftCardResponse lookupGiftCard(@PathVariable String code) {
-<span class="fc" id="L212">        log.info(&quot;Received gift card lookup request. Code: {}&quot;, code);</span>
-<span class="nc" id="L213">        return giftCardService.lookupGiftCard(code);</span>
+<span class="fc" id="L190">        log.info(&quot;Received gift card lookup request. Code: {}&quot;, code);</span>
+<span class="nc" id="L191">        return giftCardService.lookupGiftCard(code);</span>
     }
 
     @Operation(
@@ -239,8 +217,8 @@ public class GiftCardController
             @PathVariable String code,
             @Parameter(description = &quot;0-indexed page number&quot;) @RequestParam(defaultValue = &quot;0&quot;) @Min(0) int page,
             @Parameter(description = &quot;Items per page, capped at 100&quot;) @RequestParam(defaultValue = &quot;20&quot;) @Min(1) @Max(100) int size) {
-<span class="fc" id="L242">        log.info(&quot;Received gift card ledger request. Code: {}, page={}, size={}&quot;, code, page, size);</span>
-<span class="fc" id="L243">        return giftCardService.getLedger(code, page, size);</span>
+<span class="fc" id="L220">        log.info(&quot;Received gift card ledger request. Code: {}, page={}, size={}&quot;, code, page, size);</span>
+<span class="fc" id="L221">        return giftCardService.getLedger(code, page, size);</span>
     }
 
     @Operation(
@@ -275,8 +253,8 @@ public class GiftCardController
     public HoldResponse reserveGiftCard(
             @Valid @RequestBody ReserveRequest request,
             @RequestHeader(&quot;Idempotency-Key&quot;) String idempotencyKey) {
-<span class="nc" id="L278">        log.info(&quot;Received hold reservation request. Code: {}, Amount: {}, IdempotencyKey: {}&quot;, request.giftCardCode(), request.amount(), idempotencyKey);</span>
-<span class="nc" id="L279">        return giftCardHoldService.reserve(request, idempotencyKey);</span>
+<span class="nc" id="L256">        log.info(&quot;Received hold reservation request. Code: {}, Amount: {}, IdempotencyKey: {}&quot;, request.giftCardCode(), request.amount(), idempotencyKey);</span>
+<span class="nc" id="L257">        return giftCardHoldService.reserve(request, idempotencyKey);</span>
     }
 
     @Operation(
@@ -301,8 +279,8 @@ public class GiftCardController
     @PostMapping(&quot;/holds/{holdId}/capture&quot;)
     @ResponseStatus(HttpStatus.OK)
     public HoldResponse captureHold(@PathVariable Long holdId) {
-<span class="nc" id="L304">        log.info(&quot;Received hold capture request. HoldId: {}&quot;, holdId);</span>
-<span class="nc" id="L305">        return giftCardHoldService.capture(holdId);</span>
+<span class="nc" id="L282">        log.info(&quot;Received hold capture request. HoldId: {}&quot;, holdId);</span>
+<span class="nc" id="L283">        return giftCardHoldService.capture(holdId);</span>
     }
 
     @Operation(
@@ -327,8 +305,8 @@ public class GiftCardController
     @PostMapping(&quot;/holds/{holdId}/release&quot;)
     @ResponseStatus(HttpStatus.OK)
     public HoldResponse releaseHold(@PathVariable Long holdId) {
-<span class="nc" id="L330">        log.info(&quot;Received hold release request. HoldId: {}&quot;, holdId);</span>
-<span class="nc" id="L331">        return giftCardHoldService.release(holdId);</span>
+<span class="nc" id="L308">        log.info(&quot;Received hold release request. HoldId: {}&quot;, holdId);</span>
+<span class="nc" id="L309">        return giftCardHoldService.release(holdId);</span>
     }
 
     @Operation(
@@ -366,9 +344,9 @@ public class GiftCardController
     public RefundResponse refundGiftCard(
             @Valid @RequestBody RefundRequest request,
             @RequestHeader(&quot;Idempotency-Key&quot;) String idempotencyKey) {
-<span class="nc" id="L369">        log.info(&quot;Received refund request. Code: {}, Amount: {}, RedemptionLedgerEntryId: {}, IdempotencyKey: {}&quot;,</span>
-<span class="nc" id="L370">                request.giftCardCode(), request.amount(), request.redemptionLedgerEntryId(), idempotencyKey);</span>
-<span class="nc" id="L371">        return giftCardRefundService.refund(request, idempotencyKey);</span>
+<span class="nc" id="L347">        log.info(&quot;Received refund request. Code: {}, Amount: {}, RedemptionLedgerEntryId: {}, IdempotencyKey: {}&quot;,</span>
+<span class="nc" id="L348">                request.giftCardCode(), request.amount(), request.redemptionLedgerEntryId(), idempotencyKey);</span>
+<span class="nc" id="L349">        return giftCardRefundService.refund(request, idempotencyKey);</span>
     }
 
     @Operation(
@@ -405,9 +383,9 @@ public class GiftCardController
     public CreditResponse creditGiftCard(
             @Valid @RequestBody CreditRequest request,
             @RequestHeader(&quot;Idempotency-Key&quot;) String idempotencyKey) {
-<span class="nc" id="L408">        log.info(&quot;Received credit request. Code: {}, Amount: {}, IdempotencyKey: {}&quot;,</span>
-<span class="nc" id="L409">                request.giftCardCode(), request.amount(), idempotencyKey);</span>
-<span class="nc" id="L410">        return giftCardCreditService.credit(request, idempotencyKey);</span>
+<span class="nc" id="L386">        log.info(&quot;Received credit request. Code: {}, Amount: {}, IdempotencyKey: {}&quot;,</span>
+<span class="nc" id="L387">                request.giftCardCode(), request.amount(), idempotencyKey);</span>
+<span class="nc" id="L388">        return giftCardCreditService.credit(request, idempotencyKey);</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

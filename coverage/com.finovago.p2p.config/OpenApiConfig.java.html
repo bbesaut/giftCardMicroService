@@ -32,7 +32,7 @@ import org.springdoc.core.models.GroupedOpenApi;
     GroupedOpenApi adminApi() {
 <span class="fc" id="L33">        return GroupedOpenApi.builder()</span>
 <span class="fc" id="L34">                .group(&quot;admin-api&quot;)</span>
-<span class="fc" id="L35">                .pathsToMatch(&quot;/api/v1/auth/register&quot;, &quot;/api/v1/giftcards/list&quot;, &quot;/api/v1/auth/me/password&quot;,</span>
+<span class="fc" id="L35">                .pathsToMatch(&quot;/api/v1/auth/register&quot;, &quot;/api/v1/auth/me/password&quot;,</span>
                         &quot;/api/v1/auth/me&quot;, &quot;/api/v1/admin/merchants&quot;, &quot;/api/v1/admin/merchants/**&quot;)
 <span class="fc" id="L37">                .build();</span>
     }

@@ -2,17 +2,24 @@
 
 import java.util.List;
 
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import com.finovago.p2p.dto.GiftCardResponse;
+import com.finovago.p2p.dto.GiftCardSortField;
 import com.finovago.p2p.dto.MerchantResponse;
 import com.finovago.p2p.dto.MerchantStatusResponse;
 import com.finovago.p2p.dto.MerchantUserResponse;
+import com.finovago.p2p.dto.PagedResponse;
 import com.finovago.p2p.dto.RateLimitCapacityResponse;
 import com.finovago.p2p.dto.SetRateLimitCapacityRequest;
+import com.finovago.p2p.service.GiftCardService;
 import com.finovago.p2p.service.MerchantService;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -20,19 +27,24 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.extern.slf4j.Slf4j;
 
-<span class="fc" id="L25">@Slf4j</span>
+<span class="fc" id="L34">@Slf4j</span>
 @RestController
 @RequestMapping(&quot;/api/v1/admin/merchants&quot;)
 @Tag(name = &quot;Admin - Merchants&quot;, description = &quot;ADMIN-only merchant management: list every tenant, activate/deactivate, override rate limit.&quot;)
+@Validated
 public class AdminMerchantController {
 
     private final MerchantService merchantService;
+    private final GiftCardService giftCardService;
 
-<span class="fc" id="L33">    public AdminMerchantController(MerchantService merchantService) {</span>
-<span class="fc" id="L34">        this.merchantService = merchantService;</span>
-<span class="fc" id="L35">    }</span>
+<span class="fc" id="L44">    public AdminMerchantController(MerchantService merchantService, GiftCardService giftCardService) {</span>
+<span class="fc" id="L45">        this.merchantService = merchantService;</span>
+<span class="fc" id="L46">        this.giftCardService = giftCardService;</span>
+<span class="fc" id="L47">    }</span>
 
     @Operation(
         summary = &quot;List every merchant&quot;,
@@ -49,9 +61,9 @@ public class AdminMerchantController {
     })
     @GetMapping
     public ResponseEntity&lt;List&lt;MerchantResponse&gt;&gt; listMerchants() {
-<span class="fc" id="L52">        List&lt;MerchantResponse&gt; response = merchantService.listMerchants();</span>
-<span class="fc" id="L53">        log.info(&quot;Listed {} merchants&quot;, response.size());</span>
-<span class="fc" id="L54">        return ResponseEntity.ok(response);</span>
+<span class="fc" id="L64">        List&lt;MerchantResponse&gt; response = merchantService.listMerchants();</span>
+<span class="fc" id="L65">        log.info(&quot;Listed {} merchants&quot;, response.size());</span>
+<span class="fc" id="L66">        return ResponseEntity.ok(response);</span>
     }
 
     @Operation(
@@ -70,9 +82,38 @@ public class AdminMerchantController {
     })
     @GetMapping(&quot;/{merchantId}/users&quot;)
     public ResponseEntity&lt;List&lt;MerchantUserResponse&gt;&gt; listMerchantUsers(@PathVariable Long merchantId) {
-<span class="fc" id="L73">        List&lt;MerchantUserResponse&gt; response = merchantService.listMerchantUsers(merchantId);</span>
-<span class="fc" id="L74">        log.info(&quot;Listed {} users for merchant {} via admin&quot;, response.size(), merchantId);</span>
-<span class="fc" id="L75">        return ResponseEntity.ok(response);</span>
+<span class="fc" id="L85">        List&lt;MerchantUserResponse&gt; response = merchantService.listMerchantUsers(merchantId);</span>
+<span class="fc" id="L86">        log.info(&quot;Listed {} users for merchant {} via admin&quot;, response.size(), merchantId);</span>
+<span class="fc" id="L87">        return ResponseEntity.ok(response);</span>
+    }
+
+    @Operation(
+        summary = &quot;List a merchant's gift cards (paginated, filterable)&quot;,
+        description = &quot;Retrieve a page of a given merchant's gift cards, optionally filtered by active status and/or a &quot;
+                    + &quot;partial code match, for the ADMIN merchant-detail screen. Same pagination/filtering/sorting as &quot;
+                    + &quot;GET /giftcards ('my gift cards'), but merchantId comes from the path instead of the JWT - an &quot;
+                    + &quot;ADMIN has no merchant of its own to derive it from. Requires authentication (ADMIN role).&quot;
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = &quot;200&quot;, description = &quot;A page of the merchant's gift cards&quot;),
+        @ApiResponse(responseCode = &quot;400&quot;, description = &quot;page/size out of range, or sortBy/sortDirection not a recognized value&quot;),
+        @ApiResponse(responseCode = &quot;401&quot;, description = &quot;Missing or invalid JWT token&quot;),
+        @ApiResponse(responseCode = &quot;403&quot;, description = &quot;Insufficient permissions (ADMIN role required)&quot;),
+        @ApiResponse(responseCode = &quot;404&quot;, description = &quot;Merchant not found&quot;),
+        @ApiResponse(responseCode = &quot;500&quot;, description = &quot;Internal server error&quot;)
+    })
+    @GetMapping(&quot;/{merchantId}/giftcards&quot;)
+    public ResponseEntity&lt;PagedResponse&lt;GiftCardResponse&gt;&gt; listMerchantGiftCards(
+            @PathVariable Long merchantId,
+            @Parameter(description = &quot;0-indexed page number&quot;) @RequestParam(defaultValue = &quot;0&quot;) @Min(0) int page,
+            @Parameter(description = &quot;Items per page, capped at 100&quot;) @RequestParam(defaultValue = &quot;20&quot;) @Min(1) @Max(100) int size,
+            @Parameter(description = &quot;Filter by active status&quot;) @RequestParam(required = false) Boolean active,
+            @Parameter(description = &quot;Case-insensitive partial match on the gift card code&quot;) @RequestParam(required = false) String code,
+            @Parameter(description = &quot;Field to sort by&quot;) @RequestParam(defaultValue = &quot;CARD_CODE&quot;) GiftCardSortField sortBy,
+            @Parameter(description = &quot;Sort direction&quot;) @RequestParam(defaultValue = &quot;ASC&quot;) Sort.Direction sortDirection) {
+<span class="fc" id="L114">        PagedResponse&lt;GiftCardResponse&gt; response = giftCardService.getGiftCardsForMerchant(merchantId, active, code, page, size, sortBy, sortDirection);</span>
+<span class="fc" id="L115">        log.info(&quot;Listed {} gift card(s) (page {}/{}) for merchant {} via admin&quot;, response.content().size(), response.page(), response.totalPages(), merchantId);</span>
+<span class="fc" id="L116">        return ResponseEntity.ok(response);</span>
     }
 
     @Operation(
@@ -93,7 +134,7 @@ public class AdminMerchantController {
     })
     @PostMapping(&quot;/{merchantId}/deactivate&quot;)
     public ResponseEntity&lt;MerchantStatusResponse&gt; deactivateMerchant(@PathVariable Long merchantId) {
-<span class="fc" id="L96">        return setMerchantActive(merchantId, false);</span>
+<span class="fc" id="L137">        return setMerchantActive(merchantId, false);</span>
     }
 
     @Operation(
@@ -110,13 +151,13 @@ public class AdminMerchantController {
     })
     @PostMapping(&quot;/{merchantId}/activate&quot;)
     public ResponseEntity&lt;MerchantStatusResponse&gt; activateMerchant(@PathVariable Long merchantId) {
-<span class="fc" id="L113">        return setMerchantActive(merchantId, true);</span>
+<span class="fc" id="L154">        return setMerchantActive(merchantId, true);</span>
     }
 
     private ResponseEntity&lt;MerchantStatusResponse&gt; setMerchantActive(Long merchantId, boolean active) {
-<span class="fc" id="L117">        MerchantStatusResponse response = merchantService.setMerchantActive(merchantId, active);</span>
-<span class="fc bfc" id="L118" title="All 2 branches covered.">        log.info(&quot;Merchant {} {} by admin&quot;, merchantId, active ? &quot;reactivated&quot; : &quot;deactivated&quot;);</span>
-<span class="fc" id="L119">        return ResponseEntity.ok(response);</span>
+<span class="fc" id="L158">        MerchantStatusResponse response = merchantService.setMerchantActive(merchantId, active);</span>
+<span class="fc bfc" id="L159" title="All 2 branches covered.">        log.info(&quot;Merchant {} {} by admin&quot;, merchantId, active ? &quot;reactivated&quot; : &quot;deactivated&quot;);</span>
+<span class="fc" id="L160">        return ResponseEntity.ok(response);</span>
     }
 
     @Operation(
@@ -138,9 +179,9 @@ public class AdminMerchantController {
     @PostMapping(&quot;/{merchantId}/rate-limit-capacity&quot;)
     public ResponseEntity&lt;RateLimitCapacityResponse&gt; setRateLimitCapacity(
             @PathVariable Long merchantId, @Valid @RequestBody SetRateLimitCapacityRequest request) {
-<span class="fc" id="L141">        RateLimitCapacityResponse response = merchantService.setRateLimitCapacity(merchantId, request.rateLimitCapacity());</span>
-<span class="fc" id="L142">        log.info(&quot;Rate limit capacity for merchant {} set to {} by admin&quot;, merchantId, request.rateLimitCapacity());</span>
-<span class="fc" id="L143">        return ResponseEntity.ok(response);</span>
+<span class="fc" id="L182">        RateLimitCapacityResponse response = merchantService.setRateLimitCapacity(merchantId, request.rateLimitCapacity());</span>
+<span class="fc" id="L183">        log.info(&quot;Rate limit capacity for merchant {} set to {} by admin&quot;, merchantId, request.rateLimitCapacity());</span>
+<span class="fc" id="L184">        return ResponseEntity.ok(response);</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
