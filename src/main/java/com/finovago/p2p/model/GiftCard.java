@@ -68,4 +68,12 @@ public class GiftCard
         this.balance = BigDecimal.ZERO.setScale(2);
         this.active = false;
     }
+
+    public void activate() {
+        this.active = true;
+    }
+
+    public void deactivate() {
+        this.active = false;
+    }
 }
