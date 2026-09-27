@@ -23,6 +23,7 @@ import com.finovago.p2p.dto.CreditResponse;
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.GiftCardResponse;
 import com.finovago.p2p.dto.GiftCardSortField;
+import com.finovago.p2p.dto.GiftCardStatusResponse;
 import com.finovago.p2p.dto.HoldResponse;
 import com.finovago.p2p.dto.LedgerEntryResponse;
 import com.finovago.p2p.dto.PagedResponse;
@@ -189,6 +190,57 @@ public class GiftCardController
     public GiftCardResponse lookupGiftCard(@PathVariable String code) {
         log.info("Received gift card lookup request. Code: {}", code);
         return giftCardService.lookupGiftCard(code);
+    }
+
+    @Operation(
+        summary = "Deactivate a gift card",
+        description = "Blocks a gift card from further use (e.g. lost/stolen card, fraud) without touching its balance. "
+                    + "Idempotent by target state: deactivating an already-inactive card simply replays the same status, not an error. "
+                    + "Not recorded in the ledger (see GET /{code}/ledger) - the ledger is scoped to balance-affecting operations, and this "
+                    + "isn't one. Requires authentication (MERCHANT role)."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "OK - Gift card deactivated (or already was - replayed)",
+            content = @Content(schema = @Schema(implementation = GiftCardStatusResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
+        @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions (MERCHANT role required)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Forbidden\",\"message\":\"Insufficient permissions for this resource\"}"))),
+        @ApiResponse(responseCode = "404", description = "Not Found - Gift card with specified code does not exist for the caller's merchant",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Not Found\",\"message\":\"Gift card not found\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
+    })
+    @PostMapping("/{code}/deactivate")
+    @ResponseStatus(HttpStatus.OK)
+    public GiftCardStatusResponse deactivateGiftCard(@PathVariable String code) {
+        log.info("Received gift card deactivation request. Code: {}", code);
+        return giftCardService.setActive(code, false);
+    }
+
+    @Operation(
+        summary = "Reactivate a gift card",
+        description = "Re-enables a previously deactivated gift card. Idempotent by target state: reactivating an already-active card "
+                    + "simply replays the same status, not an error. Reactivating does not bypass expiration - an expired card still fails "
+                    + "on redeem/reserve. Not recorded in the ledger, same reasoning as deactivate. Requires authentication (MERCHANT role)."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "OK - Gift card reactivated (or already was - replayed)",
+            content = @Content(schema = @Schema(implementation = GiftCardStatusResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
+        @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions (MERCHANT role required)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Forbidden\",\"message\":\"Insufficient permissions for this resource\"}"))),
+        @ApiResponse(responseCode = "404", description = "Not Found - Gift card with specified code does not exist for the caller's merchant",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Not Found\",\"message\":\"Gift card not found\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
+    })
+    @PostMapping("/{code}/activate")
+    @ResponseStatus(HttpStatus.OK)
+    public GiftCardStatusResponse activateGiftCard(@PathVariable String code) {
+        log.info("Received gift card reactivation request. Code: {}", code);
+        return giftCardService.setActive(code, true);
     }
 
     @Operation(

@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.GiftCardResponse;
 import com.finovago.p2p.dto.GiftCardSortField;
+import com.finovago.p2p.dto.GiftCardStatusResponse;
 import com.finovago.p2p.dto.LedgerEntryResponse;
 import com.finovago.p2p.dto.PagedResponse;
 import com.finovago.p2p.dto.RedemptionResponse;
@@ -235,6 +236,32 @@ public class GiftCardService {
                 giftCard.getExpirationDate(),
                 merchantId
         );
+    }
+
+    /**
+     * Idempotent by target state: deactivating an already-inactive card (or activating an already-active
+     * one) simply replays the same status, no error - unlike hold capture/release, active/inactive isn't
+     * a terminal state machine, just a flag. Not ledgered: the ledger is scoped to balance-affecting
+     * operations (see getLedger), and this doesn't touch balance - same reasoning as merchant/user
+     * activate/deactivate, which only log.
+     */
+    @Transactional
+    public GiftCardStatusResponse setActive(String code, boolean active) {
+        Long merchantId = currentUserContext.currentMerchantId();
+
+        GiftCard giftCard = giftCardRepository.findByMerchantIdAndCardCode(merchantId, code)
+                .orElseThrow(() -> new UnknownGiftCardException("Gift card not found"));
+
+        if (active) {
+            giftCard.activate();
+        } else {
+            giftCard.deactivate();
+        }
+        giftCardRepository.save(giftCard);
+
+        log.info("Gift card {} (merchant {}) {}", code, merchantId, active ? "reactivated" : "deactivated");
+
+        return new GiftCardStatusResponse(giftCard.getCardCode(), giftCard.isActive());
     }
 
     @Transactional(readOnly = true)
