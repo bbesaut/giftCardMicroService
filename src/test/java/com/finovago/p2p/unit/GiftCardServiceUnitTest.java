@@ -8,7 +8,9 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,6 +36,7 @@ import org.springframework.data.jpa.domain.Specification;
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.GiftCardResponse;
 import com.finovago.p2p.dto.GiftCardSortField;
+import com.finovago.p2p.dto.GiftCardStatusResponse;
 import com.finovago.p2p.dto.LedgerEntryResponse;
 import com.finovago.p2p.dto.PagedResponse;
 import com.finovago.p2p.dto.RedemptionRequest;
@@ -410,5 +413,74 @@ class GiftCardServiceUnitTest
         assertThrows(MerchantNotFoundException.class, () -> giftCardService.getGiftCardsForMerchant(
                 unknownMerchantId, null, null, 0, 20, GiftCardSortField.CARD_CODE, Sort.Direction.ASC));
         verify(giftCardRepository, never()).findAll(ArgumentMatchers.<Specification<GiftCard>>any(), any(Pageable.class));
+    }
+
+    @Test
+    void should_deactivateGiftCard_when_currentlyActive() {
+        String cardCode = "ACTIVE1";
+        GiftCard activeCard = new GiftCard(merchant, cardCode, BigDecimal.valueOf(50.0), true, LocalDate.now().plusDays(30));
+        when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.of(activeCard));
+
+        GiftCardStatusResponse response = giftCardService.setActive(cardCode, false);
+
+        assertEquals(cardCode, response.giftCardCode());
+        assertFalse(response.active());
+        assertFalse(activeCard.isActive());
+        verify(giftCardRepository).save(activeCard);
+    }
+
+    @Test
+    void should_activateGiftCard_when_currentlyInactive() {
+        String cardCode = "INACTIVE1";
+        GiftCard inactiveCard = new GiftCard(merchant, cardCode, BigDecimal.valueOf(50.0), false, LocalDate.now().plusDays(30));
+        when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.of(inactiveCard));
+
+        GiftCardStatusResponse response = giftCardService.setActive(cardCode, true);
+
+        assertEquals(cardCode, response.giftCardCode());
+        assertTrue(response.active());
+        assertTrue(inactiveCard.isActive());
+    }
+
+    @Test
+    void should_replaySameStatus_when_deactivatingAlreadyInactiveCard() {
+        String cardCode = "ALREADY_INACTIVE";
+        GiftCard inactiveCard = new GiftCard(merchant, cardCode, BigDecimal.valueOf(50.0), false, LocalDate.now().plusDays(30));
+        when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.of(inactiveCard));
+
+        GiftCardStatusResponse response = giftCardService.setActive(cardCode, false);
+
+        assertFalse(response.active());
+    }
+
+    @Test
+    void should_replaySameStatus_when_activatingAlreadyActiveCard() {
+        String cardCode = "ALREADY_ACTIVE";
+        GiftCard activeCard = new GiftCard(merchant, cardCode, BigDecimal.valueOf(50.0), true, LocalDate.now().plusDays(30));
+        when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.of(activeCard));
+
+        GiftCardStatusResponse response = giftCardService.setActive(cardCode, true);
+
+        assertTrue(response.active());
+    }
+
+    @Test
+    void should_throwException_when_deactivatingNonExistentCard() {
+        String nonExistentCode = "NONEXISTENT";
+        when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, nonExistentCode)).thenReturn(Optional.empty());
+
+        assertThrows(UnknownGiftCardException.class, () -> giftCardService.setActive(nonExistentCode, false));
+        verify(giftCardRepository, never()).save(any());
+    }
+
+    @Test
+    void should_scopeLookupToCallingMerchant_onSetActive() {
+        String cardCode = "SCOPED1";
+        GiftCard card = new GiftCard(merchant, cardCode, BigDecimal.valueOf(50.0), true, LocalDate.now().plusDays(30));
+        when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.of(card));
+
+        giftCardService.setActive(cardCode, false);
+
+        verify(giftCardRepository).findByMerchantIdAndCardCode(MERCHANT_ID, cardCode);
     }
 }
