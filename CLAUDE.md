@@ -583,6 +583,18 @@ Header: `Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000`
 - `409 Conflict`: Gift card code already exists for this merchant
 - `500 Internal Server Error`: Database or unexpected server error
 
+### POST /api/v1/giftcards/{code}/deactivate
+### POST /api/v1/giftcards/{code}/activate
+**Description**: Block/re-enable a gift card from further use, scoped to the caller's merchant — e.g. a lost/stolen physical card or a fraud report. Doesn't touch the balance (unlike `drainCard()`, the side effect of a redemption that exhausts the balance) and isn't recorded in the ledger (see `GET /{code}/ledger`), since the ledger is scoped to balance-affecting operations and this isn't one — same reasoning as merchant/user activate/deactivate, which also don't ledger. Idempotent by target state: deactivating an already-inactive card (or activating an already-active one) simply replays the same status, not an error — unlike hold capture/release, `active` isn't a terminal state machine, just a flag. Reactivating does not bypass expiration: `ensureUsable()` still independently checks `expirationDate` on the next `redeem`/`reserve`. Requires authentication (MERCHANT role).
+
+**Response** (GiftCardStatusResponse - HTTP 200): `{ "giftCardCode": "GC-12345", "active": false }`
+
+**Error Responses**:
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Insufficient permissions (MERCHANT role required)
+- `404 Not Found`: Gift card with specified code does not exist for the caller's merchant
+- `500 Internal Server Error`: Database or unexpected server error
+
 ## 🏢 Admin - Merchant Management Endpoints
 
 All endpoints below require authentication (ADMIN role) and are unpaginated, like `GET /me/users` — see Architecture Summary for the enforcement details of activate/deactivate.
@@ -766,6 +778,11 @@ Response containing gift card details
 - `active` (boolean): Indicates if the gift card is active
 - `expirationDate` (LocalDate): Expiration date
 - `merchantId` (Long): Id of the merchant that owns this gift card
+
+### GiftCardStatusResponse
+Response for POST /api/v1/giftcards/{code}/activate and .../deactivate
+- `giftCardCode` (String): Code of the affected gift card
+- `active` (boolean): The gift card's active status after this call
 
 ### PagedResponse<T>
 Generic wrapper for any paginated list response (e.g. GET /api/v1/giftcards, GET /api/v1/giftcards/{code}/ledger)
