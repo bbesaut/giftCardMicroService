@@ -68,5 +68,13 @@ public class GiftCard
 <span class="fc" id="L68">        this.balance = BigDecimal.ZERO.setScale(2);</span>
 <span class="fc" id="L69">        this.active = false;</span>
 <span class="fc" id="L70">    }</span>
+
+    public void activate() {
+<span class="fc" id="L73">        this.active = true;</span>
+<span class="fc" id="L74">    }</span>
+
+    public void deactivate() {
+<span class="fc" id="L77">        this.active = false;</span>
+<span class="fc" id="L78">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
