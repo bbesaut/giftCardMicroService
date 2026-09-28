@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SeedCatalog.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.devseed</a> &gt; <span class="el_source">SeedCatalog.java</span></div><h1>SeedCatalog.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.devseed;
+
+import java.util.List;
+
+import jakarta.annotation.Nullable;
+
+/**
+ * The dev dataset, as plain data: who exists, what their gift cards look like and how busy they are.
+ * Kept apart from {@link DevDataSeeder} so the shape of the demo data can change without touching
+ * the logic that loads it.
+ * &lt;p&gt;
+ * The merchants are picked so a front-end has something to show for every state it handles: a
+ * regular one, a big one, a tiny one, a deactivated one and one with a custom rate limit.
+ */
+final class SeedCatalog {
+
+    static final String ADMIN_EMAIL = &quot;admin@finovago.com&quot;;
+    static final String ADMIN_PASSWORD = &quot;admin123&quot;;
+
+    /** Password of every seeded account except the admin and the demo merchant's owner. Dev fixture only. */
+    static final String DEFAULT_PASSWORD = &quot;Passw0rd!&quot;;
+
+    private static final String DEMO_OWNER_PASSWORD = &quot;client123&quot;;
+
+    /**
+     * What state a card is meant to end up in. DEACTIVATED and EXPIRED cards are created usable and
+     * only reach that state at the very end, so they carry a real history first (a card that was
+     * always dead would have nothing in its ledger to look at).
+     */
+<span class="fc" id="L30">    enum CardKind { ACTIVE, HIGH_BALANCE, EXPIRING_SOON, DEACTIVATED, EXPIRED }</span>
+
+<span class="fc" id="L32">    record Employee(String email, boolean active) {</span>
+    }
+
+    /** How many gift cards of each kind to create for a merchant. */
+<span class="fc" id="L36">    record CardMix(int active, int highBalance, int expiringSoon, int deactivated, int expired) {</span>
+    }
+
+    /**
+     * @param dailyActivity average number of operations per day over the seeded history (weekends
+     *                      are quieter, and activity trends up over time so a chart has a shape)
+     * @param pendingHolds  holds left open at the end, so capture/release has something to act on
+     */
+<span class="fc" id="L44">    record MerchantSeed(</span>
+            String name,
+            String cardCodePrefix,
+            String ownerEmail,
+            String ownerPassword,
+            List&lt;Employee&gt; employees,
+            CardMix cards,
+            boolean active,
+            @Nullable Integer rateLimitCapacity,
+            boolean withApiKey,
+            double dailyActivity,
+            int pendingHolds) {
+    }
+
+<span class="fc" id="L58">    static final List&lt;MerchantSeed&gt; MERCHANTS = List.of(</span>
+            // The account the docs and manual testing revolve around: owner + employees (one disabled),
+            // a mix of every card state, and an API key.
+            new MerchantSeed(&quot;Finovago Demo Merchant&quot;, &quot;DEMO&quot;, &quot;client@finovago.com&quot;, DEMO_OWNER_PASSWORD,
+<span class="fc" id="L62">                    List.of(new Employee(&quot;sophie.martin@example.com&quot;, true),</span>
+                            new Employee(&quot;lucas.bernard@example.com&quot;, true),
+                            new Employee(&quot;emma.petit@example.com&quot;, false)),
+                    new CardMix(24, 4, 3, 3, 2), true, null, true, 4.0, 3),
+
+            // Big catalogue - the one that makes pagination and sorting worth having.
+            new MerchantSeed(&quot;Librairie du Coin&quot;, &quot;LIB&quot;, &quot;owner@librairie-du-coin.example.com&quot;, DEFAULT_PASSWORD,
+<span class="fc" id="L69">                    List.of(new Employee(&quot;julie.moreau@example.com&quot;, true),</span>
+                            new Employee(&quot;thomas.roux@example.com&quot;, true)),
+                    new CardMix(42, 6, 5, 4, 3), true, null, false, 9.0, 2),
+
+            // Tiny merchant: an owner and a handful of cards, no team.
+            new MerchantSeed(&quot;Boulangerie Petit Pain&quot;, &quot;BOUL&quot;, &quot;owner@petit-pain.example.com&quot;, DEFAULT_PASSWORD,
+<span class="fc" id="L75">                    List.of(),</span>
+                    new CardMix(5, 0, 1, 1, 1), true, null, false, 0.6, 0),
+
+            // Deactivated by an admin: login, refresh and API key are all blocked for it.
+            new MerchantSeed(&quot;Vintage Vinyl Shop&quot;, &quot;VINYL&quot;, &quot;owner@vintage-vinyl.example.com&quot;, DEFAULT_PASSWORD,
+<span class="fc" id="L80">                    List.of(new Employee(&quot;hugo.leroy@example.com&quot;, true)),</span>
+                    new CardMix(8, 1, 1, 1, 1), false, null, false, 1.2, 0),
+
+            // Custom rate limit (default is app.rate-limit.merchant-capacity).
+            new MerchantSeed(&quot;MegaMart Online&quot;, &quot;MEGA&quot;, &quot;owner@megamart.example.com&quot;, DEFAULT_PASSWORD,
+<span class="fc" id="L85">                    List.of(new Employee(&quot;chloe.simon@example.com&quot;, true)),</span>
+<span class="fc" id="L86">                    new CardMix(16, 4, 2, 2, 1), true, 1000, false, 5.0, 1));</span>
+
+    private SeedCatalog() {
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

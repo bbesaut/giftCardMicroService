@@ -1,0 +1,436 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DevActivitySeeder.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.devseed</a> &gt; <span class="el_source">DevActivitySeeder.java</span></div><h1>DevActivitySeeder.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.devseed;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.UUID;
+import java.util.stream.IntStream;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
+import org.springframework.stereotype.Component;
+
+import com.finovago.p2p.devseed.SeedCatalog.CardKind;
+import com.finovago.p2p.dto.CreditRequest;
+import com.finovago.p2p.dto.HoldResponse;
+import com.finovago.p2p.dto.RedemptionResponse;
+import com.finovago.p2p.dto.RefundRequest;
+import com.finovago.p2p.dto.ReserveRequest;
+import com.finovago.p2p.security.AuthenticatedUser;
+import com.finovago.p2p.service.GiftCardCreditService;
+import com.finovago.p2p.service.GiftCardHoldService;
+import com.finovago.p2p.service.GiftCardRefundService;
+import com.finovago.p2p.service.GiftCardService;
+
+/**
+ * Writes a few weeks of believable activity for each merchant: redemptions, holds (captured,
+ * released, expired), refunds and manual credits, made by the merchant's own users and API key.
+ * &lt;p&gt;
+ * Every operation goes through the real service, so each one is validated like a live call and
+ * leaves the balances and ledger exactly as production code would. The services stamp everything
+ * with the current time, so after each operation the rows it wrote are moved to the moment it is
+ * pretending to have happened (see {@link SeedTimeMachine}). Operations are replayed oldest first,
+ * which keeps each card's ledger in a consistent order: the reconciliation job trusts the most
+ * recent entry's balance, so an out-of-order history would read as drift.
+ */
+@Component
+@Profile(&quot;dev &amp; seed&quot;)
+class DevActivitySeeder {
+
+<span class="fc" id="L50">    private static final Logger log = LoggerFactory.getLogger(DevActivitySeeder.class);</span>
+
+    /** How far back the history reaches - past the dashboard's default 30-day window, up to its 90-day maximum. */
+    static final int HISTORY_DAYS = 60;
+
+    /** Cards come into existence during the first stretch of the history, not all on day one. */
+    private static final int CARD_CREATION_SPREAD_DAYS = 20;
+
+    private static final int BUSINESS_START_MINUTE = 8 * 60;
+    private static final int BUSINESS_MINUTES = 13 * 60;
+
+    private static final int API_KEY_SHARE_PERCENT = 35;
+    private static final int OVERSPEND_PERCENT = 3;
+    private static final int FULL_REFUND_PERCENT = 65;
+
+    // Cumulative thresholds of a 0-99 roll, see runRandomOperation.
+    private static final int REDEMPTION_UPTO = 72;
+    private static final int HOLD_CAPTURE_UPTO = 84;
+    private static final int HOLD_RELEASE_UPTO = 88;
+    private static final int HOLD_EXPIRE_UPTO = 90;
+    private static final int REFUND_UPTO = 96;
+
+<span class="fc" id="L72">    private static final BigDecimal MIN_USABLE_BALANCE = BigDecimal.valueOf(5);</span>
+<span class="fc" id="L73">    private static final BigDecimal MAX_OVERSPEND_BALANCE = BigDecimal.valueOf(100);</span>
+
+<span class="fc" id="L75">    private static final List&lt;String&gt; REFUND_REASONS = List.of(&quot;Customer return&quot;, &quot;Wrong item&quot;, &quot;Duplicate charge&quot;);</span>
+<span class="fc" id="L76">    private static final List&lt;String&gt; CREDIT_REASONS = List.of(</span>
+            &quot;Goodwill gesture - support ticket&quot;, &quot;Promotional bonus&quot;, &quot;Compensation for a delayed order&quot;);
+
+<span class="fc" id="L79">    private enum Operation { REDEMPTION, HOLD_CAPTURED, HOLD_RELEASED, HOLD_EXPIRED, REFUND, CREDIT }</span>
+
+    private final GiftCardService giftCardService;
+    private final GiftCardHoldService holdService;
+    private final GiftCardRefundService refundService;
+    private final GiftCardCreditService creditService;
+    private final SeedTimeMachine timeMachine;
+    private final Duration holdTtl;
+
+    DevActivitySeeder(GiftCardService giftCardService, GiftCardHoldService holdService,
+            GiftCardRefundService refundService, GiftCardCreditService creditService,
+<span class="fc" id="L90">            SeedTimeMachine timeMachine, @Value(&quot;${app.holds.ttl-minutes:15}&quot;) long holdTtlMinutes) {</span>
+<span class="fc" id="L91">        this.giftCardService = giftCardService;</span>
+<span class="fc" id="L92">        this.holdService = holdService;</span>
+<span class="fc" id="L93">        this.refundService = refundService;</span>
+<span class="fc" id="L94">        this.creditService = creditService;</span>
+<span class="fc" id="L95">        this.timeMachine = timeMachine;</span>
+<span class="fc" id="L96">        this.holdTtl = Duration.ofMinutes(holdTtlMinutes);</span>
+<span class="fc" id="L97">    }</span>
+
+    void seed(List&lt;SeededMerchant&gt; merchants) {
+<span class="fc" id="L100">        merchants.forEach(merchant -&gt; new Simulation(merchant).run());</span>
+<span class="fc" id="L101">    }</span>
+
+    /** A gift card as the simulation currently believes it to be - mirrors what the real ledger says, without re-reading it. */
+    private static final class TrackedCard {
+        private final SeededCard seeded;
+        private BigDecimal balance;
+<span class="fc" id="L107">        private boolean active = true;</span>
+        // When this card's ledger was last written to. Nothing may be stamped earlier than this: a card's
+        // history has to read in the order it was written, or the reconciliation job trusts the wrong &quot;latest&quot; entry.
+        private LocalDateTime lastEntryAt;
+
+<span class="fc" id="L112">        private TrackedCard(SeededCard seeded, LocalDateTime createdAt) {</span>
+<span class="fc" id="L113">            this.seeded = seeded;</span>
+<span class="fc" id="L114">            this.lastEntryAt = createdAt;</span>
+<span class="fc" id="L115">            this.balance = seeded.initialBalance();</span>
+<span class="fc" id="L116">        }</span>
+
+        private void touch(LocalDateTime at) {
+<span class="fc" id="L119">            this.lastEntryAt = at;</span>
+<span class="fc" id="L120">        }</span>
+
+        private String code() {
+<span class="fc" id="L123">            return seeded.code();</span>
+        }
+
+        /** Whether an operation at {@code at} could really have hit this card. */
+        private boolean usableAt(LocalDateTime at) {
+<span class="fc" id="L128">            LocalDate expiration = seeded.finalExpirationDate();</span>
+<span class="fc bfc" id="L129" title="All 2 branches covered.">            return active</span>
+<span class="fc bfc" id="L130" title="All 2 branches covered.">                    &amp;&amp; balance.compareTo(MIN_USABLE_BALANCE) &gt;= 0</span>
+<span class="fc bfc" id="L131" title="All 4 branches covered.">                    &amp;&amp; lastEntryAt.isBefore(at)</span>
+<span class="fc bfc" id="L132" title="All 2 branches covered.">                    &amp;&amp; (expiration == null || at.toLocalDate().isBefore(expiration));</span>
+        }
+    }
+
+    /** A redemption that can still be (partly) refunded. */
+    private static final class Refundable {
+        private final TrackedCard card;
+        private final Long ledgerEntryId;
+        private final BigDecimal original;
+        private final LocalDateTime at;
+<span class="fc" id="L142">        private BigDecimal refunded = BigDecimal.ZERO.setScale(2);</span>
+
+<span class="fc" id="L144">        private Refundable(TrackedCard card, Long ledgerEntryId, BigDecimal original, LocalDateTime at) {</span>
+<span class="fc" id="L145">            this.card = card;</span>
+<span class="fc" id="L146">            this.ledgerEntryId = ledgerEntryId;</span>
+<span class="fc" id="L147">            this.original = original;</span>
+<span class="fc" id="L148">            this.at = at;</span>
+<span class="fc" id="L149">        }</span>
+
+        private BigDecimal remaining() {
+<span class="fc" id="L152">            return original.subtract(refunded);</span>
+        }
+    }
+
+    /** One merchant's replay. Holds the per-merchant state (cards, refundable redemptions, ledger cursor) the operations share. */
+    private final class Simulation {
+        private final SeededMerchant merchant;
+        // Own stream, distinct from the one that picked card codes and balances.
+        private final Random random;
+<span class="fc" id="L161">        private final LocalDateTime now = LocalDateTime.now();</span>
+<span class="fc" id="L162">        private final List&lt;TrackedCard&gt; cards = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L163">        private final List&lt;Refundable&gt; refundables = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L164">        private final Map&lt;Operation, Integer&gt; counts = new EnumMap&lt;&gt;(Operation.class);</span>
+        private long lastLedgerId;
+
+<span class="fc" id="L167">        private Simulation(SeededMerchant merchant) {</span>
+<span class="fc" id="L168">            this.merchant = merchant;</span>
+<span class="fc" id="L169">            this.random = new Random(merchant.spec().name().hashCode() * 31L + 17);</span>
+<span class="fc" id="L170">        }</span>
+
+        private void run() {
+<span class="fc" id="L173">            lastLedgerId = timeMachine.latestLedgerId();</span>
+<span class="fc" id="L174">            backdateCardCreations();</span>
+
+<span class="fc" id="L176">            LocalDate today = LocalDate.now();</span>
+<span class="fc bfc" id="L177" title="All 2 branches covered.">            for (int daysAgo = HISTORY_DAYS; daysAgo &gt;= 0; daysAgo--) {</span>
+<span class="fc bfc" id="L178" title="All 2 branches covered.">                for (LocalDateTime at : operationTimes(today.minusDays(daysAgo), daysAgo)) {</span>
+<span class="fc" id="L179">                    runRandomOperation(at);</span>
+<span class="fc" id="L180">                }</span>
+            }
+<span class="fc" id="L182">            leavePendingHolds();</span>
+
+<span class="fc" id="L184">            log.info(&quot;Activity for {}: {}&quot;, merchant.spec().name(), counts);</span>
+<span class="fc" id="L185">        }</span>
+
+        private void backdateCardCreations() {
+<span class="fc" id="L188">            LocalDateTime historyStart = LocalDate.now().minusDays(HISTORY_DAYS).atStartOfDay();</span>
+<span class="fc bfc" id="L189" title="All 2 branches covered.">            for (SeededCard seeded : merchant.cards()) {</span>
+<span class="fc" id="L190">                LocalDateTime createdAt = historyStart</span>
+<span class="fc" id="L191">                        .plusDays(random.nextInt(CARD_CREATION_SPREAD_DAYS))</span>
+<span class="fc" id="L192">                        .plusMinutes(BUSINESS_START_MINUTE + random.nextInt(BUSINESS_MINUTES));</span>
+<span class="fc" id="L193">                timeMachine.moveCreationEntry(merchant.id(), seeded.code(), createdAt);</span>
+<span class="fc" id="L194">                cards.add(new TrackedCard(seeded, createdAt));</span>
+<span class="fc" id="L195">            }</span>
+<span class="fc" id="L196">        }</span>
+
+        /** Sorted timestamps for one day: quieter weekends, and a gentle upward trend so a chart isn't flat. */
+        private List&lt;LocalDateTime&gt; operationTimes(LocalDate date, int daysAgo) {
+<span class="fc bfc" id="L200" title="All 2 branches covered.">            double weekendFactor = date.getDayOfWeek().getValue() &gt;= 6 ? 0.5 : 1.0;</span>
+<span class="fc" id="L201">            double trend = 0.7 + 0.6 * (HISTORY_DAYS - daysAgo) / HISTORY_DAYS;</span>
+<span class="fc" id="L202">            double jitter = 0.5 + random.nextDouble();</span>
+<span class="fc" id="L203">            int count = (int) Math.round(merchant.spec().dailyActivity() * weekendFactor * trend * jitter);</span>
+
+<span class="fc" id="L205">            return IntStream.range(0, count)</span>
+<span class="fc" id="L206">                    .mapToObj(i -&gt; date.atStartOfDay().plusMinutes(BUSINESS_START_MINUTE + random.nextInt(BUSINESS_MINUTES)))</span>
+<span class="fc" id="L207">                    .filter(at -&gt; at.isBefore(now.minusMinutes(1)))</span>
+<span class="fc" id="L208">                    .sorted()</span>
+<span class="fc" id="L209">                    .toList();</span>
+        }
+
+        private void runRandomOperation(LocalDateTime at) {
+<span class="fc" id="L213">            int roll = random.nextInt(100);</span>
+<span class="fc bfc" id="L214" title="All 2 branches covered.">            if (roll &lt; REDEMPTION_UPTO) {</span>
+<span class="fc" id="L215">                redeem(at);</span>
+<span class="fc bfc" id="L216" title="All 2 branches covered.">            } else if (roll &lt; HOLD_CAPTURE_UPTO) {</span>
+<span class="fc" id="L217">                holdThenCapture(at);</span>
+<span class="fc bfc" id="L218" title="All 2 branches covered.">            } else if (roll &lt; HOLD_RELEASE_UPTO) {</span>
+<span class="fc" id="L219">                holdThenRelease(at);</span>
+<span class="fc bfc" id="L220" title="All 2 branches covered.">            } else if (roll &lt; HOLD_EXPIRE_UPTO) {</span>
+<span class="fc" id="L221">                holdThenExpire(at);</span>
+<span class="fc bfc" id="L222" title="All 2 branches covered.">            } else if (roll &lt; REFUND_UPTO) {</span>
+<span class="fc" id="L223">                refund(at);</span>
+            } else {
+<span class="fc" id="L225">                credit(at);</span>
+            }
+<span class="fc" id="L227">        }</span>
+
+        private void redeem(LocalDateTime at) {
+<span class="fc" id="L230">            TrackedCard card = pickUsableCard(at);</span>
+<span class="fc bfc" id="L231" title="All 2 branches covered.">            if (card == null) {</span>
+<span class="fc" id="L232">                return;</span>
+            }
+<span class="fc" id="L234">            AuthenticatedUser actor = pickActor(false);</span>
+            // The rare overspend is the &quot;card can't cover it&quot; case: the redemption drains the card and reports what's
+            // left to pay. Only on a small balance - &quot;spending&quot; a few thousand in one go isn't a purchase, it's an outlier.
+<span class="fc bfc" id="L237" title="All 4 branches covered.">            boolean overspend = card.balance.compareTo(MAX_OVERSPEND_BALANCE) &lt;= 0 &amp;&amp; random.nextInt(100) &lt; OVERSPEND_PERCENT;</span>
+<span class="fc bfc" id="L238" title="All 2 branches covered.">            BigDecimal amount = overspend</span>
+<span class="fc" id="L239">                    ? card.balance.add(BigDecimal.valueOf(20))</span>
+<span class="fc" id="L240">                    : purchaseAmount(card);</span>
+
+<span class="fc" id="L242">            RedemptionResponse response = giftCardService.executeRedemptionSync(</span>
+<span class="fc" id="L243">                    merchant.id(), card.code(), amount, actor.userId(), actor.apiKey());</span>
+
+<span class="fc" id="L245">            card.balance = response.remainingBalance();</span>
+<span class="fc bfc" id="L246" title="All 2 branches covered.">            if (card.balance.signum() == 0) {</span>
+<span class="fc" id="L247">                card.active = false;</span>
+            }
+<span class="fc" id="L249">            List&lt;Long&gt; written = stamp(at);</span>
+<span class="fc" id="L250">            card.touch(at);</span>
+<span class="fc" id="L251">            refundables.add(new Refundable(card, written.get(0), response.deductedAmount(), at));</span>
+<span class="fc" id="L252">            count(Operation.REDEMPTION);</span>
+<span class="fc" id="L253">        }</span>
+
+        private void holdThenCapture(LocalDateTime at) {
+<span class="fc" id="L256">            TrackedCard card = pickUsableCard(at);</span>
+<span class="pc bpc" id="L257" title="1 of 2 branches missed.">            if (card == null) {</span>
+<span class="nc" id="L258">                return;</span>
+            }
+<span class="fc" id="L260">            AuthenticatedUser actor = pickActor(false);</span>
+<span class="fc" id="L261">            BigDecimal amount = purchaseAmount(card);</span>
+
+<span class="fc" id="L263">            HoldResponse hold = reserve(actor, card.code(), amount);</span>
+<span class="fc" id="L264">            stamp(at);</span>
+<span class="fc" id="L265">            SeedSecurityContext.runAs(actor, () -&gt; holdService.capture(hold.holdId()));</span>
+<span class="fc" id="L266">            LocalDateTime capturedAt = soonAfter(at);</span>
+<span class="fc" id="L267">            stamp(capturedAt);</span>
+<span class="fc" id="L268">            timeMachine.moveHold(hold.holdId(), at, at.plus(holdTtl));</span>
+
+<span class="fc" id="L270">            card.balance = card.balance.subtract(amount);</span>
+<span class="fc" id="L271">            card.touch(capturedAt);</span>
+<span class="fc" id="L272">            count(Operation.HOLD_CAPTURED);</span>
+<span class="fc" id="L273">        }</span>
+
+        private void holdThenRelease(LocalDateTime at) {
+<span class="fc" id="L276">            TrackedCard card = pickUsableCard(at);</span>
+<span class="pc bpc" id="L277" title="1 of 2 branches missed.">            if (card == null) {</span>
+<span class="nc" id="L278">                return;</span>
+            }
+<span class="fc" id="L280">            AuthenticatedUser actor = pickActor(false);</span>
+
+<span class="fc" id="L282">            HoldResponse hold = reserve(actor, card.code(), purchaseAmount(card));</span>
+<span class="fc" id="L283">            stamp(at);</span>
+<span class="fc" id="L284">            SeedSecurityContext.runAs(actor, () -&gt; holdService.release(hold.holdId()));</span>
+<span class="fc" id="L285">            LocalDateTime releasedAt = soonAfter(at);</span>
+<span class="fc" id="L286">            stamp(releasedAt);</span>
+<span class="fc" id="L287">            timeMachine.moveHold(hold.holdId(), at, at.plus(holdTtl));</span>
+<span class="fc" id="L288">            card.touch(releasedAt);</span>
+<span class="fc" id="L289">            count(Operation.HOLD_RELEASED);</span>
+<span class="fc" id="L290">        }</span>
+
+        private void holdThenExpire(LocalDateTime at) {
+            // An expired hold needs its TTL to have really elapsed by now; too recent, and it would be a lie.
+<span class="pc bpc" id="L294" title="1 of 2 branches missed.">            if (at.isAfter(now.minus(holdTtl).minusMinutes(1))) {</span>
+<span class="nc" id="L295">                redeem(at);</span>
+<span class="nc" id="L296">                return;</span>
+            }
+<span class="fc" id="L298">            TrackedCard card = pickUsableCard(at);</span>
+<span class="pc bpc" id="L299" title="1 of 2 branches missed.">            if (card == null) {</span>
+<span class="nc" id="L300">                return;</span>
+            }
+<span class="fc" id="L302">            HoldResponse hold = reserve(pickActor(false), card.code(), purchaseAmount(card));</span>
+<span class="fc" id="L303">            stamp(at);</span>
+<span class="fc" id="L304">            timeMachine.moveHold(hold.holdId(), at, at.plus(holdTtl));</span>
+            // The same call the expiration sweeper makes, once the hold is past its TTL.
+<span class="fc" id="L306">            holdService.expireIfStillPending(hold.holdId());</span>
+<span class="fc" id="L307">            card.touch(at);</span>
+<span class="fc" id="L308">            count(Operation.HOLD_EXPIRED);</span>
+<span class="fc" id="L309">        }</span>
+
+        private void refund(LocalDateTime at) {
+<span class="fc" id="L312">            List&lt;Refundable&gt; candidates = refundables.stream()</span>
+<span class="fc bfc" id="L313" title="All 6 branches covered.">                    .filter(r -&gt; r.remaining().signum() &gt; 0 &amp;&amp; r.at.isBefore(at.minusMinutes(30)) &amp;&amp; r.card.lastEntryAt.isBefore(at))</span>
+<span class="fc" id="L314">                    .toList();</span>
+<span class="fc bfc" id="L315" title="All 2 branches covered.">            if (candidates.isEmpty()) {</span>
+<span class="fc" id="L316">                redeem(at);</span>
+<span class="fc" id="L317">                return;</span>
+            }
+<span class="fc" id="L319">            Refundable target = candidates.get(random.nextInt(candidates.size()));</span>
+<span class="fc bfc" id="L320" title="All 2 branches covered.">            BigDecimal amount = random.nextInt(100) &lt; FULL_REFUND_PERCENT</span>
+<span class="fc" id="L321">                    ? target.remaining()</span>
+<span class="fc" id="L322">                    : target.remaining().divide(BigDecimal.valueOf(2), 2, RoundingMode.HALF_UP);</span>
+<span class="pc bpc" id="L323" title="1 of 2 branches missed.">            if (amount.signum() &lt;= 0) {</span>
+<span class="nc" id="L324">                return;</span>
+            }
+<span class="fc" id="L326">            AuthenticatedUser actor = pickActor(false);</span>
+<span class="fc bfc" id="L327" title="All 2 branches covered.">            String reason = random.nextBoolean() ? null : pick(REFUND_REASONS);</span>
+
+<span class="fc" id="L329">            SeedSecurityContext.runAs(actor, () -&gt; refundService.refund(</span>
+<span class="fc" id="L330">                    new RefundRequest(target.card.code(), amount, target.ledgerEntryId, reason), idempotencyKey()));</span>
+<span class="fc" id="L331">            stamp(at);</span>
+
+<span class="fc" id="L333">            target.refunded = target.refunded.add(amount);</span>
+<span class="fc" id="L334">            target.card.balance = target.card.balance.add(amount);</span>
+<span class="fc" id="L335">            target.card.touch(at);</span>
+<span class="fc" id="L336">            count(Operation.REFUND);</span>
+<span class="fc" id="L337">        }</span>
+
+        private void credit(LocalDateTime at) {
+            // Any card that already existed - crediting a drained or soon-dead card is exactly what support does.
+<span class="fc" id="L341">            List&lt;TrackedCard&gt; existing = cards.stream().filter(c -&gt; c.lastEntryAt.isBefore(at)).toList();</span>
+<span class="pc bpc" id="L342" title="1 of 2 branches missed.">            if (existing.isEmpty()) {</span>
+<span class="nc" id="L343">                return;</span>
+            }
+<span class="fc" id="L345">            TrackedCard card = existing.get(random.nextInt(existing.size()));</span>
+<span class="fc" id="L346">            BigDecimal amount = BigDecimal.valueOf(5L * (1 + random.nextInt(10))).setScale(2);</span>
+            // A credit must be asserted by a person, never an API key.
+<span class="fc" id="L348">            AuthenticatedUser actor = pickActor(true);</span>
+
+<span class="fc" id="L350">            SeedSecurityContext.runAs(actor, () -&gt; creditService.credit(</span>
+<span class="fc" id="L351">                    new CreditRequest(card.code(), amount, pick(CREDIT_REASONS)), idempotencyKey()));</span>
+<span class="fc" id="L352">            stamp(at);</span>
+
+<span class="fc" id="L354">            card.balance = card.balance.add(amount);</span>
+<span class="fc" id="L355">            card.touch(at);</span>
+<span class="fc" id="L356">            count(Operation.CREDIT);</span>
+<span class="fc" id="L357">        }</span>
+
+        /** Holds left open on cards that stay usable, with a long TTL so they're still pending whenever the dev looks. */
+        private void leavePendingHolds() {
+<span class="fc" id="L361">            AuthenticatedUser owner = merchant.principalOf(merchant.owner());</span>
+<span class="fc" id="L362">            List&lt;TrackedCard&gt; candidates = cards.stream()</span>
+<span class="fc bfc" id="L363" title="All 4 branches covered.">                    .filter(c -&gt; c.active &amp;&amp; c.balance.compareTo(BigDecimal.valueOf(50)) &gt;= 0)</span>
+<span class="fc bfc" id="L364" title="All 4 branches covered.">                    .filter(c -&gt; c.seeded.kind() != CardKind.DEACTIVATED &amp;&amp; c.seeded.kind() != CardKind.EXPIRED)</span>
+<span class="fc" id="L365">                    .toList();</span>
+<span class="pc bpc" id="L366" title="1 of 4 branches missed.">            for (int i = 0; i &lt; merchant.spec().pendingHolds() &amp;&amp; !candidates.isEmpty(); i++) {</span>
+<span class="fc" id="L367">                TrackedCard card = candidates.get(random.nextInt(candidates.size()));</span>
+<span class="fc" id="L368">                BigDecimal amount = BigDecimal.valueOf(5L * (2 + random.nextInt(7))).setScale(2);</span>
+<span class="fc" id="L369">                HoldResponse hold = reserve(owner, card.code(), amount);</span>
+<span class="fc" id="L370">                timeMachine.moveHold(hold.holdId(), now, now.plusDays(7));</span>
+            }
+<span class="fc" id="L372">        }</span>
+
+        private HoldResponse reserve(AuthenticatedUser actor, String code, BigDecimal amount) {
+<span class="fc" id="L375">            return SeedSecurityContext.call(actor, () -&gt; holdService.reserve(new ReserveRequest(code, amount), idempotencyKey()));</span>
+        }
+
+        /** Picks a card at random, weighted by balance: big cards see more traffic, small ones don't all drain. */
+        private TrackedCard pickUsableCard(LocalDateTime at) {
+<span class="fc" id="L380">            List&lt;TrackedCard&gt; usable = cards.stream().filter(c -&gt; c.usableAt(at)).toList();</span>
+<span class="fc bfc" id="L381" title="All 2 branches covered.">            if (usable.isEmpty()) {</span>
+<span class="fc" id="L382">                return null;</span>
+            }
+<span class="fc" id="L384">            double target = random.nextDouble() * usable.stream().mapToDouble(c -&gt; c.balance.doubleValue()).sum();</span>
+<span class="pc bpc" id="L385" title="1 of 2 branches missed.">            for (TrackedCard card : usable) {</span>
+<span class="fc" id="L386">                target -= card.balance.doubleValue();</span>
+<span class="fc bfc" id="L387" title="All 2 branches covered.">                if (target &lt;= 0) {</span>
+<span class="fc" id="L388">                    return card;</span>
+                }
+<span class="fc" id="L390">            }</span>
+<span class="nc" id="L391">            return usable.get(usable.size() - 1);</span>
+        }
+
+        /** A human account of the merchant, or - for merchants that have one - the API key. */
+        private AuthenticatedUser pickActor(boolean humanOnly) {
+<span class="fc bfc" id="L396" title="All 6 branches covered.">            if (!humanOnly &amp;&amp; merchant.spec().withApiKey() &amp;&amp; random.nextInt(100) &lt; API_KEY_SHARE_PERCENT) {</span>
+<span class="fc" id="L397">                return merchant.apiKeyPrincipal();</span>
+            }
+<span class="fc" id="L399">            return merchant.principalOf(merchant.users().get(random.nextInt(merchant.users().size())));</span>
+        }
+
+        /** A purchase-sized amount (5 to 60), never more than the card holds. */
+        private BigDecimal purchaseAmount(TrackedCard card) {
+<span class="fc" id="L404">            return BigDecimal.valueOf(5L * (1 + random.nextInt(12))).setScale(2).min(card.balance);</span>
+        }
+
+        /** A few minutes after {@code at}, within the hold TTL and never in the future. */
+        private LocalDateTime soonAfter(LocalDateTime at) {
+<span class="fc" id="L409">            LocalDateTime later = at.plusMinutes(1 + random.nextInt(14));</span>
+<span class="pc bpc" id="L410" title="1 of 2 branches missed.">            return later.isAfter(now) ? now : later;</span>
+        }
+
+        /** Moves the ledger rows the last operation wrote to {@code at}, returning their ids in write order. */
+        private List&lt;Long&gt; stamp(LocalDateTime at) {
+<span class="fc" id="L415">            List&lt;Long&gt; ids = timeMachine.moveLedgerEntriesAfter(lastLedgerId, at);</span>
+<span class="pc bpc" id="L416" title="1 of 2 branches missed.">            if (!ids.isEmpty()) {</span>
+<span class="fc" id="L417">                lastLedgerId = Collections.max(ids);</span>
+            }
+<span class="fc" id="L419">            return ids;</span>
+        }
+
+        private String pick(List&lt;String&gt; options) {
+<span class="fc" id="L423">            return options.get(random.nextInt(options.size()));</span>
+        }
+
+        /** Drawn from the seeded stream rather than {@code randomUUID()}, so keys are as reproducible as everything else. */
+        private String idempotencyKey() {
+<span class="fc" id="L428">            return new UUID(random.nextLong(), random.nextLong()).toString();</span>
+        }
+
+        private void count(Operation operation) {
+<span class="fc" id="L432">            counts.merge(operation, 1, Integer::sum);</span>
+<span class="fc" id="L433">        }</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

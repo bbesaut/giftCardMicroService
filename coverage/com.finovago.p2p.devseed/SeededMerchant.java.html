@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SeededMerchant.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.devseed</a> &gt; <span class="el_source">SeededMerchant.java</span></div><h1>SeededMerchant.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.devseed;
+
+import java.util.List;
+
+import com.finovago.p2p.devseed.SeedCatalog.MerchantSeed;
+import com.finovago.p2p.model.Merchant;
+import com.finovago.p2p.model.Role;
+import com.finovago.p2p.model.User;
+import com.finovago.p2p.security.AuthenticatedUser;
+
+/**
+ * A merchant once its accounts and cards exist: the handle the later seeding phases (activity
+ * history, lifecycle) work from.
+ *
+ * @param users the merchant's human accounts, owner first
+ */
+<span class="fc" id="L17">record SeededMerchant(MerchantSeed spec, Merchant merchant, List&lt;User&gt; users, List&lt;SeededCard&gt; cards) {</span>
+
+    Long id() {
+<span class="fc" id="L20">        return merchant.getId();</span>
+    }
+
+    User owner() {
+<span class="fc" id="L24">        return users.get(0);</span>
+    }
+
+    /** The principal a call made by this human account would carry. */
+    AuthenticatedUser principalOf(User user) {
+<span class="fc" id="L29">        return new AuthenticatedUser(user.getEmail(), Role.MERCHANT.name(), merchant.getId(), user.getId());</span>
+    }
+
+    /** The principal of a call authenticated with the merchant's API key: no user behind it. */
+    AuthenticatedUser apiKeyPrincipal() {
+<span class="fc" id="L34">        return new AuthenticatedUser(&quot;api-key&quot;, Role.MERCHANT.name(), merchant.getId(), null, true);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

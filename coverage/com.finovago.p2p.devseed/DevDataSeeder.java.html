@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DevDataSeeder.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.devseed</a> &gt; <span class="el_source">DevDataSeeder.java</span></div><h1>DevDataSeeder.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.devseed;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Random;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Profile;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Component;
+
+import com.finovago.p2p.devseed.SeedCatalog.CardKind;
+import com.finovago.p2p.devseed.SeedCatalog.CardMix;
+import com.finovago.p2p.devseed.SeedCatalog.Employee;
+import com.finovago.p2p.devseed.SeedCatalog.MerchantSeed;
+import com.finovago.p2p.dto.ApiKeyResponse;
+import com.finovago.p2p.dto.GiftCardCreateRequest;
+import com.finovago.p2p.model.Merchant;
+import com.finovago.p2p.model.Role;
+import com.finovago.p2p.model.User;
+import com.finovago.p2p.repository.MerchantRepository;
+import com.finovago.p2p.repository.UserRepository;
+import com.finovago.p2p.service.ApiKeyService;
+import com.finovago.p2p.service.GiftCardService;
+import com.finovago.p2p.service.MerchantService;
+
+/**
+ * Loads the {@link SeedCatalog} dataset into an empty database, in three phases: accounts and gift
+ * cards, then the activity history (see {@link DevActivitySeeder}), then the final states (a
+ * deactivated merchant, expired cards...) that only make sense once that history exists.
+ * &lt;p&gt;
+ * Everything goes through the same services the API uses (never the repositories directly for
+ * business data), so balances, ledger entries and merchant lifecycle rules are exactly what a real
+ * run would produce - a hand-written INSERT would happily create states the application can't reach.
+ * &lt;p&gt;
+ * Deterministic on purpose: card codes, balances and expiry dates are drawn from a per-merchant
+ * seeded {@link Random}, so a reset gives the same data every time (dates aside, which are relative
+ * to today).
+ */
+@Component
+@Profile(&quot;dev &amp; seed&quot;)
+class DevDataSeeder {
+
+<span class="fc" id="L48">    private static final Logger log = LoggerFactory.getLogger(DevDataSeeder.class);</span>
+
+    private final MerchantRepository merchantRepository;
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final ApiKeyService apiKeyService;
+    private final GiftCardService giftCardService;
+    private final MerchantService merchantService;
+    private final DevActivitySeeder activitySeeder;
+    private final SeedTimeMachine timeMachine;
+
+    DevDataSeeder(MerchantRepository merchantRepository, UserRepository userRepository,
+            PasswordEncoder passwordEncoder, ApiKeyService apiKeyService,
+            GiftCardService giftCardService, MerchantService merchantService,
+<span class="fc" id="L62">            DevActivitySeeder activitySeeder, SeedTimeMachine timeMachine) {</span>
+<span class="fc" id="L63">        this.merchantRepository = merchantRepository;</span>
+<span class="fc" id="L64">        this.userRepository = userRepository;</span>
+<span class="fc" id="L65">        this.passwordEncoder = passwordEncoder;</span>
+<span class="fc" id="L66">        this.apiKeyService = apiKeyService;</span>
+<span class="fc" id="L67">        this.giftCardService = giftCardService;</span>
+<span class="fc" id="L68">        this.merchantService = merchantService;</span>
+<span class="fc" id="L69">        this.activitySeeder = activitySeeder;</span>
+<span class="fc" id="L70">        this.timeMachine = timeMachine;</span>
+<span class="fc" id="L71">    }</span>
+
+    void seed() {
+<span class="fc" id="L74">        userRepository.save(new User(SeedCatalog.ADMIN_EMAIL, passwordEncoder.encode(SeedCatalog.ADMIN_PASSWORD), Role.ADMIN, null));</span>
+
+        // One BCrypt hash shared by every account using the default password - hashing is deliberately slow.
+<span class="fc" id="L77">        String defaultPasswordHash = passwordEncoder.encode(SeedCatalog.DEFAULT_PASSWORD);</span>
+
+<span class="fc" id="L79">        List&lt;SeededMerchant&gt; seeded = SeedCatalog.MERCHANTS.stream()</span>
+<span class="fc" id="L80">                .map(spec -&gt; seedAccountsAndCards(spec, defaultPasswordHash))</span>
+<span class="fc" id="L81">                .toList();</span>
+
+<span class="fc" id="L83">        activitySeeder.seed(seeded);</span>
+
+        // Final states last: a deactivated merchant or an expired card is somewhere to end up, and
+        // applying it before the history is written would get in the way of writing that history.
+<span class="fc" id="L87">        seeded.forEach(this::applyFinalStates);</span>
+
+<span class="fc" id="L89">        log.info(&quot;Dev data seeded: {} merchants, {} users, admin login: {}&quot;, seeded.size(), userRepository.count(), SeedCatalog.ADMIN_EMAIL);</span>
+<span class="fc" id="L90">    }</span>
+
+    private SeededMerchant seedAccountsAndCards(MerchantSeed spec, String defaultPasswordHash) {
+<span class="fc" id="L93">        Merchant merchant = merchantRepository.save(new Merchant(spec.name(), spec.ownerEmail()));</span>
+
+<span class="fc" id="L95">        List&lt;User&gt; users = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L96" title="All 2 branches covered.">        String ownerPasswordHash = SeedCatalog.DEFAULT_PASSWORD.equals(spec.ownerPassword())</span>
+<span class="fc" id="L97">                ? defaultPasswordHash</span>
+<span class="fc" id="L98">                : passwordEncoder.encode(spec.ownerPassword());</span>
+<span class="fc" id="L99">        users.add(userRepository.save(new User(spec.ownerEmail(), ownerPasswordHash, Role.MERCHANT, merchant, true)));</span>
+
+<span class="fc bfc" id="L101" title="All 2 branches covered.">        for (Employee employee : spec.employees()) {</span>
+<span class="fc" id="L102">            User user = new User(employee.email(), defaultPasswordHash, Role.MERCHANT, merchant);</span>
+<span class="fc" id="L103">            user.setActive(employee.active());</span>
+<span class="fc" id="L104">            users.add(userRepository.save(user));</span>
+<span class="fc" id="L105">        }</span>
+
+<span class="fc bfc" id="L107" title="All 2 branches covered.">        if (spec.withApiKey()) {</span>
+            // An API key is its own identity on the merchant, no service-account User behind it.
+<span class="fc" id="L109">            ApiKeyResponse apiKey = apiKeyService.generateOrRotate(merchant);</span>
+<span class="fc" id="L110">            log.info(&quot;API key for {} (dev only): {}&quot;, spec.name(), apiKey.apiKeySecret());</span>
+        }
+
+<span class="fc" id="L113">        SeededMerchant seeded = new SeededMerchant(spec, merchant, List.copyOf(users), new ArrayList&lt;&gt;());</span>
+<span class="fc" id="L114">        SeedSecurityContext.runAs(seeded.principalOf(seeded.owner()), () -&gt; seedCards(seeded));</span>
+<span class="fc" id="L115">        return seeded;</span>
+    }
+
+    private void seedCards(SeededMerchant merchant) {
+<span class="fc" id="L119">        MerchantSeed spec = merchant.spec();</span>
+        // String#hashCode is specified by the language, so this seed - and the data drawn from it - is stable across JVMs.
+<span class="fc" id="L121">        Random random = new Random(spec.name().hashCode());</span>
+
+<span class="fc" id="L123">        List&lt;CardKind&gt; kinds = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L124">        CardMix mix = spec.cards();</span>
+<span class="fc" id="L125">        addKind(kinds, CardKind.ACTIVE, mix.active());</span>
+<span class="fc" id="L126">        addKind(kinds, CardKind.HIGH_BALANCE, mix.highBalance());</span>
+<span class="fc" id="L127">        addKind(kinds, CardKind.EXPIRING_SOON, mix.expiringSoon());</span>
+<span class="fc" id="L128">        addKind(kinds, CardKind.DEACTIVATED, mix.deactivated());</span>
+<span class="fc" id="L129">        addKind(kinds, CardKind.EXPIRED, mix.expired());</span>
+        // Without the shuffle, codes would come out grouped by kind (DEMO-0001..24 all active, ...).
+<span class="fc" id="L131">        Collections.shuffle(kinds, random);</span>
+
+<span class="fc" id="L133">        LocalDate today = LocalDate.now();</span>
+<span class="fc bfc" id="L134" title="All 2 branches covered.">        for (int i = 0; i &lt; kinds.size(); i++) {</span>
+<span class="fc" id="L135">            String code = &quot;%s-%04d&quot;.formatted(spec.cardCodePrefix(), i + 1);</span>
+<span class="fc" id="L136">            CardKind kind = kinds.get(i);</span>
+<span class="fc" id="L137">            BigDecimal balance = balanceFor(kind, random);</span>
+            // DEACTIVATED and EXPIRED cards are created fully usable: they get there after their history.
+<span class="fc bfc" id="L139" title="All 3 branches covered.">            LocalDate expiration = switch (kind) {</span>
+<span class="fc" id="L140">                case EXPIRING_SOON -&gt; today.plusDays(between(random, 1, 14));</span>
+<span class="fc" id="L141">                case HIGH_BALANCE -&gt; today.plusDays(between(random, 180, 720));</span>
+<span class="fc" id="L142">                default -&gt; today.plusDays(between(random, 60, 720));</span>
+            };
+<span class="fc" id="L144">            giftCardService.createGiftCard(new GiftCardCreateRequest(code, balance, true, expiration));</span>
+
+            // Recent expiry (at most 30 days back) so it always falls after the card's own creation date.
+<span class="fc bfc" id="L147" title="All 2 branches covered.">            LocalDate finalExpiration = kind == CardKind.EXPIRED ? today.minusDays(between(random, 1, 30)) : null;</span>
+<span class="fc" id="L148">            merchant.cards().add(new SeededCard(code, kind, balance, finalExpiration));</span>
+        }
+<span class="fc" id="L150">    }</span>
+
+    private static void addKind(List&lt;CardKind&gt; kinds, CardKind kind, int count) {
+<span class="fc bfc" id="L153" title="All 2 branches covered.">        for (int i = 0; i &lt; count; i++) {</span>
+<span class="fc" id="L154">            kinds.add(kind);</span>
+        }
+<span class="fc" id="L156">    }</span>
+
+    private static BigDecimal balanceFor(CardKind kind, Random random) {
+<span class="fc bfc" id="L159" title="All 4 branches covered.">        return switch (kind) {</span>
+<span class="fc" id="L160">            case HIGH_BALANCE -&gt; amount(random, 1000, 5000, 100);</span>
+<span class="fc" id="L161">            case EXPIRING_SOON -&gt; amount(random, 20, 200, 5);</span>
+<span class="fc" id="L162">            case DEACTIVATED, EXPIRED -&gt; amount(random, 10, 300, 5);</span>
+<span class="fc" id="L163">            case ACTIVE -&gt; amount(random, 10, 500, 5);</span>
+        };
+    }
+
+    /** A random amount in [min, max], rounded to a multiple of {@code step} so balances look like real gift card values. */
+    private static BigDecimal amount(Random random, int min, int max, int step) {
+<span class="fc" id="L169">        int steps = (max - min) / step;</span>
+<span class="fc" id="L170">        return BigDecimal.valueOf(min + (long) random.nextInt(steps + 1) * step).setScale(2);</span>
+    }
+
+    private static long between(Random random, int min, int max) {
+<span class="fc" id="L174">        return min + random.nextInt(max - min + 1);</span>
+    }
+
+    private void applyFinalStates(SeededMerchant seeded) {
+<span class="fc" id="L178">        MerchantSeed spec = seeded.spec();</span>
+
+<span class="fc" id="L180">        SeedSecurityContext.runAs(seeded.principalOf(seeded.owner()), () -&gt; seeded.cards().forEach(card -&gt; {</span>
+<span class="fc bfc" id="L181" title="All 3 branches covered.">            switch (card.kind()) {</span>
+<span class="fc" id="L182">                case DEACTIVATED -&gt; giftCardService.setActive(card.code(), false);</span>
+<span class="fc" id="L183">                case EXPIRED -&gt; timeMachine.setCardExpiration(seeded.id(), card.code(), card.finalExpirationDate());</span>
+                default -&gt; { }
+            }
+<span class="fc" id="L186">        }));</span>
+
+<span class="fc bfc" id="L188" title="All 2 branches covered.">        if (spec.rateLimitCapacity() != null) {</span>
+<span class="fc" id="L189">            merchantService.setRateLimitCapacity(seeded.id(), spec.rateLimitCapacity());</span>
+        }
+<span class="fc bfc" id="L191" title="All 2 branches covered.">        if (!spec.active()) {</span>
+<span class="fc" id="L192">            merchantService.setMerchantActive(seeded.id(), false);</span>
+        }
+<span class="fc" id="L194">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

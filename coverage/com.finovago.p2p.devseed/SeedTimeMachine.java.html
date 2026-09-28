@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SeedTimeMachine.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.devseed</a> &gt; <span class="el_source">SeedTimeMachine.java</span></div><h1>SeedTimeMachine.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.devseed;
+
+import java.sql.Date;
+import java.sql.Timestamp;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
+
+import org.springframework.context.annotation.Profile;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
+
+/**
+ * Rewrites timestamps so freshly seeded data looks like it has a history. The services stamp
+ * everything with &quot;now&quot; and offer no way around it - rightly, in production - so the seeder runs the
+ * real operations first and then moves the rows they wrote to the moment they should have happened.
+ * Needs the schema-owner role: the ledger is append-only for p2p_app.
+ */
+@Component
+@Profile(&quot;dev &amp; seed&quot;)
+class SeedTimeMachine {
+
+    private final JdbcTemplate jdbc;
+
+<span class="fc" id="L25">    SeedTimeMachine(SchemaOwnerJdbc ownerJdbc) {</span>
+<span class="fc" id="L26">        this.jdbc = ownerJdbc.template();</span>
+<span class="fc" id="L27">    }</span>
+
+    long latestLedgerId() {
+<span class="fc" id="L30">        Long id = jdbc.queryForObject(&quot;SELECT COALESCE(MAX(id), 0) FROM gift_card_ledger&quot;, Long.class);</span>
+<span class="pc bpc" id="L31" title="1 of 2 branches missed.">        return id == null ? 0L : id;</span>
+    }
+
+    /**
+     * Moves every ledger entry written after {@code afterId} to {@code timestamp}, returning their ids
+     * in write order. Identity ids only ever grow, and the seeder runs one operation at a time, so
+     * &quot;everything after the last id I saw&quot; is exactly the rows that operation just produced.
+     */
+    List&lt;Long&gt; moveLedgerEntriesAfter(long afterId, LocalDateTime timestamp) {
+<span class="fc" id="L40">        return jdbc.queryForList(</span>
+                &quot;UPDATE gift_card_ledger SET created_at = ? WHERE id &gt; ? RETURNING id&quot;,
+<span class="fc" id="L42">                Long.class, Timestamp.valueOf(timestamp), afterId);</span>
+    }
+
+    void moveCreationEntry(Long merchantId, String cardCode, LocalDateTime timestamp) {
+<span class="fc" id="L46">        jdbc.update(&quot;&quot;&quot;</span>
+                UPDATE gift_card_ledger SET created_at = ?
+                WHERE entry_type = 'CREATION'
+                  AND gift_card_id = (SELECT id FROM gift_card WHERE merchant_id = ? AND card_code = ?)
+<span class="fc" id="L50">                &quot;&quot;&quot;, Timestamp.valueOf(timestamp), merchantId, cardCode);</span>
+<span class="fc" id="L51">    }</span>
+
+    void moveHold(Long holdId, LocalDateTime createdAt, LocalDateTime expiresAt) {
+<span class="fc" id="L54">        jdbc.update(&quot;UPDATE gift_card_hold SET created_at = ?, expires_at = ? WHERE id = ?&quot;,</span>
+<span class="fc" id="L55">                Timestamp.valueOf(createdAt), Timestamp.valueOf(expiresAt), holdId);</span>
+<span class="fc" id="L56">    }</span>
+
+    void setCardExpiration(Long merchantId, String cardCode, LocalDate expirationDate) {
+<span class="fc" id="L59">        jdbc.update(&quot;UPDATE gift_card SET expiration_date = ? WHERE merchant_id = ? AND card_code = ?&quot;,</span>
+<span class="fc" id="L60">                Date.valueOf(expirationDate), merchantId, cardCode);</span>
+<span class="fc" id="L61">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

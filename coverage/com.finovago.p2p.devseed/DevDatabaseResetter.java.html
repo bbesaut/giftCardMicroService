@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DevDatabaseResetter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.devseed</a> &gt; <span class="el_source">DevDatabaseResetter.java</span></div><h1>DevDatabaseResetter.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.devseed;
+
+import java.util.List;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Profile;
+import org.springframework.stereotype.Component;
+
+/**
+ * Empties every table of the local dev database, keeping the schema and Flyway's history intact.
+ * Deliberately triggered by a command the developer runs (see {@link DevSeedRunner}), not by an
+ * HTTP endpoint: a &quot;wipe the database&quot; route in the deployed API is one misconfiguration away from
+ * production.
+ */
+@Component
+@Profile(&quot;dev &amp; seed&quot;)
+class DevDatabaseResetter {
+
+<span class="fc" id="L20">    private static final Logger log = LoggerFactory.getLogger(DevDatabaseResetter.class);</span>
+
+    // Read from the catalog rather than hard-coded, so a table added by a future migration is wiped
+    // without touching this class. Partitions are skipped: truncating the partitioned parent (the
+    // ledger) already covers them. quote_ident keeps the joined TRUNCATE below safe for any name.
+    private static final String LIST_TABLES_SQL = &quot;&quot;&quot;
+            SELECT quote_ident(c.relname)
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public'
+              AND c.relkind IN ('r', 'p')
+              AND NOT c.relispartition
+              AND c.relname &lt;&gt; 'flyway_schema_history'
+            ORDER BY c.relname
+            &quot;&quot;&quot;;
+
+    private final SchemaOwnerJdbc ownerJdbc;
+
+<span class="fc" id="L38">    DevDatabaseResetter(SchemaOwnerJdbc ownerJdbc) {</span>
+<span class="fc" id="L39">        this.ownerJdbc = ownerJdbc;</span>
+<span class="fc" id="L40">    }</span>
+
+    void reset() {
+<span class="fc" id="L43">        List&lt;String&gt; tables = ownerJdbc.template().queryForList(LIST_TABLES_SQL, String.class);</span>
+<span class="fc bfc" id="L44" title="All 2 branches covered.">        if (tables.isEmpty()) {</span>
+<span class="fc" id="L45">            return;</span>
+        }
+        // One statement, so Postgres handles FK ordering itself; RESTART IDENTITY makes ids
+        // deterministic across resets.
+<span class="fc" id="L49">        ownerJdbc.template().execute(&quot;TRUNCATE TABLE &quot; + String.join(&quot;, &quot;, tables) + &quot; RESTART IDENTITY CASCADE&quot;);</span>
+<span class="fc" id="L50">        log.warn(&quot;Dev database reset: truncated {} tables ({})&quot;, tables.size(), String.join(&quot;, &quot;, tables));</span>
+<span class="fc" id="L51">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
