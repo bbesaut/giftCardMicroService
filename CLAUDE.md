@@ -13,6 +13,7 @@
 docker-compose up -d postgres-dev    # Start local PostgreSQL for dev mode
 mvn clean install                    # Full build with tests
 mvn spring-boot:run "-Dspring-boot.run.arguments=--spring.profiles.active=dev"  # Dev mode
+.\scripts\reset-dev.ps1              # Wipe the dev DB and reload the demo dataset (see Dev data seeding)
 mvn test                             # Run unit tests (Mockito-based, no DB, no Docker)
 mvn test -P integration-tests        # Run all tests with real PostgreSQL 17 via Testcontainers (requires Docker)
 ```
@@ -22,13 +23,13 @@ mvn test -P integration-tests        # Run all tests with real PostgreSQL 17 via
 Two Maven profiles for different workflows:
 
 **Unit Tests (default)** - `mvn test`
-- 261 unit tests, pure Mockito (no database at all)
+- 295 unit tests, pure Mockito (no database at all)
 - Fast (~30s), no external dependencies
 - Best for: Local TDD, quick feedback loops
 - No Docker required
 
 **Integration Tests** - `mvn test -P integration-tests`
-- 451 tests with real PostgreSQL 17
+- 498 tests with real PostgreSQL 17
 - Validates Flyway migrations
 - Matches production database (Neon PostgreSQL 18.4)
 - Requires: Docker installed and running
@@ -945,10 +946,21 @@ The correlation ID is **not** duplicated in the body — it is already returned 
 - Password: `admin123` (⚠️ **Change immediately after first login**)
 - See [docs/PRODUCTION_SETUP.md](docs/PRODUCTION_SETUP.md) for customization
 
-**Development**: Admin + Merchant users created by DataInitializer on startup:
+**Development**: a fresh dev database only has the V4 admin. Run `.\scripts\reset-dev.ps1` to wipe it and load the demo dataset (see "Dev data seeding" below). Seeded accounts:
 - `admin@finovago.com` / `admin123` (role: ADMIN, no merchant)
 - `client@finovago.com` / `client123` (role: MERCHANT, owner of the seeded "Finovago Demo Merchant" — can call `/credit` and manage other users via `/me/users/**`)
-- An API key for the demo merchant (no user account involved) — generated on startup and printed to the `DataInitializer` logs (`Demo merchant API key (dev only): ...`), used for exercising API-key-restricted paths like `/credit`'s 403 via the `X-Api-Key` header
+- Every other seeded account (other merchants' owners and employees, e.g. `owner@librairie-du-coin.example.com`) uses `Passw0rd!`
+- An API key for the demo merchant (no user account involved), printed in the job's output (`API key for Finovago Demo Merchant (dev only): ...`), used for exercising API-key-restricted paths like `/credit`'s 403 via the `X-Api-Key` header
+
+### Dev data seeding
+`.\scripts\reset-dev.ps1` runs the app once as a job under the `dev,seed` profiles (`devseed` package): wipes every table but `flyway_schema_history`, then loads 5 merchants / 13 users / 141 gift cards and 60 days of activity (redemptions, holds in every status, refunds, credits). The dataset itself is plain data in `SeedCatalog`; `DevDataSeeder` (accounts, cards, final states) and `DevActivitySeeder` (history) load it. Deterministic apart from dates (relative to today). Non-obvious points:
+- **Not an endpoint, not a startup flag**: every bean is `@Profile("dev & seed")`, so a normal run can't wipe anything, and there's no HTTP route to misconfigure into prod. `LocalDatabaseGuard` additionally refuses any non-localhost JDBC URL.
+- **Runs as the schema owner** (`spring.flyway.*`, via `SchemaOwnerJdbc`), not `p2p_app`: V17 gives `p2p_app` no `TRUNCATE` and no `UPDATE` on `gift_card_ledger`. It's a dedicated wrapper type, not a `JdbcTemplate`/`DataSource` bean, because Boot's auto-configuration would otherwise back off and swap the app's own connection for the privileged one.
+- **Goes through the real services**, impersonating the merchant's users (`SeedSecurityContext`), so balances and ledger entries can't drift from what the app would produce. Only timestamps are rewritten afterwards (`SeedTimeMachine`), since services always stamp "now".
+- **Per-card ledger order is an invariant**: `findBalanceDiscrepancies` trusts the most recent entry by `created_at`, so an operation must never be stamped earlier than the card's last entry (`TrackedCard.lastEntryAt`). Overlapping a hold's capture with the next operation on the same card broke this once.
+- `DEACTIVATED`/`EXPIRED` cards are created usable and only reach that state after their history, so they have a ledger worth looking at.
+- **Adding a table** needs nothing (the reset reads the catalog). **Adding a ledger entry type or a new balance-affecting operation** should get a matching operation in `DevActivitySeeder`.
+- The classes are package-private, so their tests live in `com.finovago.p2p.devseed` rather than `unit/`/`integration/`. `DevDataSeederIntegrationTest` wipes the database in `@AfterAll`: it leaves `api_keys`/`gift_card_hold` rows that other classes' `setUp()` don't clean, which would break their merchant delete (see the cleanup-order note under Testing Strategy).
 
 ## 📝 Git Commits
 - Write commit messages like a human, not a report: short sentences, no filler.
