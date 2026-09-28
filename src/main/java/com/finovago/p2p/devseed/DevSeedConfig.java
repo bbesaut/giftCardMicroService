@@ -4,8 +4,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 /**
  * Wires the dev seeding tools. Doubly gated - both the {@code dev} and the {@code seed} profile must
@@ -25,6 +23,6 @@ class DevSeedConfig {
         // the local database, otherwise the seeded data wouldn't even land where the app reads.
         LocalDatabaseGuard.requireLocal(ownerUrl);
         LocalDatabaseGuard.requireLocal(appUrl);
-        return new SchemaOwnerJdbc(new JdbcTemplate(new DriverManagerDataSource(ownerUrl, ownerUser, ownerPassword)));
+        return new SchemaOwnerJdbc(ownerUrl, ownerUser, ownerPassword);
     }
 }

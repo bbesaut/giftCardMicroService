@@ -1,6 +1,7 @@
 package com.finovago.p2p.devseed;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -21,13 +22,20 @@ final class SeedSecurityContext {
     }
 
     static void runAs(AuthenticatedUser principal, Runnable action) {
+        call(principal, () -> {
+            action.run();
+            return null;
+        });
+    }
+
+    static <T> T call(AuthenticatedUser principal, Supplier<T> action) {
         SecurityContext previous = SecurityContextHolder.getContext();
         SecurityContext seedContext = SecurityContextHolder.createEmptyContext();
         seedContext.setAuthentication(new UsernamePasswordAuthenticationToken(
                 principal, null, List.of(new SimpleGrantedAuthority("ROLE_" + principal.role()))));
         SecurityContextHolder.setContext(seedContext);
         try {
-            action.run();
+            return action.get();
         } finally {
             SecurityContextHolder.setContext(previous);
         }
