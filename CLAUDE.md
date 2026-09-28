@@ -28,7 +28,7 @@ Two Maven profiles for different workflows:
 - No Docker required
 
 **Integration Tests** - `mvn test -P integration-tests`
-- 450 tests with real PostgreSQL 17
+- 451 tests with real PostgreSQL 17
 - Validates Flyway migrations
 - Matches production database (Neon PostgreSQL 18.4)
 - Requires: Docker installed and running
@@ -935,6 +935,7 @@ The correlation ID is **not** duplicated in the body — it is already returned 
 - **Correlation id & response timing filters run before Spring Security** (`@Order(Ordered.HIGHEST_PRECEDENCE)` on `MdcFilter`/`ResponseTimeFilter`) so that even 401/403 responses rejected by Security itself carry `X-Correlation-Id`/`X-Response-Time` — don't remove that ordering.
 - **Tenant scoping**: never trust a client-supplied `merchantId` for gift card operations — it always comes from the authenticated principal's JWT/API key (`CurrentUserContext`).
 - **Swagger groups**: `OpenApiConfig`'s `public-api`/`customer-api`/`admin-api` groups are explicit path allowlists (`pathsToMatch`), separate from `@Operation`/`@ApiResponses` annotations on the controller method. A new endpoint can be fully annotated and still be invisible in Swagger UI if its path isn't added to the right group — this has already happened twice (`GET /auth/me`, `GET /giftcards`). Always add the new path to `OpenApiConfig` in the same commit as the endpoint.
+- **SecurityConfig role routes**: `SecurityConfig`'s `MERCHANT_ROUTES`/`ADMIN_ROUTES` arrays are a second, separate path allowlist from `OpenApiConfig`'s — a new `/api/v1/giftcards/**` endpoint not added here falls through to the default `.anyRequest().authenticated()` rule, which accepts **any** authenticated role (ADMIN included), not just MERCHANT. Caught live on `GET /giftcards/stats`: an ADMIN caller reached the controller/service, which then threw an unhandled `IllegalStateException` from `CurrentUserContext.currentMerchantId()` (no merchant on an ADMIN principal) as a raw `500` with a full stack trace in the body, instead of a clean `403`. Always add a new gift card path to `MERCHANT_ROUTES` (or `ADMIN_ROUTES`) in the same commit as the endpoint, and cover it with a `should_returnForbidden_when_callerIsAdmin`-style integration test (see `GiftCardListIntegrationTest`) — that test would have caught this immediately instead of it surfacing as a raw 500 during manual smoke testing.
 - **Swagger schema for `PagedResponse<T>` endpoints**: don't annotate the `200` `@ApiResponse` with an explicit `content = @Content(schema = @Schema(implementation = PagedResponse.class))` — that pins springdoc to the raw generic class, so `content` shows up in Swagger as `items: { type: object }` instead of the actual DTO's fields. Leave `content` off the `@ApiResponse` entirely (just `description`) and springdoc auto-resolves the concrete generic from the controller method's real return type (e.g. `PagedResponseLedgerEntryResponse`, with `content.items` correctly `$ref`-ing `LedgerEntryResponse`). Already happened once for `GET /giftcards` before the ledger pagination fixed both at once — check the live `/api-docs/customer-api` output, not just that the annotation compiles, when adding a new paginated endpoint.
 
 ## 👥 Admin User Setup
