@@ -58,6 +58,7 @@ public class SecurityConfig {
             "/api/v1/giftcards/*/ledger",
             "/api/v1/giftcards/*/deactivate",
             "/api/v1/giftcards/*/activate",
+            "/api/v1/giftcards/stats/**",
             "/api/v1/giftcards/refund/**",
             "/api/v1/giftcards/credit/**",
             "/api/v1/auth/me/users",
