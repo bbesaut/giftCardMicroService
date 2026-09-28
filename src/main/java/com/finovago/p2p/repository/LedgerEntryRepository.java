@@ -2,6 +2,7 @@ package com.finovago.p2p.repository;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -69,4 +70,20 @@ public interface LedgerEntryRepository extends JpaRepository<LedgerEntry, Long> 
             WHERE gc.balance <> le.balance_after
             """, nativeQuery = true)
     List<LedgerDiscrepancy> findBalanceDiscrepancies();
+
+    // Daily count/volume of actual balance deductions for a merchant's dashboard chart, from `since`
+    // (inclusive) onward. Covers both ways a card gets debited: a direct REDEMPTION, and a captured
+    // hold (HOLD_CAPTURED - see GiftCardHoldService#capture, the only point a hold becomes a real
+    // balance mutation). HOLD_PLACED/HOLD_RELEASED are excluded on purpose: no money actually moves
+    // until capture. Native because DATE(created_at) is Postgres-specific (see the other native
+    // queries in this repository); the created_at >= :since filter also lets the planner prune
+    // yearly partitions (V21) instead of scanning the whole table.
+    @Query(value = """
+            SELECT DATE(created_at) AS entry_date, COUNT(*) AS redemption_count, COALESCE(SUM(amount), 0) AS total_amount
+            FROM gift_card_ledger
+            WHERE merchant_id = :merchantId AND entry_type IN ('REDEMPTION', 'HOLD_CAPTURED') AND created_at >= :since
+            GROUP BY DATE(created_at)
+            ORDER BY DATE(created_at)
+            """, nativeQuery = true)
+    List<DailyRedemptionCount> getDailyRedemptionCounts(@Param("merchantId") Long merchantId, @Param("since") LocalDateTime since);
 }

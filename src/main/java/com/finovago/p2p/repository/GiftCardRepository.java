@@ -18,4 +18,13 @@ public interface GiftCardRepository extends JpaRepository<GiftCard, Long>, JpaSp
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select g from GiftCard g where g.merchant.id = :merchantId and g.cardCode = :cardCode")
     Optional<GiftCard> findByMerchantIdAndCardCodeForUpdate(@Param("merchantId") Long merchantId, @Param("cardCode") String cardCode);
+
+    // Dashboard summary: total balance held on active cards plus active/inactive counts, in one
+    // round trip. Every sum is coalesced to 0 so a merchant with zero cards gets zeros back instead
+    // of nulls (the projection's getters are primitive `long`/non-null BigDecimal).
+    @Query("select coalesce(sum(case when g.active = true then g.balance else 0 end), 0) as totalActiveBalance, "
+            + "coalesce(sum(case when g.active = true then 1L else 0L end), 0) as activeCards, "
+            + "coalesce(sum(case when g.active = false then 1L else 0L end), 0) as inactiveCards "
+            + "from GiftCard g where g.merchant.id = :merchantId")
+    GiftCardBalanceSummary getBalanceSummary(@Param("merchantId") Long merchantId);
 }
