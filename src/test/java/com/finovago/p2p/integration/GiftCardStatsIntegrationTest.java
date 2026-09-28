@@ -220,4 +220,13 @@ class GiftCardStatsIntegrationTest extends AbstractIntegrationTest {
                         .param("days", "91"))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void should_returnForbidden_when_callerIsAdmin() throws Exception {
+        userRepository.save(new User("admin@example.com", passwordEncoder.encode(PASSWORD), Role.ADMIN, null));
+        String adminToken = loginAndGetAccessToken("admin@example.com");
+
+        mockMvc.perform(get("/api/v1/giftcards/stats").header(AUTHORIZATION, "Bearer " + adminToken))
+                .andExpect(status().isForbidden());
+    }
 }
