@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import com.finovago.p2p.dto.ApiKeyInfoResponse;
 import com.finovago.p2p.dto.ApiKeyResponse;
 import com.finovago.p2p.dto.ApiKeyStatusResponse;
 import com.finovago.p2p.model.ApiKey;
@@ -99,6 +100,37 @@ class ApiKeyServiceUnitTest {
     }
 
     @Test
+    void should_returnPrefixActiveAndCreatedAt_when_merchantHasAnExistingKey() {
+        ApiKeyRepository repo = org.mockito.Mockito.mock(ApiKeyRepository.class);
+        ApiKeyService service = new ApiKeyService(repo, new BCryptPasswordEncoder(), CACHE_TTL_MINUTES);
+        Merchant merchant = merchant(42L);
+        ApiKey existing = new ApiKey(merchant, "fovak_abc", "hash");
+
+        when(repo.findByMerchant_Id(42L)).thenReturn(Optional.of(existing));
+
+        ApiKeyInfoResponse response = service.getStatus(merchant);
+
+        assertEquals("fovak_abc", response.keyPrefix());
+        assertTrue(response.active());
+        assertEquals(existing.getCreatedAt(), response.createdAt());
+    }
+
+    @Test
+    void should_returnInactiveNullFields_when_merchantHasNoKey() {
+        ApiKeyRepository repo = org.mockito.Mockito.mock(ApiKeyRepository.class);
+        ApiKeyService service = new ApiKeyService(repo, new BCryptPasswordEncoder(), CACHE_TTL_MINUTES);
+        Merchant merchant = merchant(42L);
+
+        when(repo.findByMerchant_Id(42L)).thenReturn(Optional.empty());
+
+        ApiKeyInfoResponse response = service.getStatus(merchant);
+
+        assertEquals(null, response.keyPrefix());
+        assertFalse(response.active());
+        assertEquals(null, response.createdAt());
+    }
+
+    @Test
     void should_resolveToApiKey_when_presentedKeyMatchesAnActiveKey() {
         ApiKeyRepository repo = org.mockito.Mockito.mock(ApiKeyRepository.class);
         BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
@@ -140,6 +172,23 @@ class ApiKeyServiceUnitTest {
         String secret = "the-secret";
         ApiKey key = new ApiKey(merchant, "fovak_abc", encoder.encode(secret));
         key.setActive(false);
+
+        when(repo.findByKeyPrefix("fovak_abc")).thenReturn(Optional.of(key));
+
+        Optional<ApiKey> resolved = service.resolve("fovak_abc." + secret);
+
+        assertTrue(resolved.isEmpty());
+    }
+
+    @Test
+    void should_returnEmpty_when_merchantIsInactive() {
+        ApiKeyRepository repo = org.mockito.Mockito.mock(ApiKeyRepository.class);
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+        ApiKeyService service = new ApiKeyService(repo, encoder, CACHE_TTL_MINUTES);
+        Merchant merchant = merchant(42L);
+        merchant.setActive(false);
+        String secret = "the-secret";
+        ApiKey key = new ApiKey(merchant, "fovak_abc", encoder.encode(secret));
 
         when(repo.findByKeyPrefix("fovak_abc")).thenReturn(Optional.of(key));
 

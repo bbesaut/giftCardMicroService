@@ -4,7 +4,10 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 import com.finovago.p2p.exception.ExpiredGiftCardException;
@@ -42,5 +45,32 @@ class GiftCardUnitTest {
         GiftCard card = new GiftCard(merchant, "GC-4", BigDecimal.valueOf(100.0), false, LocalDate.now().minusDays(1));
 
         assertThrows(InactiveGiftCardException.class, card::ensureUsable);
+    }
+
+    @Test
+    void should_setActiveFalse_when_deactivateCalled() {
+        GiftCard card = new GiftCard(merchant, "GC-5", BigDecimal.valueOf(100.0), true, LocalDate.now().plusDays(30));
+
+        card.deactivate();
+
+        assertFalse(card.isActive());
+    }
+
+    @Test
+    void should_setActiveTrue_when_activateCalled() {
+        GiftCard card = new GiftCard(merchant, "GC-6", BigDecimal.valueOf(100.0), false, LocalDate.now().plusDays(30));
+
+        card.activate();
+
+        assertTrue(card.isActive());
+    }
+
+    @Test
+    void should_leaveBalanceUntouched_when_deactivateCalled() {
+        GiftCard card = new GiftCard(merchant, "GC-7", BigDecimal.valueOf(100.0), true, LocalDate.now().plusDays(30));
+
+        card.deactivate();
+
+        assertEquals(BigDecimal.valueOf(100.0), card.getBalance());
     }
 }

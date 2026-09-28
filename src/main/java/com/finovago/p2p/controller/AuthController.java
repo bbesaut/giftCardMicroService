@@ -1,6 +1,7 @@
 package com.finovago.p2p.controller;
 
 import com.finovago.p2p.dto.AddMerchantUserRequest;
+import com.finovago.p2p.dto.ApiKeyInfoResponse;
 import com.finovago.p2p.dto.ApiKeyResponse;
 import com.finovago.p2p.dto.ApiKeyStatusResponse;
 import com.finovago.p2p.dto.AuthResponse;
@@ -162,6 +163,28 @@ public class AuthController {
         ApiKeyResponse response = authService.generateApiKey(currentUserContext.currentUserIdOrNull());
         log.info("API key generated/rotated via self-service");
         return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+        summary = "Get my merchant's API key status",
+        description = "Returns the current status of the caller's own merchant's API key (non-secret prefix, "
+                    + "whether it's active, and when it was created/last rotated), for the key-management screen "
+                    + "to render without any side effect - unlike POST /me/api-key (which generates or rotates) "
+                    + "or its /revoke counterpart. The secret itself is never returned here; it is only ever shown "
+                    + "once, in the response of POST /me/api-key. All fields are null/false if the merchant has no "
+                    + "key yet. Requires authentication (JWT token), MERCHANT role, and the caller must be that "
+                    + "merchant's owner."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Current API key status",
+            content = @Content(schema = @Schema(implementation = ApiKeyInfoResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token"),
+        @ApiResponse(responseCode = "403", description = "Insufficient permissions (caller must be the merchant's owner)"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @GetMapping("/me/api-key")
+    public ResponseEntity<ApiKeyInfoResponse> getApiKeyStatus() {
+        return ResponseEntity.ok(authService.getApiKeyStatus(currentUserContext.currentUserIdOrNull()));
     }
 
     @Operation(

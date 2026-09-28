@@ -1,6 +1,5 @@
 package com.finovago.p2p.controller;
 
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import org.slf4j.Logger;
@@ -21,9 +20,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.finovago.p2p.dto.CreditRequest;
 import com.finovago.p2p.dto.CreditResponse;
+import com.finovago.p2p.dto.DashboardStatsResponse;
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.GiftCardResponse;
 import com.finovago.p2p.dto.GiftCardSortField;
+import com.finovago.p2p.dto.GiftCardStatusResponse;
 import com.finovago.p2p.dto.HoldResponse;
 import com.finovago.p2p.dto.LedgerEntryResponse;
 import com.finovago.p2p.dto.PagedResponse;
@@ -36,6 +37,7 @@ import com.finovago.p2p.service.GiftCardCreditService;
 import com.finovago.p2p.service.GiftCardHoldService;
 import com.finovago.p2p.service.GiftCardRefundService;
 import com.finovago.p2p.service.GiftCardService;
+import com.finovago.p2p.service.GiftCardStatsService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -61,12 +63,14 @@ public class GiftCardController
     private final GiftCardHoldService giftCardHoldService;
     private final GiftCardRefundService giftCardRefundService;
     private final GiftCardCreditService giftCardCreditService;
+    private final GiftCardStatsService giftCardStatsService;
 
-    public GiftCardController(GiftCardService giftCardService, GiftCardHoldService giftCardHoldService, GiftCardRefundService giftCardRefundService, GiftCardCreditService giftCardCreditService) {
+    public GiftCardController(GiftCardService giftCardService, GiftCardHoldService giftCardHoldService, GiftCardRefundService giftCardRefundService, GiftCardCreditService giftCardCreditService, GiftCardStatsService giftCardStatsService) {
         this.giftCardService = giftCardService;
         this.giftCardHoldService = giftCardHoldService;
         this.giftCardRefundService = giftCardRefundService;
         this.giftCardCreditService = giftCardCreditService;
+        this.giftCardStatsService = giftCardStatsService;
     }
 
     @Operation(
@@ -106,32 +110,11 @@ public class GiftCardController
     }
 
     @Operation(
-        summary = "List all gift cards",
-        description = "Retrieve a list of all available gift cards with their details (code, balance, creation date, etc.). "
-                    + "Requires authentication (JWT token)."
-    )
-    @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "OK - Successfully retrieved the list of gift cards",
-            content = @Content(schema = @Schema(implementation = GiftCardResponse.class))),
-        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
-            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
-        @ApiResponse(responseCode = "403", description = "Forbidden - User role not permitted to list gift cards",
-            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Forbidden\",\"message\":\"Insufficient permissions for this resource\"}"))),
-        @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error",
-            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
-    })
-    @GetMapping("/list")
-    @ResponseStatus(HttpStatus.OK)
-    public List<GiftCardResponse> listGiftCards() {
-        log.info("Received request to list all gift cards");
-        return giftCardService.getAllGiftCards();
-    }
-
-    @Operation(
         summary = "List the caller's own gift cards (paginated, filterable)",
         description = "Retrieve a page of the caller merchant's own gift cards, optionally filtered by active status and/or a "
                     + "partial code match. Intended for a merchant-facing 'my gift cards' screen. Scoped to the caller's own "
-                    + "merchant (from the JWT) - unlike /list, which is ADMIN-only and returns every merchant's cards, unpaginated. "
+                    + "merchant (from the JWT). For an ADMIN's cross-merchant view, see "
+                    + "GET /admin/merchants/{merchantId}/giftcards instead. "
                     + "Requires authentication (JWT token, MERCHANT role)."
     )
     @ApiResponses({
@@ -211,6 +194,57 @@ public class GiftCardController
     public GiftCardResponse lookupGiftCard(@PathVariable String code) {
         log.info("Received gift card lookup request. Code: {}", code);
         return giftCardService.lookupGiftCard(code);
+    }
+
+    @Operation(
+        summary = "Deactivate a gift card",
+        description = "Blocks a gift card from further use (e.g. lost/stolen card, fraud) without touching its balance. "
+                    + "Idempotent by target state: deactivating an already-inactive card simply replays the same status, not an error. "
+                    + "Not recorded in the ledger (see GET /{code}/ledger) - the ledger is scoped to balance-affecting operations, and this "
+                    + "isn't one. Requires authentication (MERCHANT role)."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "OK - Gift card deactivated (or already was - replayed)",
+            content = @Content(schema = @Schema(implementation = GiftCardStatusResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
+        @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions (MERCHANT role required)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Forbidden\",\"message\":\"Insufficient permissions for this resource\"}"))),
+        @ApiResponse(responseCode = "404", description = "Not Found - Gift card with specified code does not exist for the caller's merchant",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Not Found\",\"message\":\"Gift card not found\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
+    })
+    @PostMapping("/{code}/deactivate")
+    @ResponseStatus(HttpStatus.OK)
+    public GiftCardStatusResponse deactivateGiftCard(@PathVariable String code) {
+        log.info("Received gift card deactivation request. Code: {}", code);
+        return giftCardService.setActive(code, false);
+    }
+
+    @Operation(
+        summary = "Reactivate a gift card",
+        description = "Re-enables a previously deactivated gift card. Idempotent by target state: reactivating an already-active card "
+                    + "simply replays the same status, not an error. Reactivating does not bypass expiration - an expired card still fails "
+                    + "on redeem/reserve. Not recorded in the ledger, same reasoning as deactivate. Requires authentication (MERCHANT role)."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "OK - Gift card reactivated (or already was - replayed)",
+            content = @Content(schema = @Schema(implementation = GiftCardStatusResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
+        @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions (MERCHANT role required)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Forbidden\",\"message\":\"Insufficient permissions for this resource\"}"))),
+        @ApiResponse(responseCode = "404", description = "Not Found - Gift card with specified code does not exist for the caller's merchant",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Not Found\",\"message\":\"Gift card not found\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
+    })
+    @PostMapping("/{code}/activate")
+    @ResponseStatus(HttpStatus.OK)
+    public GiftCardStatusResponse activateGiftCard(@PathVariable String code) {
+        log.info("Received gift card reactivation request. Code: {}", code);
+        return giftCardService.setActive(code, true);
     }
 
     @Operation(
@@ -408,5 +442,34 @@ public class GiftCardController
         log.info("Received credit request. Code: {}, Amount: {}, IdempotencyKey: {}",
                 request.giftCardCode(), request.amount(), idempotencyKey);
         return giftCardCreditService.credit(request, idempotencyKey);
+    }
+
+    @Operation(
+        summary = "Get dashboard stats for the caller's own merchant",
+        description = "Aggregate stats for a merchant dashboard: total balance held on active cards, active/inactive card counts, "
+                    + "and a daily time series of redemption activity over the requested period (covers both a direct redeem and a "
+                    + "captured hold - the two ways a card's balance actually gets debited; a placed/released hold is excluded since "
+                    + "no money moves until capture). Every day in the period is present in the series, even with zero activity - "
+                    + "no gaps for the chart to fill in. Scoped to the caller's own merchant (from the JWT). "
+                    + "Requires authentication (JWT token, MERCHANT role)."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "OK - Successfully retrieved dashboard stats",
+            content = @Content(schema = @Schema(implementation = DashboardStatsResponse.class))),
+        @ApiResponse(responseCode = "400", description = "Bad Request - days out of range",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"days: must be less than or equal to 90\"}"))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
+        @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions (MERCHANT role required)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Forbidden\",\"message\":\"Insufficient permissions for this resource\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
+    })
+    @GetMapping("/stats")
+    @ResponseStatus(HttpStatus.OK)
+    public DashboardStatsResponse getDashboardStats(
+            @Parameter(description = "Size of the redemption time series window, in calendar days including today") @RequestParam(defaultValue = "30") @Min(1) @Max(90) int days) {
+        log.info("Received dashboard stats request. days={}", days);
+        return giftCardStatsService.getDashboardStats(days);
     }
 }

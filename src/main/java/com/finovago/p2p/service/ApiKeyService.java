@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import com.finovago.p2p.dto.ApiKeyInfoResponse;
 import com.finovago.p2p.dto.ApiKeyResponse;
 import com.finovago.p2p.dto.ApiKeyStatusResponse;
 import com.finovago.p2p.model.ApiKey;
@@ -100,7 +101,21 @@ public class ApiKeyService {
         return new ApiKeyStatusResponse(key.getKeyPrefix(), false);
     }
 
-    /** Validates a presented "{prefix}.{secret}" key and returns the ApiKey it matches, if valid and active. */
+    /** Read-only status for the merchant's key screen - never returns the secret, only the non-secret prefix. */
+    @Transactional(readOnly = true)
+    public ApiKeyInfoResponse getStatus(Merchant merchant) {
+        return apiKeyRepository.findByMerchant_Id(merchant.getId())
+                .map(key -> new ApiKeyInfoResponse(key.getKeyPrefix(), key.isActive(), key.getCreatedAt()))
+                .orElse(new ApiKeyInfoResponse(null, false, null));
+    }
+
+    /**
+     * Validates a presented "{prefix}.{secret}" key and returns the ApiKey it matches, if valid, active,
+     * and its merchant is active. Since the ApiKey (including its eagerly-fetched Merchant) is cached for
+     * app.api-key-cache.ttl-minutes, a merchant deactivated via POST /admin/merchants/{id}/deactivate can
+     * take up to that TTL to actually cut off API key access here - same class of trade-off already
+     * accepted for JWT access tokens staying valid until their own expiry.
+     */
     @Transactional
     public Optional<ApiKey> resolve(String presentedKey) {
         int separator = presentedKey.indexOf('.');
@@ -115,6 +130,7 @@ public class ApiKeyService {
 
         Optional<ApiKey> apiKey = Optional.ofNullable(cachedKey)
                 .filter(ApiKey::isActive)
+                .filter(key -> key.getMerchant().isActive())
                 .filter(key -> passwordEncoder.matches(secret, key.getHashedSecret()));
 
         apiKey.ifPresent(key -> apiKeyRepository.updateLastUsedAt(key.getId(), LocalDateTime.now()));

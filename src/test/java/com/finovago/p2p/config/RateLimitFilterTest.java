@@ -33,7 +33,7 @@ class RateLimitFilterTest {
     private static final int MERCHANT_CAPACITY = 3;
     private static final String LOGIN_URI = "/api/v1/auth/login";
     private static final String PROTECTED_URI = "/api/v1/giftcards/lookup/GC-12345";
-    private static final String UNPROTECTED_URI = "/api/v1/giftcards/list";
+    private static final String UNPROTECTED_URI = "/api/v1/admin/merchants";
 
     private CurrentUserContext currentUserContext;
     private MerchantRepository merchantRepository;

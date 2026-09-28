@@ -8,7 +8,9 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,12 +36,14 @@ import org.springframework.data.jpa.domain.Specification;
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.GiftCardResponse;
 import com.finovago.p2p.dto.GiftCardSortField;
+import com.finovago.p2p.dto.GiftCardStatusResponse;
 import com.finovago.p2p.dto.LedgerEntryResponse;
 import com.finovago.p2p.dto.PagedResponse;
 import com.finovago.p2p.dto.RedemptionRequest;
 import com.finovago.p2p.dto.RedemptionResponse;
 import com.finovago.p2p.exception.ExpiredGiftCardException;
 import com.finovago.p2p.exception.InactiveGiftCardException;
+import com.finovago.p2p.exception.MerchantNotFoundException;
 import com.finovago.p2p.exception.UnknownGiftCardException;
 import com.finovago.p2p.model.GiftCard;
 import com.finovago.p2p.model.LedgerEntry;
@@ -342,36 +346,6 @@ class GiftCardServiceUnitTest
     }
 
     @Test
-    void should_list_cards_across_all_merchants_when_caller_is_admin()
-    {
-        when(currentUserContext.isAdmin()).thenReturn(true);
-        GiftCard cardA = new GiftCard(merchant, "GC-A", BigDecimal.valueOf(100.0), true, LocalDate.now().plusDays(30));
-        GiftCard cardB = new GiftCard(merchant, "GC-B", BigDecimal.valueOf(200.0), true, LocalDate.now().plusDays(30));
-        when(giftCardRepository.findAll()).thenReturn(List.of(cardA, cardB));
-
-        List<GiftCardResponse> response = giftCardService.getAllGiftCards();
-
-        assertEquals(2, response.size());
-        assertEquals("GC-A", response.get(0).giftCardCode());
-        assertEquals("GC-B", response.get(1).giftCardCode());
-        verify(giftCardRepository, never()).findAllByMerchantId(any());
-    }
-
-    @Test
-    void should_list_only_own_cards_when_caller_is_merchant()
-    {
-        when(currentUserContext.isAdmin()).thenReturn(false);
-        GiftCard card = new GiftCard(merchant, "GC-OWN", BigDecimal.valueOf(50.0), true, LocalDate.now().plusDays(30));
-        when(giftCardRepository.findAllByMerchantId(MERCHANT_ID)).thenReturn(List.of(card));
-
-        List<GiftCardResponse> response = giftCardService.getAllGiftCards();
-
-        assertEquals(1, response.size());
-        assertEquals("GC-OWN", response.get(0).giftCardCode());
-        verify(giftCardRepository, never()).findAll();
-    }
-
-    @Test
     void getMyGiftCards_mapsRepositoryPageIntoPagedResponse() {
         GiftCard cardA = new GiftCard(merchant, "GC-A", BigDecimal.valueOf(100.0), true, LocalDate.now().plusDays(30));
         GiftCard cardB = new GiftCard(merchant, "GC-B", BigDecimal.valueOf(200.0), false, LocalDate.now().plusDays(60));
@@ -411,5 +385,102 @@ class GiftCardServiceUnitTest
         assertEquals(Sort.Direction.DESC, orders.get(0).getDirection());
         assertEquals("id", orders.get(1).getProperty());
         assertEquals(Sort.Direction.ASC, orders.get(1).getDirection());
+    }
+
+    @Test
+    void getGiftCardsForMerchant_mapsRepositoryPageForTheGivenMerchant_notTheCaller() {
+        Long otherMerchantId = 2L;
+        when(merchantRepository.existsById(otherMerchantId)).thenReturn(true);
+        GiftCard card = new GiftCard(merchant, "GC-OTHER", BigDecimal.valueOf(75.0), true, LocalDate.now().plusDays(30));
+        Page<GiftCard> repositoryPage = new PageImpl<>(List.of(card), PageRequest.of(0, 20), 1);
+        when(giftCardRepository.findAll(ArgumentMatchers.<Specification<GiftCard>>any(), any(Pageable.class)))
+                .thenReturn(repositoryPage);
+
+        PagedResponse<GiftCardResponse> response = giftCardService.getGiftCardsForMerchant(
+                otherMerchantId, null, null, 0, 20, GiftCardSortField.CARD_CODE, Sort.Direction.ASC);
+
+        assertEquals(1, response.content().size());
+        assertEquals("GC-OTHER", response.content().get(0).giftCardCode());
+        assertEquals(otherMerchantId, response.content().get(0).merchantId());
+        verify(currentUserContext, never()).currentMerchantId();
+    }
+
+    @Test
+    void getGiftCardsForMerchant_throwsMerchantNotFound_when_merchantDoesNotExist() {
+        Long unknownMerchantId = 999L;
+        when(merchantRepository.existsById(unknownMerchantId)).thenReturn(false);
+
+        assertThrows(MerchantNotFoundException.class, () -> giftCardService.getGiftCardsForMerchant(
+                unknownMerchantId, null, null, 0, 20, GiftCardSortField.CARD_CODE, Sort.Direction.ASC));
+        verify(giftCardRepository, never()).findAll(ArgumentMatchers.<Specification<GiftCard>>any(), any(Pageable.class));
+    }
+
+    @Test
+    void should_deactivateGiftCard_when_currentlyActive() {
+        String cardCode = "ACTIVE1";
+        GiftCard activeCard = new GiftCard(merchant, cardCode, BigDecimal.valueOf(50.0), true, LocalDate.now().plusDays(30));
+        when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.of(activeCard));
+
+        GiftCardStatusResponse response = giftCardService.setActive(cardCode, false);
+
+        assertEquals(cardCode, response.giftCardCode());
+        assertFalse(response.active());
+        assertFalse(activeCard.isActive());
+        verify(giftCardRepository).save(activeCard);
+    }
+
+    @Test
+    void should_activateGiftCard_when_currentlyInactive() {
+        String cardCode = "INACTIVE1";
+        GiftCard inactiveCard = new GiftCard(merchant, cardCode, BigDecimal.valueOf(50.0), false, LocalDate.now().plusDays(30));
+        when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.of(inactiveCard));
+
+        GiftCardStatusResponse response = giftCardService.setActive(cardCode, true);
+
+        assertEquals(cardCode, response.giftCardCode());
+        assertTrue(response.active());
+        assertTrue(inactiveCard.isActive());
+    }
+
+    @Test
+    void should_replaySameStatus_when_deactivatingAlreadyInactiveCard() {
+        String cardCode = "ALREADY_INACTIVE";
+        GiftCard inactiveCard = new GiftCard(merchant, cardCode, BigDecimal.valueOf(50.0), false, LocalDate.now().plusDays(30));
+        when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.of(inactiveCard));
+
+        GiftCardStatusResponse response = giftCardService.setActive(cardCode, false);
+
+        assertFalse(response.active());
+    }
+
+    @Test
+    void should_replaySameStatus_when_activatingAlreadyActiveCard() {
+        String cardCode = "ALREADY_ACTIVE";
+        GiftCard activeCard = new GiftCard(merchant, cardCode, BigDecimal.valueOf(50.0), true, LocalDate.now().plusDays(30));
+        when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.of(activeCard));
+
+        GiftCardStatusResponse response = giftCardService.setActive(cardCode, true);
+
+        assertTrue(response.active());
+    }
+
+    @Test
+    void should_throwException_when_deactivatingNonExistentCard() {
+        String nonExistentCode = "NONEXISTENT";
+        when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, nonExistentCode)).thenReturn(Optional.empty());
+
+        assertThrows(UnknownGiftCardException.class, () -> giftCardService.setActive(nonExistentCode, false));
+        verify(giftCardRepository, never()).save(any());
+    }
+
+    @Test
+    void should_scopeLookupToCallingMerchant_onSetActive() {
+        String cardCode = "SCOPED1";
+        GiftCard card = new GiftCard(merchant, cardCode, BigDecimal.valueOf(50.0), true, LocalDate.now().plusDays(30));
+        when(giftCardRepository.findByMerchantIdAndCardCode(MERCHANT_ID, cardCode)).thenReturn(Optional.of(card));
+
+        giftCardService.setActive(cardCode, false);
+
+        verify(giftCardRepository).findByMerchantIdAndCardCode(MERCHANT_ID, cardCode);
     }
 }

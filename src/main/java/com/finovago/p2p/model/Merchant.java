@@ -26,6 +26,7 @@ public class Merchant {
 
     private String contactEmail;
 
+    @Setter
     @Column(nullable = false)
     private boolean active;
 

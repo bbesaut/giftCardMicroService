@@ -527,6 +527,74 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void should_returnInactiveNullFields_when_gettingApiKeyStatusWithNoKeyGenerated() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+
+        mockMvc.perform(get("/api/v1/auth/me/api-key")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.keyPrefix", nullValue()))
+                .andExpect(jsonPath("$.active").value(false))
+                .andExpect(jsonPath("$.createdAt", nullValue()));
+    }
+
+    @Test
+    void should_returnPrefixActiveAndCreatedAt_butNeverTheSecret_when_gettingApiKeyStatusAfterGenerating() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+
+        MvcResult keyResult = mockMvc.perform(post("/api/v1/auth/me/api-key")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                        .andExpect(status().isOk())
+                        .andReturn();
+        String keyPrefix = objectMapper.readValue(keyResult.getResponse().getContentAsString(), ApiKeyResponse.class)
+                .keyPrefix();
+
+        MvcResult statusResult = mockMvc.perform(get("/api/v1/auth/me/api-key")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.keyPrefix").value(keyPrefix))
+                .andExpect(jsonPath("$.active").value(true))
+                .andExpect(jsonPath("$.createdAt", notNullValue()))
+                .andReturn();
+
+        // Regression guard: the secret must never resurface outside its one-time POST /me/api-key response.
+        assertTrue(!statusResult.getResponse().getContentAsString().contains("apiKeySecret"));
+    }
+
+    @Test
+    void should_returnInactiveStatus_when_gettingApiKeyStatusAfterRevoking() throws Exception {
+        String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/me/api-key")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/auth/me/api-key/revoke")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/auth/me/api-key")
+                        .header(AUTHORIZATION, "Bearer " + ownerAccessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.keyPrefix", notNullValue()))
+                .andExpect(jsonPath("$.active").value(false));
+    }
+
+    @Test
+    void should_returnForbidden_when_nonOwnerGetsApiKeyStatus() throws Exception {
+        String clientAccessToken = loginAndGetAccessToken(EMAIL, PASSWORD);
+
+        mockMvc.perform(get("/api/v1/auth/me/api-key")
+                        .header(AUTHORIZATION, "Bearer " + clientAccessToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void should_returnUnauthorized_when_gettingApiKeyStatusWithoutToken() throws Exception {
+        mockMvc.perform(get("/api/v1/auth/me/api-key"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void should_selfServiceAddUser_and_returnAccessAndRefreshTokens_when_callerIsOwner() throws Exception {
         String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
         String newEmail = "self-service-employee@example.com";

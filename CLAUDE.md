@@ -22,13 +22,13 @@ mvn test -P integration-tests        # Run all tests with real PostgreSQL 17 via
 Two Maven profiles for different workflows:
 
 **Unit Tests (default)** - `mvn test`
-- 47 unit tests, pure Mockito (no database at all)
+- 261 unit tests, pure Mockito (no database at all)
 - Fast (~30s), no external dependencies
 - Best for: Local TDD, quick feedback loops
 - No Docker required
 
 **Integration Tests** - `mvn test -P integration-tests`
-- 109 tests (47 unit + 62 integration) with real PostgreSQL 17
+- 451 tests with real PostgreSQL 17
 - Validates Flyway migrations
 - Matches production database (Neon PostgreSQL 18.4)
 - Requires: Docker installed and running
@@ -51,6 +51,7 @@ Two ways to see it without running Maven yourself:
 ## 🏗️ Architecture Summary
 - **Multi-tenancy**: every gift card belongs to exactly one `Merchant`. `ADMIN` is the platform owner (manages merchants, sees all cards via `/list`); `MERCHANT` is a merchant account, scoped to its own cards only. Tenant scoping is derived server-side from the JWT/API key (`merchantId` claim), never from client input.
 - **Merchant users**: a `Merchant` has N `User`s (all role MERCHANT, all human), distinguished by an `owner` flag (can manage the merchant's other users: create via `POST /auth/me/users`, activate/deactivate via `POST /auth/me/users/{userId}/(de)activate`). `/register` creates exactly one owner per new merchant — `owner` is never client-settable outside `/register`, so no endpoint can create a second one. Every other user is added via the owner's self-service routes — there is no admin-side equivalent. Deactivated users are blocked at login/refresh and their refresh tokens are revoked, but an access token already issued before deactivation stays valid until its own ~15 min expiry (stateless JWT, no per-request DB check by design).
+- **Merchant lifecycle (ADMIN-side)**: an ADMIN lists every merchant and can activate/deactivate one via `POST /admin/merchants/{id}/(de)activate`, and override its rate limit via `POST /admin/merchants/{id}/rate-limit-capacity` (see `MerchantService`). Deactivating a merchant is enforced in three separate places — easy to miss one if `Merchant` gains a new consumer later: `AuthService.login`/`.refresh` reject when `user.getMerchant().isActive()` is false, and `ApiKeyService.resolve` rejects when the key's merchant is inactive. It also revokes every one of the merchant's users' active refresh tokens, but does **not** touch each `User.active` individually (`GET /admin/merchants/{id}/users`, or the merchant's own `GET /me/users`, still shows every employee as `active: true`) — that's deliberate, so reactivating the merchant doesn't silently un-deactivate an employee who was already disabled by their owner beforehand. Same stateless-JWT trade-off as user deactivation (already-issued access token stays valid until its own ~15 min expiry), plus an already-cached API key can take up to `app.api-key-cache.ttl-minutes` to be cut off.
 - **JWT auth**: JJWT-based, stateless, roles (ADMIN/MERCHANT), JWT carries a `merchantId` claim (null for ADMIN). Always a human `User` — a merchant's automated/integration access goes through an API key instead (see below), never a JWT.
 - **API key auth**: a merchant's automated/backend integration authenticates with a `X-Api-Key: {keyPrefix}.{secret}` header instead of a Bearer JWT (`ApiKeyAuthenticationFilter`, wired alongside `JwtAuthenticationFilter` in `SecurityConfig`). An API key is its own identity directly on `api_keys.merchant_id` — **not** a stand-in "service account" `User` (no fake email/password to manage) — so the resulting `AuthenticatedUser` principal has `merchantId` and `role=MERCHANT` but no `userId`. Tenant scoping and rate limiting work identically either way (both key off `merchantId`); anything that needs a real human (`/credit`, `/me/users/**`, `/me/api-key` itself) naturally rejects a null `userId`. Ledger entries written by an API-key-authenticated call are attributed to `"SYSTEM"` (`LedgerEntry.actorViaApiKey`), not an email. `ApiKeyService` stores only a bcrypt hash of the secret (`api_keys.hashed_secret`) plus a non-secret `key_prefix` used for lookup; the plaintext secret is shown exactly once, at generation/rotation time, and cannot be retrieved again. `resolve()` caches the `key_prefix -> ApiKey` DB lookup in-process (Caffeine, `app.api-key-cache.ttl-minutes`, default 2 min) to avoid a `SELECT` on every API-key-authenticated request — BCrypt verification against the cached hash still runs on every call, and `generateOrRotate()`/`revoke()` invalidate the cache explicitly so a rotated/revoked key stops working immediately rather than waiting out the TTL. One key per merchant (`api_keys.merchant_id` is `UNIQUE`) — generating again rotates (invalidates the previous secret) rather than creating a second one.
 - **Service layer**: GiftCardService with async redemption (CompletableFuture)
@@ -159,6 +160,16 @@ Content-Type: application/json
 **Description**: Disables the caller's own merchant's API key immediately, e.g. as an emergency response to a leaked secret — deliberately no separate credential-rotation endpoint, so cutting access is the fastest lever; call `POST /me/api-key` again afterwards to issue a fresh one. Idempotent: calling it with no active key is a no-op, not an error. Requires authentication (MERCHANT role) and the caller must be that merchant's owner.
 
 **Response** (ApiKeyStatusResponse - HTTP 200): `{ "keyPrefix": "fovak_7f3d9c2b1a4e", "active": false }` (or `{ "keyPrefix": null, "active": false }` if no key existed).
+
+**Error Responses**:
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Caller is not the merchant's owner account
+- `500 Internal Server Error`: Server error
+
+### GET /api/v1/auth/me/api-key
+**Description**: Returns the current status of the caller's own merchant's API key (non-secret prefix, whether it's active, and when it was created/last rotated), for the key-management screen to render without any side effect — unlike `POST /me/api-key` (generates/rotates) or `POST /me/api-key/revoke`. The secret itself is **never** returned here; it is only ever shown once, in the response of `POST /me/api-key`. All fields are null/false if the merchant has no key yet. Requires authentication (MERCHANT role) and the caller must be that merchant's owner.
+
+**Response** (ApiKeyInfoResponse - HTTP 200): `{ "keyPrefix": "fovak_7f3d9c2b1a4e", "active": true, "createdAt": "2026-09-26T15:30:00" }` (or `{ "keyPrefix": null, "active": false, "createdAt": null }` if no key exists).
 
 **Error Responses**:
 - `401 Unauthorized`: Missing or invalid JWT token
@@ -342,7 +353,7 @@ Content-Type: application/json
 All gift card endpoints below are scoped to the calling MERCHANT's own tenant — `merchantId` is derived from the JWT, never accepted from the client. A gift card code only needs to be unique **within a merchant** (`UNIQUE(merchant_id, card_code)`); two different merchants may use the same code without collision. Looking up or redeeming another merchant's card returns `404 Not Found` (not `403`), so tenant existence is never leaked.
 
 ### GET /api/v1/giftcards
-**Description**: Retrieve a paginated, filterable page of the caller's own gift cards ("my gift cards"), scoped to the caller's merchant. Requires authentication (MERCHANT role). Distinct from `GET /giftcards/list` below, which is ADMIN-only, unpaginated, and returns every merchant's cards.
+**Description**: Retrieve a paginated, filterable page of the caller's own gift cards ("my gift cards"), scoped to the caller's merchant. Requires authentication (MERCHANT role). For an ADMIN's cross-merchant view, see `GET /admin/merchants/{merchantId}/giftcards` instead (Admin - Merchant Management Endpoints below), which uses the same pagination/filtering/sorting but takes the merchant from the path rather than the JWT.
 
 **Query Parameters**:
 - `page` (int, optional, default `0`): 0-indexed page number
@@ -572,31 +583,121 @@ Header: `Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000`
 - `409 Conflict`: Gift card code already exists for this merchant
 - `500 Internal Server Error`: Database or unexpected server error
 
-### GET /api/v1/giftcards/list
-**Description**: Retrieve a list of all available gift cards with their details. Requires authentication (ADMIN role) — this is the only gift card endpoint ADMIN can access, and it returns cards across **all** merchants (not scoped).
+### POST /api/v1/giftcards/{code}/deactivate
+### POST /api/v1/giftcards/{code}/activate
+**Description**: Block/re-enable a gift card from further use, scoped to the caller's merchant — e.g. a lost/stolen physical card or a fraud report. Doesn't touch the balance (unlike `drainCard()`, the side effect of a redemption that exhausts the balance) and isn't recorded in the ledger (see `GET /{code}/ledger`), since the ledger is scoped to balance-affecting operations and this isn't one — same reasoning as merchant/user activate/deactivate, which also don't ledger. Idempotent by target state: deactivating an already-inactive card (or activating an already-active one) simply replays the same status, not an error — unlike hold capture/release, `active` isn't a terminal state machine, just a flag. Reactivating does not bypass expiration: `ensureUsable()` still independently checks `expirationDate` on the next `redeem`/`reserve`. Requires authentication (MERCHANT role).
 
-**Response** (List of GiftCardResponse - HTTP 200):
+**Response** (GiftCardStatusResponse - HTTP 200): `{ "giftCardCode": "GC-12345", "active": false }`
+
+**Error Responses**:
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Insufficient permissions (MERCHANT role required)
+- `404 Not Found`: Gift card with specified code does not exist for the caller's merchant
+- `500 Internal Server Error`: Database or unexpected server error
+
+### GET /api/v1/giftcards/stats
+**Description**: Aggregate stats for a merchant dashboard, scoped to the caller's own merchant: total balance held on active cards, active/inactive card counts, plus a daily time series of redemption activity over a requested window, for a chart. Requires authentication (MERCHANT role).
+
+Covers both ways a card's balance actually gets debited — a direct `REDEMPTION`, and a captured hold (`HOLD_CAPTURED`; see `GiftCardHoldService#capture`, the only point at which a hold's earmark becomes a real balance mutation). `HOLD_PLACED`/`HOLD_RELEASED` are excluded on purpose — no money moves until capture. A `REFUND` is **not** netted out of the totals: a fully-refunded redemption still counts as redeemed that day. Every day in the requested window is present in `redemptionsPerDay`, even with zero activity (`count: 0`, `totalAmount: 0.00`) — no gaps for the chart to fill in. No `404` case: this is an aggregate over the whole merchant, not a lookup of one card, so a merchant with zero gift cards just gets zeros back.
+
+**Query Parameters**:
+- `days` (int, optional, default `30`, min `1`, max `90`): size of the `redemptionsPerDay` window, in calendar days including today
+
+**Response** (DashboardStatsResponse - HTTP 200):
+```json
+{
+  "totalActiveBalance": 15420.50,
+  "activeCards": 142,
+  "inactiveCards": 8,
+  "totalRedeemedInPeriod": 3200.00,
+  "redemptionsPerDay": [
+    { "date": "2026-09-26", "count": 0, "totalAmount": 0.00 },
+    { "date": "2026-09-27", "count": 12, "totalAmount": 450.00 },
+    { "date": "2026-09-28", "count": 5, "totalAmount": 120.00 }
+  ]
+}
+```
+
+**Error Responses**:
+- `400 Bad Request`: `days` out of range
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Insufficient permissions (MERCHANT role required)
+- `500 Internal Server Error`: Database or unexpected server error
+
+## 🏢 Admin - Merchant Management Endpoints
+
+All endpoints below require authentication (ADMIN role) and are unpaginated, like `GET /me/users` — see Architecture Summary for the enforcement details of activate/deactivate.
+
+### GET /api/v1/admin/merchants
+**Description**: Lists every merchant across the platform, for the ADMIN merchant-management screen.
+
+**Response** (List of MerchantResponse - HTTP 200):
 ```json
 [
-  {
-    "giftCardCode": "GC-12345",
-    "balance": 150.0,
-    "active": true,
-    "expirationDate": "2025-12-31"
-  },
-  {
-    "giftCardCode": "GC-67890",
-    "balance": 500.0,
-    "active": true,
-    "expirationDate": "2025-11-30"
-  }
+  { "merchantId": 1, "name": "Finovago Demo Merchant", "contactEmail": "client@finovago.com", "active": true, "rateLimitCapacity": null }
 ]
 ```
 
 **Error Responses**:
 - `401 Unauthorized`: Missing or invalid JWT token
-- `403 Forbidden`: User role not permitted to list gift cards
-- `500 Internal Server Error`: Database or unexpected server error
+- `403 Forbidden`: Insufficient permissions (ADMIN role required)
+- `500 Internal Server Error`: Server error
+
+### GET /api/v1/admin/merchants/{merchantId}/users
+**Description**: Lists the human user accounts belonging to a given merchant, for the ADMIN merchant-detail screen (alongside its activate/deactivate/rate-limit controls). Same response shape as `GET /me/users`.
+
+**Response** (List of MerchantUserResponse - HTTP 200): see `GET /me/users` above.
+
+**Error Responses**:
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Insufficient permissions (ADMIN role required)
+- `404 Not Found`: Merchant does not exist
+- `500 Internal Server Error`: Server error
+
+### GET /api/v1/admin/merchants/{merchantId}/giftcards
+**Description**: Retrieve a page of a given merchant's gift cards, optionally filtered by active status and/or a partial code match, for the ADMIN merchant-detail screen. Same pagination/filtering/sorting as `GET /giftcards` ("my gift cards") — see that endpoint for the query parameters — except `merchantId` comes from the path instead of the JWT, since an ADMIN has no merchant of its own to derive it from. Replaces the old unpaginated `GET /giftcards/list` (removed), which dumped every merchant's cards at once and didn't scale.
+
+**Query Parameters**: same as `GET /giftcards` (`page`, `size`, `active`, `code`, `sortBy`, `sortDirection`).
+
+**Response** (PagedResponse<GiftCardResponse> - HTTP 200): same shape as `GET /giftcards`.
+
+**Error Responses**:
+- `400 Bad Request`: `page`/`size` out of range, or `sortBy`/`sortDirection` not a recognized value
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Insufficient permissions (ADMIN role required)
+- `404 Not Found`: Merchant does not exist
+- `500 Internal Server Error`: Server error
+
+### POST /api/v1/admin/merchants/{merchantId}/deactivate
+### POST /api/v1/admin/merchants/{merchantId}/activate
+**Description**: Disable/re-enable a merchant. Deactivating blocks login and refresh for all of its users, blocks its API key, and revokes all of its users' active refresh tokens — see Architecture Summary for the exact enforcement points and known limitations (stateless JWT expiry, API key cache TTL).
+
+**Response** (MerchantStatusResponse - HTTP 200): `{ "merchantId": 1, "name": "Finovago Demo Merchant", "active": false }`
+
+**Error Responses**:
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Insufficient permissions (ADMIN role required)
+- `404 Not Found`: Merchant does not exist
+- `500 Internal Server Error`: Server error
+
+### POST /api/v1/admin/merchants/{merchantId}/rate-limit-capacity
+**Description**: Overrides the requests/minute capacity used for that merchant's redeem/lookup/reserve/refund/credit rate limit (see `RateLimitFilter`). A `null` `rateLimitCapacity` clears the override, falling back to the app-wide default (`app.rate-limit.merchant-capacity`).
+
+**Request** (SetRateLimitCapacityRequest):
+```json
+{
+  "rateLimitCapacity": 500
+}
+```
+
+**Response** (RateLimitCapacityResponse - HTTP 200): `{ "merchantId": 1, "rateLimitCapacity": 500 }`
+
+**Error Responses**:
+- `400 Bad Request`: `rateLimitCapacity` is not null and not greater than zero
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Insufficient permissions (ADMIN role required)
+- `404 Not Found`: Merchant does not exist
+- `500 Internal Server Error`: Server error
 
 ## 📦 DTOs
 
@@ -624,17 +725,46 @@ Response for revoking the merchant's API key (POST /api/v1/auth/me/api-key/revok
 - `keyPrefix` (String, nullable): Prefix of the affected key, null if none existed
 - `active` (boolean): Always false after this call
 
+### ApiKeyInfoResponse
+Response for reading the merchant's API key status (GET /api/v1/auth/me/api-key) — never includes the secret
+- `keyPrefix` (String, nullable): Non-secret prefix of the key, null if no key exists
+- `active` (boolean): Whether the key is currently active, false if no key exists
+- `createdAt` (LocalDateTime, nullable): When the key was generated or last rotated, null if no key exists
+
 ### AddMerchantUserRequest
 Used to attach a human employee to a merchant, self-service by that merchant's owner (POST /api/v1/auth/me/users) — always creates a human account; API-key-style automated access is managed separately via POST /me/api-key
 - `email` (String): New employee's email, must be unique
 - `password` (String): New employee's password, non-blank
 
 ### MerchantUserResponse
-A single user of GET /api/v1/auth/me/users's response list
+A single user of GET /api/v1/auth/me/users's response list (also reused by GET /api/v1/admin/merchants/{merchantId}/users)
 - `userId` (Long): Id of the user
 - `email` (String): Email of the user
 - `owner` (boolean): Whether this user owns the merchant (can manage its other users)
 - `active` (boolean): Whether the user is active
+
+### MerchantResponse
+A single merchant of GET /api/v1/admin/merchants's response list
+- `merchantId` (Long): Id of the merchant
+- `name` (String): Business name of the merchant
+- `contactEmail` (String, nullable): Contact email of the merchant
+- `active` (boolean): Whether the merchant is active (see Architecture Summary for what that blocks)
+- `rateLimitCapacity` (Integer, nullable): Requests/minute override, null means the app-wide default applies
+
+### MerchantStatusResponse
+Response for POST /api/v1/admin/merchants/{merchantId}/activate and .../deactivate
+- `merchantId` (Long): Id of the affected merchant
+- `name` (String): Business name of the affected merchant
+- `active` (boolean): The merchant's active status after this call
+
+### SetRateLimitCapacityRequest
+Used to override a merchant's rate limit capacity (POST /api/v1/admin/merchants/{merchantId}/rate-limit-capacity)
+- `rateLimitCapacity` (Integer, nullable): Requests/minute override, must be greater than zero if provided; null clears the override
+
+### RateLimitCapacityResponse
+Response for POST /api/v1/admin/merchants/{merchantId}/rate-limit-capacity
+- `merchantId` (Long): Id of the affected merchant
+- `rateLimitCapacity` (Integer, nullable): The override now in effect, null means the app-wide default applies
 
 ### ChangePasswordRequest
 Used for self-service password change (POST /api/v1/auth/me/password)
@@ -676,6 +806,12 @@ Response containing gift card details
 - `balance` (double): Current balance
 - `active` (boolean): Indicates if the gift card is active
 - `expirationDate` (LocalDate): Expiration date
+- `merchantId` (Long): Id of the merchant that owns this gift card
+
+### GiftCardStatusResponse
+Response for POST /api/v1/giftcards/{code}/activate and .../deactivate
+- `giftCardCode` (String): Code of the affected gift card
+- `active` (boolean): The gift card's active status after this call
 
 ### PagedResponse<T>
 Generic wrapper for any paginated list response (e.g. GET /api/v1/giftcards, GET /api/v1/giftcards/{code}/ledger)
@@ -743,6 +879,20 @@ Response for a successful credit operation
 - `creditedAmount` (BigDecimal): Amount credited to the card
 - `newBalance` (BigDecimal): Balance after this credit
 
+### DashboardStatsResponse
+Response for GET /api/v1/giftcards/stats
+- `totalActiveBalance` (BigDecimal): Sum of the balance of every active gift card
+- `activeCards` (long): Number of active gift cards
+- `inactiveCards` (long): Number of inactive (deactivated) gift cards
+- `totalRedeemedInPeriod` (BigDecimal): Sum of amounts redeemed (REDEMPTION + HOLD_CAPTURED) over the requested period
+- `redemptionsPerDay` (List<DailyRedemptionStat>): One entry per day in the requested period, oldest first, zero-filled for days with no activity
+
+### DailyRedemptionStat
+One point of `DashboardStatsResponse.redemptionsPerDay`
+- `date` (LocalDate): Calendar day this entry covers
+- `count` (long): Number of balance-debiting ledger entries (REDEMPTION + HOLD_CAPTURED) recorded on this day
+- `totalAmount` (BigDecimal): Total amount redeemed on this day
+
 ## ⚠️ Error Responses
 
 All error responses follow this standard structure:
@@ -785,6 +935,7 @@ The correlation ID is **not** duplicated in the body — it is already returned 
 - **Correlation id & response timing filters run before Spring Security** (`@Order(Ordered.HIGHEST_PRECEDENCE)` on `MdcFilter`/`ResponseTimeFilter`) so that even 401/403 responses rejected by Security itself carry `X-Correlation-Id`/`X-Response-Time` — don't remove that ordering.
 - **Tenant scoping**: never trust a client-supplied `merchantId` for gift card operations — it always comes from the authenticated principal's JWT/API key (`CurrentUserContext`).
 - **Swagger groups**: `OpenApiConfig`'s `public-api`/`customer-api`/`admin-api` groups are explicit path allowlists (`pathsToMatch`), separate from `@Operation`/`@ApiResponses` annotations on the controller method. A new endpoint can be fully annotated and still be invisible in Swagger UI if its path isn't added to the right group — this has already happened twice (`GET /auth/me`, `GET /giftcards`). Always add the new path to `OpenApiConfig` in the same commit as the endpoint.
+- **SecurityConfig role routes**: `SecurityConfig`'s `MERCHANT_ROUTES`/`ADMIN_ROUTES` arrays are a second, separate path allowlist from `OpenApiConfig`'s — a new `/api/v1/giftcards/**` endpoint not added here falls through to the default `.anyRequest().authenticated()` rule, which accepts **any** authenticated role (ADMIN included), not just MERCHANT. Caught live on `GET /giftcards/stats`: an ADMIN caller reached the controller/service, which then threw an unhandled `IllegalStateException` from `CurrentUserContext.currentMerchantId()` (no merchant on an ADMIN principal) as a raw `500` with a full stack trace in the body, instead of a clean `403`. Always add a new gift card path to `MERCHANT_ROUTES` (or `ADMIN_ROUTES`) in the same commit as the endpoint, and cover it with a `should_returnForbidden_when_callerIsAdmin`-style integration test (see `GiftCardListIntegrationTest`) — that test would have caught this immediately instead of it surfacing as a raw 500 during manual smoke testing.
 - **Swagger schema for `PagedResponse<T>` endpoints**: don't annotate the `200` `@ApiResponse` with an explicit `content = @Content(schema = @Schema(implementation = PagedResponse.class))` — that pins springdoc to the raw generic class, so `content` shows up in Swagger as `items: { type: object }` instead of the actual DTO's fields. Leave `content` off the `@ApiResponse` entirely (just `description`) and springdoc auto-resolves the concrete generic from the controller method's real return type (e.g. `PagedResponseLedgerEntryResponse`, with `content.items` correctly `$ref`-ing `LedgerEntryResponse`). Already happened once for `GET /giftcards` before the ledger pagination fixed both at once — check the live `/api-docs/customer-api` output, not just that the annotation compiles, when adding a new paginated endpoint.
 
 ## 👥 Admin User Setup

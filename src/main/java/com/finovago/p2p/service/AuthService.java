@@ -7,6 +7,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.finovago.p2p.dto.AddMerchantUserRequest;
+import com.finovago.p2p.dto.ApiKeyInfoResponse;
 import com.finovago.p2p.dto.ApiKeyResponse;
 import com.finovago.p2p.dto.ApiKeyStatusResponse;
 import com.finovago.p2p.dto.AuthResponse;
@@ -81,6 +82,11 @@ public class AuthService {
             throw new BadCredentialsException("Invalid credentials");
         }
 
+        if (user.getMerchant() != null && !user.getMerchant().isActive()) {
+            log.warn("Login failed - merchant deactivated for user: {}", user.getEmail());
+            throw new BadCredentialsException("Invalid credentials");
+        }
+
         AuthResponse response = issueTokens(user);
         log.info("Tokens issued for user: {} (role: {})", user.getEmail(), user.getRole());
         return response;
@@ -92,6 +98,10 @@ public class AuthService {
             if (!user.isActive()) {
                 log.warn("Token rotation failed - account deactivated for user: {}", user.getEmail());
                 throw new InvalidRefreshTokenException("Account has been deactivated");
+            }
+            if (user.getMerchant() != null && !user.getMerchant().isActive()) {
+                log.warn("Token rotation failed - merchant deactivated for user: {}", user.getEmail());
+                throw new InvalidRefreshTokenException("Merchant has been deactivated");
             }
             log.info("Token rotation successful for user: {}", user.getEmail());
             return issueTokens(user);
@@ -140,6 +150,12 @@ public class AuthService {
     public ApiKeyStatusResponse revokeApiKey(Long callerId) {
         User caller = requireOwner(callerId);
         return apiKeyService.revoke(caller.getMerchant());
+    }
+
+    /** Read-only status of the merchant's API key, for the key-management screen. */
+    public ApiKeyInfoResponse getApiKeyStatus(Long callerId) {
+        User caller = requireOwner(callerId);
+        return apiKeyService.getStatus(caller.getMerchant());
     }
 
     public AuthResponse addUserToOwnMerchant(Long callerId, AddMerchantUserRequest request) {
