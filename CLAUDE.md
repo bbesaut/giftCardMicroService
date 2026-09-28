@@ -22,13 +22,13 @@ mvn test -P integration-tests        # Run all tests with real PostgreSQL 17 via
 Two Maven profiles for different workflows:
 
 **Unit Tests (default)** - `mvn test`
-- 47 unit tests, pure Mockito (no database at all)
+- 261 unit tests, pure Mockito (no database at all)
 - Fast (~30s), no external dependencies
 - Best for: Local TDD, quick feedback loops
 - No Docker required
 
 **Integration Tests** - `mvn test -P integration-tests`
-- 109 tests (47 unit + 62 integration) with real PostgreSQL 17
+- 451 tests with real PostgreSQL 17
 - Validates Flyway migrations
 - Matches production database (Neon PostgreSQL 18.4)
 - Requires: Docker installed and running
@@ -595,6 +595,35 @@ Header: `Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000`
 - `404 Not Found`: Gift card with specified code does not exist for the caller's merchant
 - `500 Internal Server Error`: Database or unexpected server error
 
+### GET /api/v1/giftcards/stats
+**Description**: Aggregate stats for a merchant dashboard, scoped to the caller's own merchant: total balance held on active cards, active/inactive card counts, plus a daily time series of redemption activity over a requested window, for a chart. Requires authentication (MERCHANT role).
+
+Covers both ways a card's balance actually gets debited — a direct `REDEMPTION`, and a captured hold (`HOLD_CAPTURED`; see `GiftCardHoldService#capture`, the only point at which a hold's earmark becomes a real balance mutation). `HOLD_PLACED`/`HOLD_RELEASED` are excluded on purpose — no money moves until capture. A `REFUND` is **not** netted out of the totals: a fully-refunded redemption still counts as redeemed that day. Every day in the requested window is present in `redemptionsPerDay`, even with zero activity (`count: 0`, `totalAmount: 0.00`) — no gaps for the chart to fill in. No `404` case: this is an aggregate over the whole merchant, not a lookup of one card, so a merchant with zero gift cards just gets zeros back.
+
+**Query Parameters**:
+- `days` (int, optional, default `30`, min `1`, max `90`): size of the `redemptionsPerDay` window, in calendar days including today
+
+**Response** (DashboardStatsResponse - HTTP 200):
+```json
+{
+  "totalActiveBalance": 15420.50,
+  "activeCards": 142,
+  "inactiveCards": 8,
+  "totalRedeemedInPeriod": 3200.00,
+  "redemptionsPerDay": [
+    { "date": "2026-09-26", "count": 0, "totalAmount": 0.00 },
+    { "date": "2026-09-27", "count": 12, "totalAmount": 450.00 },
+    { "date": "2026-09-28", "count": 5, "totalAmount": 120.00 }
+  ]
+}
+```
+
+**Error Responses**:
+- `400 Bad Request`: `days` out of range
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: Insufficient permissions (MERCHANT role required)
+- `500 Internal Server Error`: Database or unexpected server error
+
 ## 🏢 Admin - Merchant Management Endpoints
 
 All endpoints below require authentication (ADMIN role) and are unpaginated, like `GET /me/users` — see Architecture Summary for the enforcement details of activate/deactivate.
@@ -850,6 +879,20 @@ Response for a successful credit operation
 - `creditedAmount` (BigDecimal): Amount credited to the card
 - `newBalance` (BigDecimal): Balance after this credit
 
+### DashboardStatsResponse
+Response for GET /api/v1/giftcards/stats
+- `totalActiveBalance` (BigDecimal): Sum of the balance of every active gift card
+- `activeCards` (long): Number of active gift cards
+- `inactiveCards` (long): Number of inactive (deactivated) gift cards
+- `totalRedeemedInPeriod` (BigDecimal): Sum of amounts redeemed (REDEMPTION + HOLD_CAPTURED) over the requested period
+- `redemptionsPerDay` (List<DailyRedemptionStat>): One entry per day in the requested period, oldest first, zero-filled for days with no activity
+
+### DailyRedemptionStat
+One point of `DashboardStatsResponse.redemptionsPerDay`
+- `date` (LocalDate): Calendar day this entry covers
+- `count` (long): Number of balance-debiting ledger entries (REDEMPTION + HOLD_CAPTURED) recorded on this day
+- `totalAmount` (BigDecimal): Total amount redeemed on this day
+
 ## ⚠️ Error Responses
 
 All error responses follow this standard structure:
@@ -892,6 +935,7 @@ The correlation ID is **not** duplicated in the body — it is already returned 
 - **Correlation id & response timing filters run before Spring Security** (`@Order(Ordered.HIGHEST_PRECEDENCE)` on `MdcFilter`/`ResponseTimeFilter`) so that even 401/403 responses rejected by Security itself carry `X-Correlation-Id`/`X-Response-Time` — don't remove that ordering.
 - **Tenant scoping**: never trust a client-supplied `merchantId` for gift card operations — it always comes from the authenticated principal's JWT/API key (`CurrentUserContext`).
 - **Swagger groups**: `OpenApiConfig`'s `public-api`/`customer-api`/`admin-api` groups are explicit path allowlists (`pathsToMatch`), separate from `@Operation`/`@ApiResponses` annotations on the controller method. A new endpoint can be fully annotated and still be invisible in Swagger UI if its path isn't added to the right group — this has already happened twice (`GET /auth/me`, `GET /giftcards`). Always add the new path to `OpenApiConfig` in the same commit as the endpoint.
+- **SecurityConfig role routes**: `SecurityConfig`'s `MERCHANT_ROUTES`/`ADMIN_ROUTES` arrays are a second, separate path allowlist from `OpenApiConfig`'s — a new `/api/v1/giftcards/**` endpoint not added here falls through to the default `.anyRequest().authenticated()` rule, which accepts **any** authenticated role (ADMIN included), not just MERCHANT. Caught live on `GET /giftcards/stats`: an ADMIN caller reached the controller/service, which then threw an unhandled `IllegalStateException` from `CurrentUserContext.currentMerchantId()` (no merchant on an ADMIN principal) as a raw `500` with a full stack trace in the body, instead of a clean `403`. Always add a new gift card path to `MERCHANT_ROUTES` (or `ADMIN_ROUTES`) in the same commit as the endpoint, and cover it with a `should_returnForbidden_when_callerIsAdmin`-style integration test (see `GiftCardListIntegrationTest`) — that test would have caught this immediately instead of it surfacing as a raw 500 during manual smoke testing.
 - **Swagger schema for `PagedResponse<T>` endpoints**: don't annotate the `200` `@ApiResponse` with an explicit `content = @Content(schema = @Schema(implementation = PagedResponse.class))` — that pins springdoc to the raw generic class, so `content` shows up in Swagger as `items: { type: object }` instead of the actual DTO's fields. Leave `content` off the `@ApiResponse` entirely (just `description`) and springdoc auto-resolves the concrete generic from the controller method's real return type (e.g. `PagedResponseLedgerEntryResponse`, with `content.items` correctly `$ref`-ing `LedgerEntryResponse`). Already happened once for `GET /giftcards` before the ledger pagination fixed both at once — check the live `/api-docs/customer-api` output, not just that the annotation compiles, when adding a new paginated endpoint.
 
 ## 👥 Admin User Setup

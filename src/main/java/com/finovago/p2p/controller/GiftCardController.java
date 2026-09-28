@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.finovago.p2p.dto.CreditRequest;
 import com.finovago.p2p.dto.CreditResponse;
+import com.finovago.p2p.dto.DashboardStatsResponse;
 import com.finovago.p2p.dto.GiftCardCreateRequest;
 import com.finovago.p2p.dto.GiftCardResponse;
 import com.finovago.p2p.dto.GiftCardSortField;
@@ -36,6 +37,7 @@ import com.finovago.p2p.service.GiftCardCreditService;
 import com.finovago.p2p.service.GiftCardHoldService;
 import com.finovago.p2p.service.GiftCardRefundService;
 import com.finovago.p2p.service.GiftCardService;
+import com.finovago.p2p.service.GiftCardStatsService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -61,12 +63,14 @@ public class GiftCardController
     private final GiftCardHoldService giftCardHoldService;
     private final GiftCardRefundService giftCardRefundService;
     private final GiftCardCreditService giftCardCreditService;
+    private final GiftCardStatsService giftCardStatsService;
 
-    public GiftCardController(GiftCardService giftCardService, GiftCardHoldService giftCardHoldService, GiftCardRefundService giftCardRefundService, GiftCardCreditService giftCardCreditService) {
+    public GiftCardController(GiftCardService giftCardService, GiftCardHoldService giftCardHoldService, GiftCardRefundService giftCardRefundService, GiftCardCreditService giftCardCreditService, GiftCardStatsService giftCardStatsService) {
         this.giftCardService = giftCardService;
         this.giftCardHoldService = giftCardHoldService;
         this.giftCardRefundService = giftCardRefundService;
         this.giftCardCreditService = giftCardCreditService;
+        this.giftCardStatsService = giftCardStatsService;
     }
 
     @Operation(
@@ -438,5 +442,34 @@ public class GiftCardController
         log.info("Received credit request. Code: {}, Amount: {}, IdempotencyKey: {}",
                 request.giftCardCode(), request.amount(), idempotencyKey);
         return giftCardCreditService.credit(request, idempotencyKey);
+    }
+
+    @Operation(
+        summary = "Get dashboard stats for the caller's own merchant",
+        description = "Aggregate stats for a merchant dashboard: total balance held on active cards, active/inactive card counts, "
+                    + "and a daily time series of redemption activity over the requested period (covers both a direct redeem and a "
+                    + "captured hold - the two ways a card's balance actually gets debited; a placed/released hold is excluded since "
+                    + "no money moves until capture). Every day in the period is present in the series, even with zero activity - "
+                    + "no gaps for the chart to fill in. Scoped to the caller's own merchant (from the JWT). "
+                    + "Requires authentication (JWT token, MERCHANT role)."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "OK - Successfully retrieved dashboard stats",
+            content = @Content(schema = @Schema(implementation = DashboardStatsResponse.class))),
+        @ApiResponse(responseCode = "400", description = "Bad Request - days out of range",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"days: must be less than or equal to 90\"}"))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT token",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Invalid or missing JWT token\"}"))),
+        @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions (MERCHANT role required)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Forbidden\",\"message\":\"Insufficient permissions for this resource\"}"))),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error - Database or unexpected server error",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
+    })
+    @GetMapping("/stats")
+    @ResponseStatus(HttpStatus.OK)
+    public DashboardStatsResponse getDashboardStats(
+            @Parameter(description = "Size of the redemption time series window, in calendar days including today") @RequestParam(defaultValue = "30") @Min(1) @Max(90) int days) {
+        log.info("Received dashboard stats request. days={}", days);
+        return giftCardStatsService.getDashboardStats(days);
     }
 }
