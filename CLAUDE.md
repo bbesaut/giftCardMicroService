@@ -293,7 +293,7 @@ Content-Type: application/json
 - `500 Internal Server Error`: Server error
 
 ### POST /api/v1/auth/login
-**Description**: Authenticate user with credentials and obtain JWT tokens.
+**Description**: Authenticate user with credentials and obtain JWT tokens. The refresh token is also set as an `HttpOnly` cookie: `refresh_token`, `Secure`, `SameSite=None`, `Path=/api/v1/auth`, `Max-Age` = refresh token expiry. The JSON body still carries the same token during the transition to cookie-only.
 
 **Request** (LoginRequest):
 ```json
@@ -318,7 +318,7 @@ Content-Type: application/json
 - `500 Internal Server Error`: Server error
 
 ### POST /api/v1/auth/refresh
-**Description**: Rotate refresh token and issue new access token. Old refresh token is automatically revoked.
+**Description**: Rotate refresh token and issue new access token. Old refresh token is automatically revoked. The rotated refresh token is also set as the `refresh_token` cookie (same attributes as login).
 
 **Request** (RefreshTokenRequest):
 ```json
@@ -341,7 +341,7 @@ Content-Type: application/json
 - `500 Internal Server Error`: Server error
 
 ### POST /api/v1/auth/logout
-**Description**: Revoke refresh token and invalidate future refresh attempts.
+**Description**: Revoke refresh token and invalidate future refresh attempts. On success, also clears the `refresh_token` cookie (`Max-Age=0`). A failed logout leaves the cookie untouched.
 
 **Request** (RefreshTokenRequest):
 ```json

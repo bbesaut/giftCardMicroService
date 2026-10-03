@@ -20,7 +20,8 @@ public record AuthResponse(
     @Schema(
         description = "Long-lived opaque refresh token used to obtain new access tokens. "
                     + "Stored as a hash in the database with expiry tracking. Automatically rotated on each refresh. "
-                    + "Expires in ~7 days. Must be kept secure (e.g., in HTTP-only cookies).",
+                    + "Expires in ~7 days. Also set as an HttpOnly refresh_token cookie on login and refresh, "
+                    + "and still returned here during the transition to cookie-only.",
         example = "8f14e45f-ceea-4f6c-8f0e-0123456789ab",
         requiredMode = Schema.RequiredMode.REQUIRED
     )

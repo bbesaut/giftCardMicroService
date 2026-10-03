@@ -27,11 +27,14 @@ import java.util.Arrays;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.http.HttpHeaders.AUTHORIZATION;
+import static org.springframework.http.HttpHeaders.SET_COOKIE;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -241,6 +244,98 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"refreshToken\":\"\"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void should_setRefreshTokenCookie_matchingJsonBody_when_loginSucceeds() throws Exception {
+        MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        AuthResponse authResponse = objectMapper.readValue(loginResult.getResponse().getContentAsString(), AuthResponse.class);
+        String setCookie = loginResult.getResponse().getHeader(SET_COOKIE);
+
+        assertNotNull(setCookie);
+        assertTrue(setCookie.startsWith("refresh_token=" + authResponse.refreshToken() + ";"));
+        assertRefreshCookieAttributes(setCookie, 604_800);
+    }
+
+    @Test
+    void should_rotateRefreshCookie_when_refreshSucceeds() throws Exception {
+        MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        String oldRefreshToken = objectMapper.readValue(loginResult.getResponse().getContentAsString(), AuthResponse.class).refreshToken();
+
+        MvcResult refreshResult = mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + oldRefreshToken + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        AuthResponse refreshed = objectMapper.readValue(refreshResult.getResponse().getContentAsString(), AuthResponse.class);
+        String setCookie = refreshResult.getResponse().getHeader(SET_COOKIE);
+
+        assertNotNull(setCookie);
+        assertTrue(setCookie.startsWith("refresh_token=" + refreshed.refreshToken() + ";"));
+        assertNotEquals(oldRefreshToken, refreshed.refreshToken());
+        assertRefreshCookieAttributes(setCookie, 604_800);
+    }
+
+    @Test
+    void should_clearRefreshCookie_when_logoutSucceeds() throws Exception {
+        MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        String refreshToken = objectMapper.readValue(loginResult.getResponse().getContentAsString(), AuthResponse.class).refreshToken();
+
+        MvcResult logoutResult = mockMvc.perform(post("/api/v1/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + refreshToken + "\"}"))
+                .andExpect(status().isNoContent())
+                .andReturn();
+
+        String setCookie = logoutResult.getResponse().getHeader(SET_COOKIE);
+        assertNotNull(setCookie);
+        assertTrue(setCookie.startsWith("refresh_token=;"));
+        assertTrue(setCookie.contains("Max-Age=0"));
+        assertTrue(setCookie.contains("Path=/api/v1/auth"));
+    }
+
+    @Test
+    void should_notSetRefreshCookie_when_loginFails() throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + EMAIL + "\",\"password\":\"wrongPassword\"}"))
+                .andExpect(status().isUnauthorized())
+                .andReturn();
+
+        assertNull(result.getResponse().getHeader(SET_COOKIE));
+    }
+
+    @Test
+    void should_notTouchRefreshCookie_when_logoutFails() throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/v1/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"invalid-refresh-token\"}"))
+                .andExpect(status().isUnauthorized())
+                .andReturn();
+
+        assertNull(result.getResponse().getHeader(SET_COOKIE));
+    }
+
+    private void assertRefreshCookieAttributes(String setCookie, long maxAgeSeconds) {
+        assertTrue(setCookie.contains("HttpOnly"));
+        assertTrue(setCookie.contains("Secure"));
+        assertTrue(setCookie.contains("SameSite=None"));
+        assertTrue(setCookie.contains("Path=/api/v1/auth"));
+        assertTrue(setCookie.contains("Max-Age=" + maxAgeSeconds));
     }
 
     @Test
