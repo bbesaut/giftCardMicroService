@@ -20,7 +20,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
     @Schema(
         description = &quot;Long-lived opaque refresh token used to obtain new access tokens. &quot;
                     + &quot;Stored as a hash in the database with expiry tracking. Automatically rotated on each refresh. &quot;
-                    + &quot;Expires in ~7 days. Must be kept secure (e.g., in HTTP-only cookies).&quot;,
+                    + &quot;Expires in ~7 days. Also set as an HttpOnly refresh_token cookie on login and refresh, &quot;
+                    + &quot;and still returned here during the transition to cookie-only.&quot;,
         example = &quot;8f14e45f-ceea-4f6c-8f0e-0123456789ab&quot;,
         requiredMode = Schema.RequiredMode.REQUIRED
     )
