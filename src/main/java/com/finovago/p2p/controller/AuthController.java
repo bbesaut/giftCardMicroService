@@ -33,6 +33,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.annotation.*;
@@ -45,10 +46,15 @@ public class AuthController {
 
     private final AuthService authService;
     private final CurrentUserContext currentUserContext;
+    private final RefreshTokenCookieFactory refreshTokenCookieFactory;
 
-    public AuthController(AuthService authService, CurrentUserContext currentUserContext) {
+    public AuthController(
+            AuthService authService,
+            CurrentUserContext currentUserContext,
+            RefreshTokenCookieFactory refreshTokenCookieFactory) {
         this.authService = authService;
         this.currentUserContext = currentUserContext;
+        this.refreshTokenCookieFactory = refreshTokenCookieFactory;
     }
 
     @Operation(
@@ -74,7 +80,7 @@ public class AuthController {
         try {
             AuthResponse response = authService.login(request);
             log.info("Login successful for email: {}", sanitizeEmail(request.email()));
-            return ResponseEntity.ok(response);
+            return withRefreshTokenCookie(response);
         } catch (BadCredentialsException e) {
             log.warn("Login failed - invalid credentials for email: {}", sanitizeEmail(request.email()));
             throw e;
@@ -371,7 +377,7 @@ public class AuthController {
         try {
             AuthResponse response = authService.refresh(request);
             log.info("Token refreshed successfully");
-            return ResponseEntity.ok(response);
+            return withRefreshTokenCookie(response);
         } catch (Exception e) {
             log.warn("Refresh failed: {}", e.getMessage());
             throw e;
@@ -397,11 +403,20 @@ public class AuthController {
         try {
             authService.logout(request);
             log.info("User logged out successfully");
-            return ResponseEntity.noContent().build();
+            return ResponseEntity.noContent()
+                    .header(HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.clear().toString())
+                    .build();
         } catch (Exception e) {
             log.warn("Logout failed: {}", e.getMessage());
             throw e;
         }
+    }
+
+    /** Returns the tokens in the JSON body (transitional) and also sets the refresh token as an HttpOnly cookie. */
+    private ResponseEntity<AuthResponse> withRefreshTokenCookie(AuthResponse response) {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.create(response.refreshToken()).toString())
+                .body(response);
     }
 
     private String sanitizeEmail(String email) {
