@@ -12,14 +12,15 @@ REST API for issuing, looking up and redeeming gift cards, with multi-tenant sup
 
 ## Getting started
 
-Requirements: JDK 21, Docker, Maven (or use `./mvnw`).
+Requirements: JDK 21, Docker, Maven (or use `./mvnw`), [mkcert](https://github.com/FiloSottile/mkcert) (`scoop bucket add extras; scoop install mkcert`).
 
 ```bash
 docker-compose up -d postgres-dev
+.\scripts\generate-dev-cert.ps1       # one-time, generates the dev HTTPS keystore (see CLAUDE.md - Dev HTTPS)
 ./mvnw spring-boot:run "-Dspring-boot.run.arguments=--spring.profiles.active=dev"
 ```
 
-The API starts on `http://localhost:8080`, Swagger UI at `/swagger-ui.html`.
+The API starts on `https://localhost:8080`, Swagger UI at `/swagger-ui.html`.
 
 ### Dev data (seeding and reset)
 
