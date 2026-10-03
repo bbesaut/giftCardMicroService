@@ -22,6 +22,7 @@ import com.finovago.p2p.security.CurrentUserContext;
 import com.finovago.p2p.service.AuthService;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -44,6 +45,9 @@ import org.springframework.web.bind.annotation.*;
 @Tag(name = "Authentication", description = "Authentication endpoints.")
 public class AuthController {
 
+    private static final String REFRESH_COOKIE_HEADER_DESCRIPTION =
+            "Sets the refresh_token cookie (HttpOnly, Secure, SameSite=None, Path=/api/v1/auth)";
+
     private final AuthService authService;
     private final CurrentUserContext currentUserContext;
     private final RefreshTokenCookieFactory refreshTokenCookieFactory;
@@ -59,10 +63,13 @@ public class AuthController {
 
     @Operation(
         summary = "User login",
-        description = "Authenticates a user with email and password, returning access and refresh tokens."
+        description = "Authenticates a user with email and password, returning access and refresh tokens. "
+                    + "The refresh token is also set as an HttpOnly cookie named refresh_token, scoped to /api/v1/auth."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Login successful",
+            headers = @Header(name = "Set-Cookie", description = REFRESH_COOKIE_HEADER_DESCRIPTION,
+                schema = @Schema(type = "string")),
             content = @Content(schema = @Schema(implementation = AuthResponse.class))),
         @ApiResponse(responseCode = "400", description = "Invalid request body (missing or invalid fields)",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"Email cannot be blank\"}"))),
@@ -362,6 +369,8 @@ public class AuthController {
     )
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Token refreshed successfully",
+            headers = @Header(name = "Set-Cookie", description = REFRESH_COOKIE_HEADER_DESCRIPTION,
+                schema = @Schema(type = "string")),
             content = @Content(schema = @Schema(implementation = AuthResponse.class))),
         @ApiResponse(responseCode = "400", description = "Invalid request body (missing refresh token)",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"Refresh token cannot be blank\"}"))),
@@ -387,10 +396,12 @@ public class AuthController {
     @Operation(
         summary = "User logout",
         description = "Revokes the refresh token, invalidating any future token refresh attempts for this token. "
-                    + "Returns 204 No Content on success."
+                    + "Returns 204 No Content on success, and clears the refresh_token cookie."
     )
     @ApiResponses({
-        @ApiResponse(responseCode = "204", description = "Logout successful - refresh token revoked"),
+        @ApiResponse(responseCode = "204", description = "Logout successful - refresh token revoked, cookie cleared",
+            headers = @Header(name = "Set-Cookie", description = "Expires the refresh_token cookie (Max-Age=0)",
+                schema = @Schema(type = "string"))),
         @ApiResponse(responseCode = "400", description = "Invalid request body (missing refresh token)",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"Refresh token cannot be blank\"}"))),
         @ApiResponse(responseCode = "401", description = "Refresh token not found or already revoked",
