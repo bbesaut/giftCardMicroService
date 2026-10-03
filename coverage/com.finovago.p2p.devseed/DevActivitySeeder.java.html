@@ -127,7 +127,7 @@ class DevActivitySeeder {
         private boolean usableAt(LocalDateTime at) {
 <span class="fc" id="L128">            LocalDate expiration = seeded.finalExpirationDate();</span>
 <span class="fc bfc" id="L129" title="All 2 branches covered.">            return active</span>
-<span class="fc bfc" id="L130" title="All 2 branches covered.">                    &amp;&amp; balance.compareTo(MIN_USABLE_BALANCE) &gt;= 0</span>
+<span class="pc bpc" id="L130" title="1 of 2 branches missed.">                    &amp;&amp; balance.compareTo(MIN_USABLE_BALANCE) &gt;= 0</span>
 <span class="fc bfc" id="L131" title="All 4 branches covered.">                    &amp;&amp; lastEntryAt.isBefore(at)</span>
 <span class="fc bfc" id="L132" title="All 2 branches covered.">                    &amp;&amp; (expiration == null || at.toLocalDate().isBefore(expiration));</span>
         }
@@ -234,9 +234,9 @@ class DevActivitySeeder {
 <span class="fc" id="L234">            AuthenticatedUser actor = pickActor(false);</span>
             // The rare overspend is the &quot;card can't cover it&quot; case: the redemption drains the card and reports what's
             // left to pay. Only on a small balance - &quot;spending&quot; a few thousand in one go isn't a purchase, it's an outlier.
-<span class="fc bfc" id="L237" title="All 4 branches covered.">            boolean overspend = card.balance.compareTo(MAX_OVERSPEND_BALANCE) &lt;= 0 &amp;&amp; random.nextInt(100) &lt; OVERSPEND_PERCENT;</span>
-<span class="fc bfc" id="L238" title="All 2 branches covered.">            BigDecimal amount = overspend</span>
-<span class="fc" id="L239">                    ? card.balance.add(BigDecimal.valueOf(20))</span>
+<span class="pc bpc" id="L237" title="1 of 4 branches missed.">            boolean overspend = card.balance.compareTo(MAX_OVERSPEND_BALANCE) &lt;= 0 &amp;&amp; random.nextInt(100) &lt; OVERSPEND_PERCENT;</span>
+<span class="pc bpc" id="L238" title="1 of 2 branches missed.">            BigDecimal amount = overspend</span>
+<span class="nc" id="L239">                    ? card.balance.add(BigDecimal.valueOf(20))</span>
 <span class="fc" id="L240">                    : purchaseAmount(card);</span>
 
 <span class="fc" id="L242">            RedemptionResponse response = giftCardService.executeRedemptionSync(</span>
@@ -310,7 +310,7 @@ class DevActivitySeeder {
 
         private void refund(LocalDateTime at) {
 <span class="fc" id="L312">            List&lt;Refundable&gt; candidates = refundables.stream()</span>
-<span class="fc bfc" id="L313" title="All 6 branches covered.">                    .filter(r -&gt; r.remaining().signum() &gt; 0 &amp;&amp; r.at.isBefore(at.minusMinutes(30)) &amp;&amp; r.card.lastEntryAt.isBefore(at))</span>
+<span class="pc bpc" id="L313" title="1 of 6 branches missed.">                    .filter(r -&gt; r.remaining().signum() &gt; 0 &amp;&amp; r.at.isBefore(at.minusMinutes(30)) &amp;&amp; r.card.lastEntryAt.isBefore(at))</span>
 <span class="fc" id="L314">                    .toList();</span>
 <span class="fc bfc" id="L315" title="All 2 branches covered.">            if (candidates.isEmpty()) {</span>
 <span class="fc" id="L316">                redeem(at);</span>
