@@ -16,12 +16,13 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 /**
  * CORS policy for browser clients (e.g. the Angular front, served from a different origin).
  * <p>
- * Authentication is a Bearer JWT in the {@code Authorization} header - no cookies, no session - so
- * credentials are deliberately NOT allowed: that keeps a compromised or over-broad origin from
- * riding on ambient browser credentials, and avoids the browser rule that forbids combining
- * credentials with wildcard origins. Origins come from configuration as an exact allowlist (never
- * {@code *}); the app refuses to start on a missing, blank or malformed list rather than silently
- * falling open or closed.
+ * Credentials are allowed so the browser sends the {@code refresh_token} cookie on
+ * {@code /auth/refresh} and {@code /auth/logout}. Allowing credentials means an allowed origin can
+ * ride on the user's cookie, so the origin allowlist must stay exact: origins come from
+ * configuration (never {@code *}, which browsers refuse with credentials anyway), and the app
+ * refuses to start on a missing, blank or malformed list rather than silently falling open or
+ * closed. Cross-site requests to the cookie endpoints are refused by
+ * {@link OriginCheckFilter}, since CORS alone does not stop a form POST from another site.
  * <p>
  * {@code X-Api-Key} is intentionally absent from the allowed headers: API keys are for
  * backend-to-backend integration and must never be sent from a browser, where they'd be exposed.
@@ -54,7 +55,7 @@ public class CorsConfig {
         configuration.setAllowedMethods(ALLOWED_METHODS);
         configuration.setAllowedHeaders(ALLOWED_HEADERS);
         configuration.setExposedHeaders(EXPOSED_HEADERS);
-        configuration.setAllowCredentials(false);
+        configuration.setAllowCredentials(true);
         configuration.setMaxAge(Duration.ofSeconds(maxAgeSeconds));
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

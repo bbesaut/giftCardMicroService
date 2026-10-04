@@ -54,10 +54,10 @@ class CorsConfigUnitTest {
     }
 
     @Test
-    void should_notAllowCredentials() {
+    void should_allowCredentials_so_refreshCookieIsSent() {
         CorsConfiguration configuration = configurationForApiPath(List.of(FRONT_ORIGIN), true);
 
-        assertFalse(Boolean.TRUE.equals(configuration.getAllowCredentials()));
+        assertTrue(Boolean.TRUE.equals(configuration.getAllowCredentials()));
     }
 
     @Test
