@@ -18,13 +18,14 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.filter.CorsFilter;
 
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
 public class SecurityConfig {
 
-<span class="fc" id="L27">    private static final String[] PUBLIC_ROUTES = {</span>
+<span class="fc" id="L28">    private static final String[] PUBLIC_ROUTES = {</span>
             &quot;/api/v1/auth/login&quot;,
             &quot;/api/v1/auth/refresh&quot;,
             &quot;/api/v1/auth/logout&quot;,
@@ -42,13 +43,13 @@ public class SecurityConfig {
             &quot;/error&quot;
     };
 
-<span class="fc" id="L45">    private static final String[] ADMIN_ROUTES = {</span>
+<span class="fc" id="L46">    private static final String[] ADMIN_ROUTES = {</span>
             &quot;/api/v1/auth/register&quot;,
             &quot;/api/v1/admin/merchants&quot;,
             &quot;/api/v1/admin/merchants/**&quot;
     };
 
-<span class="fc" id="L51">    private static final String[] MERCHANT_ROUTES = {</span>
+<span class="fc" id="L52">    private static final String[] MERCHANT_ROUTES = {</span>
             &quot;/api/v1/giftcards&quot;,
             &quot;/api/v1/giftcards/redeem/**&quot;,
             &quot;/api/v1/giftcards/lookup/**&quot;,
@@ -71,55 +72,61 @@ public class SecurityConfig {
     private final ApiKeyAuthenticationFilter apiKeyAuthFilter;
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
     private final JwtAccessDeniedHandler accessDeniedHandler;
+    private final OriginCheckFilter originCheckFilter;
 
     public SecurityConfig(
             JwtAuthenticationFilter jwtAuthFilter,
             ApiKeyAuthenticationFilter apiKeyAuthFilter,
             JwtAuthenticationEntryPoint authenticationEntryPoint,
-<span class="fc" id="L79">            JwtAccessDeniedHandler accessDeniedHandler) {</span>
-<span class="fc" id="L80">        this.jwtAuthFilter = jwtAuthFilter;</span>
-<span class="fc" id="L81">        this.apiKeyAuthFilter = apiKeyAuthFilter;</span>
-<span class="fc" id="L82">        this.authenticationEntryPoint = authenticationEntryPoint;</span>
-<span class="fc" id="L83">        this.accessDeniedHandler = accessDeniedHandler;</span>
-<span class="fc" id="L84">    }</span>
+            JwtAccessDeniedHandler accessDeniedHandler,
+<span class="fc" id="L82">            OriginCheckFilter originCheckFilter) {</span>
+<span class="fc" id="L83">        this.jwtAuthFilter = jwtAuthFilter;</span>
+<span class="fc" id="L84">        this.apiKeyAuthFilter = apiKeyAuthFilter;</span>
+<span class="fc" id="L85">        this.authenticationEntryPoint = authenticationEntryPoint;</span>
+<span class="fc" id="L86">        this.accessDeniedHandler = accessDeniedHandler;</span>
+<span class="fc" id="L87">        this.originCheckFilter = originCheckFilter;</span>
+<span class="fc" id="L88">    }</span>
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-<span class="fc" id="L88">        return new BCryptPasswordEncoder();</span>
+<span class="fc" id="L92">        return new BCryptPasswordEncoder();</span>
     }
 
     @Bean
     public RoleHierarchy roleHierarchy() {
         // No implied roles: ADMIN manages the platform (merchants, global gift card listing)
         // but does not act on behalf of a specific merchant's own gift cards.
-<span class="fc" id="L95">        return RoleHierarchyImpl.withDefaultRolePrefix().build();</span>
+<span class="fc" id="L99">        return RoleHierarchyImpl.withDefaultRolePrefix().build();</span>
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-<span class="fc" id="L100">        http</span>
-<span class="fc" id="L101">                .csrf(csrf -&gt; csrf.disable())</span>
+<span class="fc" id="L104">        http</span>
+<span class="fc" id="L105">                .csrf(csrf -&gt; csrf.disable())</span>
                 // Uses the CorsConfigurationSource bean (CorsConfig). Must go through Security so
                 // preflight OPTIONS requests are answered before authorization rejects them (no JWT
                 // on a preflight) and 401/403 responses still carry CORS headers.
-<span class="fc" id="L105">                .cors(Customizer.withDefaults())</span>
-<span class="fc" id="L106">                .headers(headers -&gt; headers.frameOptions(frame -&gt; frame.disable()))</span>
-<span class="fc" id="L107">                .sessionManagement(session -&gt; session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))</span>
+<span class="fc" id="L109">                .cors(Customizer.withDefaults())</span>
+<span class="fc" id="L110">                .headers(headers -&gt; headers.frameOptions(frame -&gt; frame.disable()))</span>
+<span class="fc" id="L111">                .sessionManagement(session -&gt; session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))</span>
 
-<span class="fc" id="L109">                .authorizeHttpRequests(auth -&gt; auth</span>
-<span class="fc" id="L110">                        .requestMatchers(&quot;/h2-console/**&quot;).permitAll()</span>
-<span class="fc" id="L111">                        .requestMatchers(PUBLIC_ROUTES).permitAll()</span>
-<span class="fc" id="L112">                        .requestMatchers(ADMIN_ROUTES).hasRole(&quot;ADMIN&quot;)</span>
-<span class="fc" id="L113">                        .requestMatchers(MERCHANT_ROUTES).hasRole(&quot;MERCHANT&quot;)</span>
-<span class="fc" id="L114">                        .anyRequest().authenticated())</span>
+<span class="fc" id="L113">                .authorizeHttpRequests(auth -&gt; auth</span>
+<span class="fc" id="L114">                        .requestMatchers(&quot;/h2-console/**&quot;).permitAll()</span>
+<span class="fc" id="L115">                        .requestMatchers(PUBLIC_ROUTES).permitAll()</span>
+<span class="fc" id="L116">                        .requestMatchers(ADMIN_ROUTES).hasRole(&quot;ADMIN&quot;)</span>
+<span class="fc" id="L117">                        .requestMatchers(MERCHANT_ROUTES).hasRole(&quot;MERCHANT&quot;)</span>
+<span class="fc" id="L118">                        .anyRequest().authenticated())</span>
 
-<span class="fc" id="L116">                .exceptionHandling(exception -&gt; exception</span>
-<span class="fc" id="L117">                        .authenticationEntryPoint(authenticationEntryPoint)</span>
-<span class="fc" id="L118">                        .accessDeniedHandler(accessDeniedHandler))</span>
-<span class="fc" id="L119">                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)</span>
-<span class="fc" id="L120">                .addFilterBefore(apiKeyAuthFilter, UsernamePasswordAuthenticationFilter.class);</span>
+<span class="fc" id="L120">                .exceptionHandling(exception -&gt; exception</span>
+<span class="fc" id="L121">                        .authenticationEntryPoint(authenticationEntryPoint)</span>
+<span class="fc" id="L122">                        .accessDeniedHandler(accessDeniedHandler))</span>
+                // After CorsFilter so a preflight from an allowed origin is answered first, and
+                // before authentication so a cross-site request is refused without touching JWT/API key.
+<span class="fc" id="L125">                .addFilterAfter(originCheckFilter, CorsFilter.class)</span>
+<span class="fc" id="L126">                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)</span>
+<span class="fc" id="L127">                .addFilterBefore(apiKeyAuthFilter, UsernamePasswordAuthenticationFilter.class);</span>
 
-<span class="fc" id="L122">        return http.build();</span>
+<span class="fc" id="L129">        return http.build();</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

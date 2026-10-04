@@ -376,20 +376,22 @@ public class AuthController {
             content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Bad Request\&quot;,\&quot;message\&quot;:\&quot;Refresh token cannot be blank\&quot;}&quot;))),
         @ApiResponse(responseCode = &quot;401&quot;, description = &quot;Refresh token expired, revoked, or invalid&quot;,
             content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Unauthorized\&quot;,\&quot;message\&quot;:\&quot;Refresh token has expired\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;403&quot;, description = &quot;Origin header present but not in the CORS allowlist (requests without Origin are not checked)&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Forbidden\&quot;,\&quot;message\&quot;:\&quot;Request origin is not allowed.\&quot;}&quot;))),
         @ApiResponse(responseCode = &quot;500&quot;, description = &quot;Internal server error&quot;,
             content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Internal Server Error\&quot;,\&quot;message\&quot;:\&quot;Database error occurred\&quot;}&quot;)))
     })
     @PostMapping(&quot;/refresh&quot;)
     public ResponseEntity&lt;AuthResponse&gt; refresh(@Valid @RequestBody RefreshTokenRequest request) {
-<span class="fc" id="L384">        log.debug(&quot;Refresh token attempt&quot;);</span>
+<span class="fc" id="L386">        log.debug(&quot;Refresh token attempt&quot;);</span>
 
         try {
-<span class="fc" id="L387">            AuthResponse response = authService.refresh(request);</span>
-<span class="fc" id="L388">            log.info(&quot;Token refreshed successfully&quot;);</span>
-<span class="fc" id="L389">            return withRefreshTokenCookie(response);</span>
-<span class="fc" id="L390">        } catch (Exception e) {</span>
-<span class="fc" id="L391">            log.warn(&quot;Refresh failed: {}&quot;, e.getMessage());</span>
-<span class="fc" id="L392">            throw e;</span>
+<span class="fc" id="L389">            AuthResponse response = authService.refresh(request);</span>
+<span class="fc" id="L390">            log.info(&quot;Token refreshed successfully&quot;);</span>
+<span class="fc" id="L391">            return withRefreshTokenCookie(response);</span>
+<span class="fc" id="L392">        } catch (Exception e) {</span>
+<span class="fc" id="L393">            log.warn(&quot;Refresh failed: {}&quot;, e.getMessage());</span>
+<span class="fc" id="L394">            throw e;</span>
         }
     }
 
@@ -406,39 +408,41 @@ public class AuthController {
             content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Bad Request\&quot;,\&quot;message\&quot;:\&quot;Refresh token cannot be blank\&quot;}&quot;))),
         @ApiResponse(responseCode = &quot;401&quot;, description = &quot;Refresh token not found or already revoked&quot;,
             content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Unauthorized\&quot;,\&quot;message\&quot;:\&quot;Refresh token not found\&quot;}&quot;))),
+        @ApiResponse(responseCode = &quot;403&quot;, description = &quot;Origin header present but not in the CORS allowlist (requests without Origin are not checked)&quot;,
+            content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Forbidden\&quot;,\&quot;message\&quot;:\&quot;Request origin is not allowed.\&quot;}&quot;))),
         @ApiResponse(responseCode = &quot;500&quot;, description = &quot;Internal server error&quot;,
             content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Internal Server Error\&quot;,\&quot;message\&quot;:\&quot;Database error occurred\&quot;}&quot;)))
     })
     @PostMapping(&quot;/logout&quot;)
     public ResponseEntity&lt;Void&gt; logout(@Valid @RequestBody RefreshTokenRequest request) {
         try {
-<span class="fc" id="L415">            authService.logout(request);</span>
-<span class="fc" id="L416">            log.info(&quot;User logged out successfully&quot;);</span>
-<span class="fc" id="L417">            return ResponseEntity.noContent()</span>
-<span class="fc" id="L418">                    .header(HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.clear().toString())</span>
-<span class="fc" id="L419">                    .build();</span>
-<span class="fc" id="L420">        } catch (Exception e) {</span>
-<span class="fc" id="L421">            log.warn(&quot;Logout failed: {}&quot;, e.getMessage());</span>
-<span class="fc" id="L422">            throw e;</span>
+<span class="fc" id="L419">            authService.logout(request);</span>
+<span class="fc" id="L420">            log.info(&quot;User logged out successfully&quot;);</span>
+<span class="fc" id="L421">            return ResponseEntity.noContent()</span>
+<span class="fc" id="L422">                    .header(HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.clear().toString())</span>
+<span class="fc" id="L423">                    .build();</span>
+<span class="fc" id="L424">        } catch (Exception e) {</span>
+<span class="fc" id="L425">            log.warn(&quot;Logout failed: {}&quot;, e.getMessage());</span>
+<span class="fc" id="L426">            throw e;</span>
         }
     }
 
     /** Returns the tokens in the JSON body (transitional) and also sets the refresh token as an HttpOnly cookie. */
     private ResponseEntity&lt;AuthResponse&gt; withRefreshTokenCookie(AuthResponse response) {
-<span class="fc" id="L428">        return ResponseEntity.ok()</span>
-<span class="fc" id="L429">                .header(HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.create(response.refreshToken()).toString())</span>
-<span class="fc" id="L430">                .body(response);</span>
+<span class="fc" id="L432">        return ResponseEntity.ok()</span>
+<span class="fc" id="L433">                .header(HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.create(response.refreshToken()).toString())</span>
+<span class="fc" id="L434">                .body(response);</span>
     }
 
     private String sanitizeEmail(String email) {
-<span class="pc bpc" id="L434" title="2 of 4 branches missed.">        if (email == null || email.length() &lt; 3) {</span>
-<span class="nc" id="L435">            return &quot;***&quot;;</span>
+<span class="pc bpc" id="L438" title="2 of 4 branches missed.">        if (email == null || email.length() &lt; 3) {</span>
+<span class="nc" id="L439">            return &quot;***&quot;;</span>
         }
-<span class="fc" id="L437">        int atIndex = email.indexOf('@');</span>
-<span class="pc bpc" id="L438" title="1 of 2 branches missed.">        if (atIndex &lt;= 1) {</span>
-<span class="nc" id="L439">            return email.substring(0, 1) + &quot;***&quot;;</span>
+<span class="fc" id="L441">        int atIndex = email.indexOf('@');</span>
+<span class="pc bpc" id="L442" title="1 of 2 branches missed.">        if (atIndex &lt;= 1) {</span>
+<span class="nc" id="L443">            return email.substring(0, 1) + &quot;***&quot;;</span>
         }
-<span class="fc" id="L441">        return email.substring(0, 1) + &quot;***&quot; + email.substring(atIndex);</span>
+<span class="fc" id="L445">        return email.substring(0, 1) + &quot;***&quot; + email.substring(atIndex);</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

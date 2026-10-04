@@ -16,12 +16,13 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 /**
  * CORS policy for browser clients (e.g. the Angular front, served from a different origin).
  * &lt;p&gt;
- * Authentication is a Bearer JWT in the {@code Authorization} header - no cookies, no session - so
- * credentials are deliberately NOT allowed: that keeps a compromised or over-broad origin from
- * riding on ambient browser credentials, and avoids the browser rule that forbids combining
- * credentials with wildcard origins. Origins come from configuration as an exact allowlist (never
- * {@code *}); the app refuses to start on a missing, blank or malformed list rather than silently
- * falling open or closed.
+ * Credentials are allowed so the browser sends the {@code refresh_token} cookie on
+ * {@code /auth/refresh} and {@code /auth/logout}. Allowing credentials means an allowed origin can
+ * ride on the user's cookie, so the origin allowlist must stay exact: origins come from
+ * configuration (never {@code *}, which browsers refuse with credentials anyway), and the app
+ * refuses to start on a missing, blank or malformed list rather than silently falling open or
+ * closed. Cross-site requests to the cookie endpoints are refused by
+ * {@link OriginCheckFilter}, since CORS alone does not stop a form POST from another site.
  * &lt;p&gt;
  * {@code X-Api-Key} is intentionally absent from the allowed headers: API keys are for
  * backend-to-backend integration and must never be sent from a browser, where they'd be exposed.
@@ -30,18 +31,18 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  * JWT/role checks in {@link SecurityConfig}.
  */
 @Configuration
-<span class="fc" id="L33">public class CorsConfig {</span>
+<span class="fc" id="L34">public class CorsConfig {</span>
 
     static final String API_PATH_PATTERN = &quot;/api/**&quot;;
 
-<span class="fc" id="L37">    private static final List&lt;String&gt; ALLOWED_METHODS = List.of(&quot;GET&quot;, &quot;POST&quot;, &quot;OPTIONS&quot;);</span>
-<span class="fc" id="L38">    private static final List&lt;String&gt; ALLOWED_HEADERS = List.of(&quot;Authorization&quot;, &quot;Content-Type&quot;, &quot;Idempotency-Key&quot;);</span>
+<span class="fc" id="L38">    private static final List&lt;String&gt; ALLOWED_METHODS = List.of(&quot;GET&quot;, &quot;POST&quot;, &quot;OPTIONS&quot;);</span>
+<span class="fc" id="L39">    private static final List&lt;String&gt; ALLOWED_HEADERS = List.of(&quot;Authorization&quot;, &quot;Content-Type&quot;, &quot;Idempotency-Key&quot;);</span>
 
     // Response headers are hidden from browser JS unless listed here. Correlation id / timing are
     // what a front needs to report an issue or surface latency; Retry-After lets it honor a 429.
-<span class="fc" id="L42">    private static final List&lt;String&gt; EXPOSED_HEADERS = List.of(&quot;X-Correlation-Id&quot;, &quot;X-Response-Time&quot;, &quot;Retry-After&quot;);</span>
+<span class="fc" id="L43">    private static final List&lt;String&gt; EXPOSED_HEADERS = List.of(&quot;X-Correlation-Id&quot;, &quot;X-Response-Time&quot;, &quot;Retry-After&quot;);</span>
 
-<span class="fc" id="L44">    private static final Set&lt;String&gt; ALLOWED_SCHEMES = Set.of(&quot;http&quot;, &quot;https&quot;);</span>
+<span class="fc" id="L45">    private static final Set&lt;String&gt; ALLOWED_SCHEMES = Set.of(&quot;http&quot;, &quot;https&quot;);</span>
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource(
@@ -49,17 +50,17 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
             @Value(&quot;${app.cors.require-https:false}&quot;) boolean requireHttps,
             @Value(&quot;${app.cors.max-age-seconds:3600}&quot;) long maxAgeSeconds) {
 
-<span class="fc" id="L52">        CorsConfiguration configuration = new CorsConfiguration();</span>
-<span class="fc" id="L53">        configuration.setAllowedOrigins(validateOrigins(allowedOrigins, requireHttps));</span>
-<span class="fc" id="L54">        configuration.setAllowedMethods(ALLOWED_METHODS);</span>
-<span class="fc" id="L55">        configuration.setAllowedHeaders(ALLOWED_HEADERS);</span>
-<span class="fc" id="L56">        configuration.setExposedHeaders(EXPOSED_HEADERS);</span>
-<span class="fc" id="L57">        configuration.setAllowCredentials(false);</span>
-<span class="fc" id="L58">        configuration.setMaxAge(Duration.ofSeconds(maxAgeSeconds));</span>
+<span class="fc" id="L53">        CorsConfiguration configuration = new CorsConfiguration();</span>
+<span class="fc" id="L54">        configuration.setAllowedOrigins(validateOrigins(allowedOrigins, requireHttps));</span>
+<span class="fc" id="L55">        configuration.setAllowedMethods(ALLOWED_METHODS);</span>
+<span class="fc" id="L56">        configuration.setAllowedHeaders(ALLOWED_HEADERS);</span>
+<span class="fc" id="L57">        configuration.setExposedHeaders(EXPOSED_HEADERS);</span>
+<span class="fc" id="L58">        configuration.setAllowCredentials(true);</span>
+<span class="fc" id="L59">        configuration.setMaxAge(Duration.ofSeconds(maxAgeSeconds));</span>
 
-<span class="fc" id="L60">        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();</span>
-<span class="fc" id="L61">        source.registerCorsConfiguration(API_PATH_PATTERN, configuration);</span>
-<span class="fc" id="L62">        return source;</span>
+<span class="fc" id="L61">        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();</span>
+<span class="fc" id="L62">        source.registerCorsConfiguration(API_PATH_PATTERN, configuration);</span>
+<span class="fc" id="L63">        return source;</span>
     }
 
     /**
@@ -68,46 +69,46 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
      * never match and the front would just see an opaque CORS error.
      */
     static List&lt;String&gt; validateOrigins(List&lt;String&gt; origins, boolean requireHttps) {
-<span class="fc bfc" id="L71" title="All 2 branches covered.">        List&lt;String&gt; cleaned = origins == null ? List.of()</span>
-<span class="fc bfc" id="L72" title="All 2 branches covered.">                : origins.stream().map(String::trim).filter(o -&gt; !o.isEmpty()).toList();</span>
+<span class="fc bfc" id="L72" title="All 2 branches covered.">        List&lt;String&gt; cleaned = origins == null ? List.of()</span>
+<span class="fc bfc" id="L73" title="All 2 branches covered.">                : origins.stream().map(String::trim).filter(o -&gt; !o.isEmpty()).toList();</span>
 
-<span class="fc bfc" id="L74" title="All 2 branches covered.">        if (cleaned.isEmpty()) {</span>
-<span class="fc" id="L75">            throw new IllegalStateException(</span>
+<span class="fc bfc" id="L75" title="All 2 branches covered.">        if (cleaned.isEmpty()) {</span>
+<span class="fc" id="L76">            throw new IllegalStateException(</span>
                     &quot;app.cors.allowed-origins must list at least one origin (e.g. https://app.example.com)&quot;);
         }
-<span class="fc" id="L78">        cleaned.forEach(origin -&gt; validateOrigin(origin, requireHttps));</span>
-<span class="fc" id="L79">        return cleaned;</span>
+<span class="fc" id="L79">        cleaned.forEach(origin -&gt; validateOrigin(origin, requireHttps));</span>
+<span class="fc" id="L80">        return cleaned;</span>
     }
 
     private static void validateOrigin(String origin, boolean requireHttps) {
-<span class="fc bfc" id="L83" title="All 2 branches covered.">        if (origin.contains(&quot;*&quot;)) {</span>
-<span class="fc" id="L84">            throw new IllegalStateException(&quot;Wildcard CORS origins are not allowed: '&quot; + origin + &quot;'&quot;);</span>
+<span class="fc bfc" id="L84" title="All 2 branches covered.">        if (origin.contains(&quot;*&quot;)) {</span>
+<span class="fc" id="L85">            throw new IllegalStateException(&quot;Wildcard CORS origins are not allowed: '&quot; + origin + &quot;'&quot;);</span>
         }
 
         URI uri;
         try {
-<span class="fc" id="L89">            uri = new URI(origin);</span>
-<span class="fc" id="L90">        } catch (URISyntaxException e) {</span>
-<span class="fc" id="L91">            throw new IllegalStateException(&quot;Invalid CORS origin: '&quot; + origin + &quot;'&quot;, e);</span>
-<span class="fc" id="L92">        }</span>
+<span class="fc" id="L90">            uri = new URI(origin);</span>
+<span class="fc" id="L91">        } catch (URISyntaxException e) {</span>
+<span class="fc" id="L92">            throw new IllegalStateException(&quot;Invalid CORS origin: '&quot; + origin + &quot;'&quot;, e);</span>
+<span class="fc" id="L93">        }</span>
 
-<span class="fc" id="L94">        String scheme = uri.getScheme();</span>
-<span class="fc bfc" id="L95" title="All 4 branches covered.">        if (scheme == null || !ALLOWED_SCHEMES.contains(scheme.toLowerCase())) {</span>
-<span class="fc" id="L96">            throw new IllegalStateException(&quot;CORS origin must start with http:// or https://: '&quot; + origin + &quot;'&quot;);</span>
+<span class="fc" id="L95">        String scheme = uri.getScheme();</span>
+<span class="fc bfc" id="L96" title="All 4 branches covered.">        if (scheme == null || !ALLOWED_SCHEMES.contains(scheme.toLowerCase())) {</span>
+<span class="fc" id="L97">            throw new IllegalStateException(&quot;CORS origin must start with http:// or https://: '&quot; + origin + &quot;'&quot;);</span>
         }
-<span class="fc bfc" id="L98" title="All 4 branches covered.">        if (requireHttps &amp;&amp; !&quot;https&quot;.equalsIgnoreCase(scheme)) {</span>
-<span class="fc" id="L99">            throw new IllegalStateException(&quot;CORS origin must use https in this environment: '&quot; + origin + &quot;'&quot;);</span>
+<span class="fc bfc" id="L99" title="All 4 branches covered.">        if (requireHttps &amp;&amp; !&quot;https&quot;.equalsIgnoreCase(scheme)) {</span>
+<span class="fc" id="L100">            throw new IllegalStateException(&quot;CORS origin must use https in this environment: '&quot; + origin + &quot;'&quot;);</span>
         }
-<span class="pc bpc" id="L101" title="1 of 4 branches missed.">        if (uri.getHost() == null || uri.getUserInfo() != null) {</span>
-<span class="fc" id="L102">            throw new IllegalStateException(&quot;CORS origin must be scheme://host[:port]: '&quot; + origin + &quot;'&quot;);</span>
+<span class="pc bpc" id="L102" title="1 of 4 branches missed.">        if (uri.getHost() == null || uri.getUserInfo() != null) {</span>
+<span class="fc" id="L103">            throw new IllegalStateException(&quot;CORS origin must be scheme://host[:port]: '&quot; + origin + &quot;'&quot;);</span>
         }
-<span class="pc bpc" id="L104" title="1 of 4 branches missed.">        boolean hasPathQueryOrFragment = (uri.getRawPath() != null &amp;&amp; !uri.getRawPath().isEmpty())</span>
-<span class="fc bfc" id="L105" title="All 2 branches covered.">                || uri.getRawQuery() != null</span>
-<span class="pc bpc" id="L106" title="1 of 2 branches missed.">                || uri.getRawFragment() != null;</span>
-<span class="fc bfc" id="L107" title="All 2 branches covered.">        if (hasPathQueryOrFragment) {</span>
-<span class="fc" id="L108">            throw new IllegalStateException(</span>
+<span class="pc bpc" id="L105" title="1 of 4 branches missed.">        boolean hasPathQueryOrFragment = (uri.getRawPath() != null &amp;&amp; !uri.getRawPath().isEmpty())</span>
+<span class="fc bfc" id="L106" title="All 2 branches covered.">                || uri.getRawQuery() != null</span>
+<span class="pc bpc" id="L107" title="1 of 2 branches missed.">                || uri.getRawFragment() != null;</span>
+<span class="fc bfc" id="L108" title="All 2 branches covered.">        if (hasPathQueryOrFragment) {</span>
+<span class="fc" id="L109">            throw new IllegalStateException(</span>
                     &quot;CORS origin must not have a path, query or trailing slash: '&quot; + origin + &quot;'&quot;);
         }
-<span class="fc" id="L111">    }</span>
+<span class="fc" id="L112">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
