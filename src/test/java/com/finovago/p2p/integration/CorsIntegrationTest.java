@@ -49,7 +49,7 @@ class CorsIntegrationTest extends AbstractIntegrationTest {
                 // Spring echoes the requested header names as the browser sent them (lowercase).
                 .andExpect(header().string("Access-Control-Allow-Headers", containsString("idempotency-key")))
                 .andExpect(header().string("Access-Control-Max-Age", "3600"))
-                .andExpect(header().doesNotExist("Access-Control-Allow-Credentials"));
+                .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
     }
 
     @Test
