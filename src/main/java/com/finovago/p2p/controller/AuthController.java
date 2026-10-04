@@ -376,6 +376,8 @@ public class AuthController {
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"Refresh token cannot be blank\"}"))),
         @ApiResponse(responseCode = "401", description = "Refresh token expired, revoked, or invalid",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Refresh token has expired\"}"))),
+        @ApiResponse(responseCode = "403", description = "Origin header present but not in the CORS allowlist (requests without Origin are not checked)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Forbidden\",\"message\":\"Request origin is not allowed.\"}"))),
         @ApiResponse(responseCode = "500", description = "Internal server error",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
     })
@@ -406,6 +408,8 @@ public class AuthController {
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"Refresh token cannot be blank\"}"))),
         @ApiResponse(responseCode = "401", description = "Refresh token not found or already revoked",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Refresh token not found\"}"))),
+        @ApiResponse(responseCode = "403", description = "Origin header present but not in the CORS allowlist (requests without Origin are not checked)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Forbidden\",\"message\":\"Request origin is not allowed.\"}"))),
         @ApiResponse(responseCode = "500", description = "Internal server error",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
     })
