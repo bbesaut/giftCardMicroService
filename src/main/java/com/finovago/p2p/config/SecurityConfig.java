@@ -18,6 +18,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.filter.CorsFilter;
 
 @Configuration
 @EnableWebSecurity
@@ -71,16 +72,19 @@ public class SecurityConfig {
     private final ApiKeyAuthenticationFilter apiKeyAuthFilter;
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
     private final JwtAccessDeniedHandler accessDeniedHandler;
+    private final OriginCheckFilter originCheckFilter;
 
     public SecurityConfig(
             JwtAuthenticationFilter jwtAuthFilter,
             ApiKeyAuthenticationFilter apiKeyAuthFilter,
             JwtAuthenticationEntryPoint authenticationEntryPoint,
-            JwtAccessDeniedHandler accessDeniedHandler) {
+            JwtAccessDeniedHandler accessDeniedHandler,
+            OriginCheckFilter originCheckFilter) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.apiKeyAuthFilter = apiKeyAuthFilter;
         this.authenticationEntryPoint = authenticationEntryPoint;
         this.accessDeniedHandler = accessDeniedHandler;
+        this.originCheckFilter = originCheckFilter;
     }
 
     @Bean
@@ -116,6 +120,9 @@ public class SecurityConfig {
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
+                // After CorsFilter so a preflight from an allowed origin is answered first, and
+                // before authentication so a cross-site request is refused without touching JWT/API key.
+                .addFilterAfter(originCheckFilter, CorsFilter.class)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(apiKeyAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
