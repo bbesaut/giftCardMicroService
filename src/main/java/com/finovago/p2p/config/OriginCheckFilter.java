@@ -24,8 +24,10 @@ import tools.jackson.databind.json.JsonMapper;
  * The refresh cookie is SameSite=None, so browsers attach it to cross-site requests. Once
  * {@code /refresh} and {@code /logout} read that cookie, a page on another site could trigger them
  * with the victim's cookie. Browsers always send an {@code Origin} header on cross-site requests, so
- * an Origin outside the CORS allowlist is refused here. Requests without an Origin (curl, mobile
- * apps, backend callers) are not browser cross-site requests and pass through.
+ * an Origin outside the CORS allowlist is refused. Spring's {@code CorsFilter} already does this for
+ * {@code /api/**} and runs first, so this filter is defense in depth: the rule stays explicit on these
+ * two routes even if the CORS mapping changes. Requests without an Origin (curl, mobile apps, backend
+ * callers) are not browser cross-site requests and pass through.
  * <p>
  * The allowlist is the same {@code app.cors.allowed-origins} that {@link CorsConfig} validates at
  * startup, so the two cannot drift apart.
