@@ -7,7 +7,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -53,7 +52,6 @@ import jakarta.validation.constraints.Min;
 
 @RestController
 @RequestMapping("/api/v1/giftcards")
-@CrossOrigin(origins = "http://localhost:3000")
 @Tag(name = "Gift Cards", description = "Gift card management endpoints.")
 @Validated
 public class GiftCardController
