@@ -4,27 +4,16 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 @Schema(
     name = &quot;AuthResponse&quot;,
-    description = &quot;Response containing both access and refresh tokens after successful authentication. &quot;
-                + &quot;The access token is a short-lived JWT used to authorize API requests. &quot;
-                + &quot;The refresh token is a long-lived opaque token used to obtain new access tokens when they expire.&quot;
+    description = &quot;Response carrying the access token after successful authentication. &quot;
+                + &quot;The refresh token is never returned in the body: it is set as an HttpOnly refresh_token cookie.&quot;
 )
-<span class="fc" id="L11">public record AuthResponse(</span>
+<span class="fc" id="L10">public record AuthResponse(</span>
     @Schema(
         description = &quot;Short-lived JWT access token (Bearer token) used to authenticate API requests. &quot;
                     + &quot;Includes user email and roles as claims. Expires in ~15 minutes.&quot;,
         example = &quot;eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyQGV4YW1wbGUuY29tIiwicm9sZXMiOlsiQ0xJRU5UIl0sImlhdCI6MTY4MzAwMDAwMCwiZXhwIjoxNjgzMDAwOTAwfQ.signature&quot;,
         requiredMode = Schema.RequiredMode.REQUIRED
     )
-    String accessToken,
-
-    @Schema(
-        description = &quot;Long-lived opaque refresh token used to obtain new access tokens. &quot;
-                    + &quot;Stored as a hash in the database with expiry tracking. Automatically rotated on each refresh. &quot;
-                    + &quot;Expires in ~7 days. Also set as an HttpOnly refresh_token cookie on login and refresh, &quot;
-                    + &quot;and still returned here during the transition to cookie-only.&quot;,
-        example = &quot;8f14e45f-ceea-4f6c-8f0e-0123456789ab&quot;,
-        requiredMode = Schema.RequiredMode.REQUIRED
-    )
-    String refreshToken
+    String accessToken
 ) {}
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -127,7 +127,7 @@ class DevActivitySeeder {
         private boolean usableAt(LocalDateTime at) {
 <span class="fc" id="L128">            LocalDate expiration = seeded.finalExpirationDate();</span>
 <span class="fc bfc" id="L129" title="All 2 branches covered.">            return active</span>
-<span class="pc bpc" id="L130" title="1 of 2 branches missed.">                    &amp;&amp; balance.compareTo(MIN_USABLE_BALANCE) &gt;= 0</span>
+<span class="fc bfc" id="L130" title="All 2 branches covered.">                    &amp;&amp; balance.compareTo(MIN_USABLE_BALANCE) &gt;= 0</span>
 <span class="fc bfc" id="L131" title="All 4 branches covered.">                    &amp;&amp; lastEntryAt.isBefore(at)</span>
 <span class="fc bfc" id="L132" title="All 2 branches covered.">                    &amp;&amp; (expiration == null || at.toLocalDate().isBefore(expiration));</span>
         }
