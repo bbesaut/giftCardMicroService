@@ -300,12 +300,12 @@
                                 </thead>
                                 <tbody>
                                 <tr>
-                                    <td>gift_card_hold_status_check</td>
-                                    <td>((status)::text = ANY ((ARRAY[&#39;PENDING&#39;::character varying, &#39;CAPTURED&#39;::character varying, &#39;RELEASED&#39;::character varying, &#39;EXPIRED&#39;::character varying])::text[]))</td>
-                                </tr>
-                                <tr>
                                     <td>gift_card_hold_amount_check</td>
                                     <td>((amount)::double precision &gt; (0)::double precision)</td>
+                                </tr>
+                                <tr>
+                                    <td>gift_card_hold_status_check</td>
+                                    <td>((status)::text = ANY ((ARRAY[&#39;PENDING&#39;::character varying, &#39;CAPTURED&#39;::character varying, &#39;RELEASED&#39;::character varying, &#39;EXPIRED&#39;::character varying])::text[]))</td>
                                 </tr>
                                 </tbody>
                             </table>
