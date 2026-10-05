@@ -131,7 +131,12 @@ public class AuthService {
         }
     }
 
-    public AuthTokens register(RegisterRequest request) {
+    /**
+     * Creates the merchant and its owner, then emails a verification token. No session is issued: the owner
+     * can only log in once the address is verified (see login and EmailVerificationService).
+     */
+    @Transactional
+    public void register(RegisterRequest request) {
         if (userRepository.findByEmail(request.email()).isPresent()) {
             log.warn("Registration failed - email already exists: {}", request.email());
             throw new UserAlreadyExistsException("Email already registered");
@@ -145,10 +150,9 @@ public class AuthService {
         // owner requests one explicitly via POST /me/api-key whenever they actually need it.
         User owner = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, merchant, true);
         userRepository.save(owner);
+        emailVerificationService.sendVerification(owner);
 
         log.info("Merchant registered successfully: merchantId: {}, owner: {}", merchant.getId(), owner.getEmail());
-
-        return issueTokens(owner);
     }
 
     /** Generates the merchant's first API key, or rotates it (invalidating the old one) if it already has one. */

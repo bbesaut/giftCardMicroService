@@ -193,22 +193,21 @@ class AuthServiceUnitTest {
     }
 
     @Test
-    void should_returnOwnerBothTokens_when_registrationSucceeds() {
+    void should_createUnverifiedOwnerAndSendVerification_when_registrationSucceeds() {
         RegisterRequest request = new RegisterRequest("newuser@example.com", "password123", "Acme Corp");
 
         when(userRepository.findByEmail("newuser@example.com")).thenReturn(Optional.empty());
         when(merchantRepository.save(any(Merchant.class))).thenReturn(merchant());
         when(passwordEncoder.encode(any())).thenReturn("hashed");
-        when(jwtService.generateToken(eq("newuser@example.com"), anyList(), any(), any())).thenReturn("access-token");
-        when(refreshTokenService.createRefreshToken(any(User.class))).thenReturn("refresh-token");
 
-        AuthTokens tokens = authService.register(request);
+        authService.register(request);
 
-        assertEquals("access-token", tokens.accessToken());
-        assertEquals("refresh-token", tokens.refreshToken());
         verify(merchantRepository).save(any(Merchant.class));
-        verify(userRepository).save(argThat(saved -> saved.getEmail().equals("newuser@example.com") && saved.isOwner()));
+        verify(userRepository).save(argThat(saved -> saved.getEmail().equals("newuser@example.com")
+                && saved.isOwner() && !saved.isEmailVerified()));
         verify(userRepository, org.mockito.Mockito.times(1)).save(any(User.class));
+        verify(emailVerificationService).sendVerification(argThat(saved -> saved.getEmail().equals("newuser@example.com")));
+        verifyNoInteractions(jwtService, refreshTokenService);
     }
 
     @Test
