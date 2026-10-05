@@ -6,7 +6,7 @@
 - JWT authentication (JJWT)
 - JPA with Lombok
 - Swagger/OpenAPI
-- Mail (password reset): `EmailSender` interface with two implementations selected by profile - `SmtpEmailSender` (`spring-boot-starter-mail`/`JavaMailSender`, Brevo SMTP relay) in dev/test, `BrevoApiEmailSender` (Brevo's HTTP transactional email API) in prod, since Render blocks outbound SMTP ports; MailHog (Testcontainers) captures what `SmtpEmailSender` sends in tests
+- Mail (password reset and email verification): `EmailSender` interface with two implementations selected by profile - `SmtpEmailSender` (`spring-boot-starter-mail`/`JavaMailSender`, Brevo SMTP relay) in dev/test, `BrevoApiEmailSender` (Brevo's HTTP transactional email API) in prod, since Render blocks outbound SMTP ports; MailHog (Testcontainers) captures what `SmtpEmailSender` sends in tests
 
 ## ⚙️ Commands
 ```bash
@@ -70,7 +70,8 @@ Two ways to see it without running Maven yourself:
 - **Response timing**: ResponseTimeFilter adds `X-Response-Time` header to all responses (in milliseconds)
 - **CORS**: `CorsConfig` exposes a `CorsConfigurationSource` for `/api/**`, plugged into Spring Security via `.cors(...)` in `SecurityConfig` (so preflight `OPTIONS` is answered before authorization, which has no JWT to check, and 401/403/429 responses still carry CORS headers — `RateLimitFilter` runs after the Security chain, so it never sees preflights either). Origins are an exact allowlist from `app.cors.allowed-origins` (comma-separated, env var `CORS_ALLOWED_ORIGINS`): no wildcard, no path/trailing slash, validated at startup — the app refuses to boot on a missing/blank/malformed list. `dev` defaults to `https://localhost:4200` (Angular, served via `ng serve --ssl` — see Dev HTTPS); `prod` has **no default** and sets `app.cors.require-https=true`, so an `http://` origin is also rejected at startup. `allowCredentials` is `true` so the browser sends the `refresh_token` cookie to `/auth/refresh` and `/auth/logout` (see Refresh cookie origin guard below); Bearer JWT endpoints never read cookies. Allowed methods are `GET`, `POST`, `OPTIONS` (no `PUT`/`PATCH`/`DELETE` — add them here if that changes); allowed headers `Authorization`, `Content-Type`, `Idempotency-Key`; **`X-Api-Key` is deliberately not allowed** (API keys are backend-to-backend and must never be sent from a browser). Exposed to front JS (`Access-Control-Expose-Headers`): `X-Correlation-Id`, `X-Response-Time`, `Retry-After` — browsers hide any response header not listed here, so a front can only read them because of this list. CORS is a browser-side rule, not access control — authorization stays with JWT/roles/tenant scoping. Reading the cookie server-side is a separate change, and it must keep the origin guard below.
 - **Refresh cookie origin guard**: `OriginCheckFilter` (only `/api/v1/auth/refresh` and `/api/v1/auth/logout`) answers `403` `{"error":"Forbidden"}` when the `Origin` header is not in `app.cors.allowed-origins`. A request without `Origin` (curl, mobile, backend) passes. Spring's `CorsFilter` already refuses foreign origins on `/api/**` before this filter runs (plain-text 403 "Invalid CORS request"), so the guard is defense in depth: it keeps the rule explicit on these routes. **Gotcha:** any endpoint that starts reading the `refresh_token` cookie must be added to the guard's path list, or it becomes CSRF-able once `allowCredentials` is on.
-- **Rate limiting**: `RateLimitFilter` caps `login`, `register`, `password-reset/request`, and `password-reset/confirm` at 10 requests/minute per client IP (the only identity available pre-auth — protects against credential stuffing / account enumeration / token guessing). `POST /me/password` is capped the same way but keyed per **user id** instead of IP (an ADMIN caller has no merchantId to key on, and it's a current-password-guessing surface like login). `lookup`/`redeem`/`reserve`/`refund`/`credit` are capped at 300 requests/minute **per merchant** (from the JWT), not per IP — these are B2B endpoints called from a merchant's own backend, so all of a merchant's end users would otherwise share one IP and throttle each other. A merchant can get a custom quota via `merchants.rate_limit_capacity` (nullable override; `NULL` falls back to the `app.rate-limit.merchant-capacity` default). In-memory buckets, per-instance only (see `app.rate-limit.*` properties). Disabled under the `test` profile.
+- **Rate limiting**: `RateLimitFilter` caps `login`, `register`, `password-reset/request`, `password-reset/confirm`, `email-verification/confirm` and `email-verification/resend` at 10 requests/minute per client IP (the only identity available pre-auth — protects against credential stuffing / account enumeration / token guessing). `POST /me/password` is capped the same way but keyed per **user id** instead of IP (an ADMIN caller has no merchantId to key on, and it's a current-password-guessing surface like login). `lookup`/`redeem`/`reserve`/`refund`/`credit` are capped at 300 requests/minute **per merchant** (from the JWT), not per IP — these are B2B endpoints called from a merchant's own backend, so all of a merchant's end users would otherwise share one IP and throttle each other. A merchant can get a custom quota via `merchants.rate_limit_capacity` (nullable override; `NULL` falls back to the `app.rate-limit.merchant-capacity` default). In-memory buckets, per-instance only (see `app.rate-limit.*` properties). Disabled under the `test` profile.
+- **Email verification**: `register` and `POST /me/users` create the account with `users.email_verified = false` and email a single-use token (`EmailVerificationService`, `EmailVerificationToken`, same hashing and single-use pattern as password reset, expiry `app.email-verification.expiration-minutes`, default 1440). `login` refuses an unverified account with `403 Email Not Verified`, checked after the password. `register` issues **no session** (no token, no cookie): the owner must verify first. Existing accounts were grandfathered as verified by migration `V33`. Resending invalidates the previous token. An expired-token sweep runs hourly (`EmailVerificationTokenCleanupScheduler`, `app.email-verification.cleanup-sweep-interval-ms`). Refresh and the other endpoints don't re-check the flag: a session can only exist for a verified account.
 - **Password reset**: `PasswordResetToken` mirrors `RefreshToken`'s pattern exactly — a `UUID.randomUUID()` raw token is emailed once and never stored, only its SHA-256 hash (`password_reset_tokens.token_hash`), same-day-expiring (`app.password-reset.expiration-minutes`, default 30 min), single-use (`used` flag, not deleted, so a replay of an already-consumed token is distinguishable from garbage in logs/metrics). Requesting a new reset invalidates any still-outstanding token for that account first, so at most one valid token exists per user at a time. Email delivery goes through the `EmailSender` interface, with the implementation picked by Spring profile: `SmtpEmailSender` (`@Profile("!prod")`) wraps `JavaMailSender` against Brevo's SMTP relay in dev via `MAIL_HOST`/`MAIL_USERNAME`/`MAIL_PASSWORD`/`MAIL_FROM` (`MAIL_USERNAME`/`MAIL_PASSWORD` are Brevo's SMTP login/key from its SMTP & API settings, not the account password), and against MailHog via Testcontainers in `test` (a real SMTP server that captures instead of delivering, so integration tests exercise the actual SMTP path rather than mocking the email step). `BrevoApiEmailSender` (`@Profile("prod")`) calls Brevo's HTTP transactional email API (`https://api.brevo.com/v3/smtp/email`) instead, using a separate `BREVO_API_KEY` (not the SMTP one) via Spring's `RestClient` - Render, like most PaaS hosts, blocks outbound SMTP ports at the network level to fight spam, so the SMTP relay that works everywhere else times out there regardless of credentials. Both implementations require `MAIL_FROM` to be a sender address verified in Brevo. `PasswordResetTokenCleanupScheduler` sweeps expired entries (see `app.password-reset.*` properties), same pattern as `RefreshTokenCleanupScheduler`.
 - **Idempotency**: `POST /giftcards/redeem` and `POST /giftcards/reserve` require an `Idempotency-Key` header — any mutating endpoint without a natural uniqueness guard is a candidate (`create`/`register` are already covered by their own unique constraints; `capture`/`release` are idempotent by target state — a retry that already reached the requested terminal state (e.g. re-capturing an already-CAPTURED hold) replays the same 200 response; a retry hitting a *different* terminal state (e.g. capturing an already-RELEASED hold) is a genuine conflict and returns 409). `IdempotencyKeyService` is endpoint-agnostic business-logic-wise, but keys are scoped by `(merchant_id, endpoint, idempotency_key)` — not just `(merchant_id, idempotency_key)` — the same way Stripe/PayPal/AWS do it, so a client reusing the same key value on two different endpoints (e.g. `reserve` then `redeem`) can never have one silently replay the other's cached response even if their request-hash inputs happen to coincide (`request_hash` only needs to catch reuse *within* the same endpoint with a different payload). It claims the key in its own transaction (REQUIRES_NEW) before the business logic runs, so concurrent duplicates are caught by the DB unique constraint; a completed claim replays its cached response (serialized as JSON, endpoint-specific DTO type), a failed one is discarded so retries can proceed cleanly. `IdempotencyKeyCleanupScheduler` sweeps expired entries (see `app.idempotency.*` properties).
 - **Ledger partitioning**: `gift_card_ledger` is RANGE-partitioned by year on `created_at` (see `V21__partition_gift_card_ledger_by_date.sql`) — it's an append-only audit trail that grows forever, so partitioning keeps per-partition indexes/vacuum small and makes future retention (`DETACH PARTITION` + export + drop) a metadata-only operation instead of a slow `DELETE`. Yearly (not monthly) because the retention policy this supports is expressed in years and current queries don't filter by date range, so finer granularity would only add catalog/index overhead. Partitions are pre-created through 2029, plus a `gift_card_ledger_default` catch-all so an insert past that window degrades (lands in the catch-all) instead of failing.
@@ -99,7 +100,7 @@ Set-Cookie: refresh_token=...; HttpOnly; Secure; SameSite=None; Path=/api/v1/aut
 ## 🔐 Authentication Endpoints
 
 ### POST /api/v1/auth/register
-**Description**: Public self-service signup. Creates the `Merchant` record (business name) together with a single MERCHANT-role **owner** account (the submitted email/password — the owner's login, and the only account that can manage the merchant's other users). The owner is logged in straight away: the access token is in the body and the refresh token is set as the `refresh_token` cookie (same attributes as login). No email verification yet (planned as a separate feature). No service account or API key is created here — the owner requests one explicitly, later, via `POST /me/api-key`. Unauthenticated, rate-limited per client IP (max 10/minute, like `login`).
+**Description**: Public self-service signup. Creates the `Merchant` record (business name) together with a single MERCHANT-role **owner** account (the submitted email/password — the owner's login, and the only account that can manage the merchant's other users). **No session is issued**: no access token in the body, no `refresh_token` cookie. A verification email is sent to the owner, and login is refused until the address is verified (see `POST /email-verification/confirm`). No service account or API key is created here — the owner requests one explicitly, later, via `POST /me/api-key`. Unauthenticated, rate-limited per client IP (max 10/minute, like `login`).
 
 **Request** (RegisterRequest):
 ```json
@@ -110,7 +111,7 @@ Set-Cookie: refresh_token=...; HttpOnly; Secure; SameSite=None; Path=/api/v1/aut
 }
 ```
 
-**Response** (AuthResponse - HTTP 201): `{ "accessToken": "..." }` for the newly created owner account, plus the `refresh_token` cookie.
+**Response**: HTTP 201 Created, empty body, no cookie. The owner must confirm the verification email before logging in.
 
 **Error Responses**:
 - `400 Bad Request`: Invalid email format or blank/missing fields (including blank `merchantName`)
@@ -292,6 +293,40 @@ Set-Cookie: refresh_token=...; HttpOnly; Secure; SameSite=None; Path=/api/v1/aut
 - `429 Too Many Requests`: Rate limit exceeded (max 10 attempts/minute per IP)
 - `500 Internal Server Error`: Server error
 
+### POST /api/v1/auth/email-verification/confirm
+**Description**: Confirms an email address with the single-use token received by email (sent by `POST /register`, `POST /me/users`, or `POST /email-verification/resend`). Marks the account as verified, so it can log in. The token is single-use, expires after `app.email-verification.expiration-minutes` (default 1440 = 24 h), and is invalidated as soon as a newer one is issued for the same account. Unauthenticated. Rate-limited per client IP like `login` (token-guessing surface).
+
+**Request** (EmailVerificationConfirmRequest):
+```json
+{
+  "token": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+}
+```
+
+**Response**: HTTP 204 No Content
+
+**Error Responses**:
+- `400 Bad Request`: Blank token, or the token is invalid/already used/expired (single generic message, `"error": "Bad Request"`)
+- `429 Too Many Requests`: Rate limit exceeded (max 10 attempts/minute per IP)
+- `500 Internal Server Error`: Server error
+
+### POST /api/v1/auth/email-verification/resend
+**Description**: Sends a fresh verification email to an unverified account, invalidating any previously issued token for it. Always answers `202 Accepted`, whether the email is registered, unverified, or unknown, so it can't be used to enumerate accounts. Sends nothing for an already-verified account. Unauthenticated. Rate-limited per client IP like `login`, since each call sends an email.
+
+**Request** (EmailVerificationResendRequest):
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+**Response**: HTTP 202 Accepted (always)
+
+**Error Responses**:
+- `400 Bad Request`: Invalid or missing email
+- `429 Too Many Requests`: Rate limit exceeded (max 10 attempts/minute per IP)
+- `500 Internal Server Error`: Server error
+
 ### POST /api/v1/auth/login
 **Description**: Authenticate user with credentials. Returns the access token in the body. The refresh token is **never** in the body: it is set only as an `HttpOnly` cookie `refresh_token`, `Secure`, `SameSite=None`, `Path=/api/v1/auth`, `Max-Age` = refresh token expiry.
 
@@ -312,7 +347,8 @@ Set-Cookie: refresh_token=...; HttpOnly; Secure; SameSite=None; Path=/api/v1/aut
 
 **Error Responses**:
 - `400 Bad Request`: Invalid email format or blank fields
-- `401 Unauthorized`: Invalid email or password
+- `401 Unauthorized`: Invalid email or password, or the account is deactivated
+- `403 Forbidden`: Correct password but the email address is not verified yet (`"error": "Email Not Verified"`). Checked after the password, so it reveals nothing a guesser doesn't already know. The front should show a "check your inbox" screen and offer `POST /email-verification/resend`.
 - `429 Too Many Requests`: Rate limit exceeded (max 10 attempts/minute per IP)
 - `500 Internal Server Error`: Server error
 
@@ -706,6 +742,14 @@ Used for merchant registration (POST /api/v1/auth/register) — describes the ne
 - `password` (String): Owner's password, non-blank
 - `merchantName` (String): Business name for the new Merchant created alongside this user, non-blank
 
+### EmailVerificationConfirmRequest
+Used to confirm an email address (POST /api/v1/auth/email-verification/confirm)
+- `token` (String): Raw single-use verification token received by email, non-blank
+
+### EmailVerificationResendRequest
+Used to resend the verification email (POST /api/v1/auth/email-verification/resend)
+- `email` (String): Email of the account, validated with @Email
+
 ### CurrentUserResponse
 Response for GET /api/v1/auth/me
 - `userId` (Long): Id of the authenticated user
@@ -791,7 +835,7 @@ Used for authentication (POST /api/v1/auth/login)
 - `password` (String): User's password
 
 ### AuthResponse
-Response body of the endpoints that start a session (login, refresh, register)
+Response body of the endpoints that start a session (login, refresh)
 - `accessToken` (String): JWT access token (bearer token for API requests)
 
 The refresh token is never in the body: it travels only in the `refresh_token` HttpOnly cookie (see login/refresh/logout). `AuthTokens` is the service-internal pair the controller splits between body and cookie.
@@ -924,7 +968,8 @@ The correlation ID is **not** duplicated in the body — it is already returned 
 ## 📌 Conventions
 - Use `@Valid` for DTO validation
 - Async operations return CompletableFuture or HTTP 202 (Accepted)
-- All endpoints require JWT (except /api/v1/auth/login, /api/v1/auth/refresh, /api/v1/auth/logout). `/api/v1/auth/register` is public (self-service signup, rate-limited per IP).
+- All endpoints require JWT (except /api/v1/auth/login, /api/v1/auth/refresh, /api/v1/auth/logout). `/api/v1/auth/register`, `/api/v1/auth/password-reset/*` and `/api/v1/auth/email-verification/*` are public (rate-limited per IP).
+- **New `User` is unverified**: `new User(...)` starts with `emailVerified = false`, so login is refused until the email is confirmed. Dev seed accounts are marked verified explicitly in `DevDataSeeder`. In integration tests, build users that must log in with `TestUsers.verified(...)` (in `com.finovago.p2p.integration`), never a bare `new User(...)`. Use `MailHogInbox` to read a token out of an email the app really sent.
 - **CORS**: never add `*`/wildcard origins to `CorsConfig`. `allowCredentials(true)` is on for the refresh cookie, so any new cookie-reading endpoint must be added to the origin guard (see Architecture Summary). New front-end origins go in `CORS_ALLOWED_ORIGINS`, not in code.
 - Profiles: dev (PostgreSQL via docker-compose, DEBUG), prod (PostgreSQL, INFO), test (PostgreSQL via Testcontainers, random port)
 - **Response timing**: All responses include `X-Response-Time` header (milliseconds). This is HTTP metadata only—never add timing to DTOs.
