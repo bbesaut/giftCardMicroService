@@ -45,6 +45,9 @@ public class User {
     @Column(nullable = false)
     private boolean active;
 
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified;
+
     public User(String email, String password, Role role, @Nullable Merchant merchant) {
         this(email, password, role, merchant, false);
     }
@@ -56,6 +59,12 @@ public class User {
         this.merchant = merchant;
         this.owner = owner;
         this.active = true;
+        this.emailVerified = false;
+    }
+
+    /** Called once the user has proved they own the address (see EmailVerificationService). */
+    public void markEmailVerified() {
+        this.emailVerified = true;
     }
 }
 

@@ -99,16 +99,13 @@ public class AuthController {
     @Operation(
         summary = "Merchant registration",
         description = "Public self-service signup: creates a new Merchant along with its human owner account (the submitted "
-                    + "email/password, which is the owner's login). The owner is logged in straight away: the access "
-                    + "token is returned in the body and the refresh token is set as the HttpOnly refresh_token cookie. "
+                    + "email/password, which is the owner's login). No session is issued: a verification email is sent "
+                    + "to the owner, and login is refused until the address is verified (see POST /api/v1/auth/email-verification/confirm). "
                     + "No automated/integration account is created here - the owner requests an API key explicitly later "
                     + "via POST /me/api-key. Unauthenticated, rate-limited per client IP."
     )
     @ApiResponses({
-        @ApiResponse(responseCode = "201", description = "Merchant and owner created, owner logged in",
-            headers = @Header(name = "Set-Cookie", description = REFRESH_COOKIE_HEADER_DESCRIPTION,
-                schema = @Schema(type = "string")),
-            content = @Content(schema = @Schema(implementation = AuthResponse.class))),
+        @ApiResponse(responseCode = "201", description = "Merchant and owner created, verification email sent (no session)"),
         @ApiResponse(responseCode = "400", description = "Invalid request body (missing or invalid fields)",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"Email should be valid\"}"))),
         @ApiResponse(responseCode = "409", description = "Email already registered",
@@ -119,13 +116,13 @@ public class AuthController {
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
     })
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
+    public ResponseEntity<Void> register(@Valid @RequestBody RegisterRequest request) {
         log.info("Registration attempt for email: {}", sanitizeEmail(request.email()));
 
         try {
-            AuthTokens tokens = authService.register(request);
+            authService.register(request);
             log.info("Registration successful for email: {}", sanitizeEmail(request.email()));
-            return sessionResponse(HttpStatus.CREATED, tokens);
+            return ResponseEntity.status(HttpStatus.CREATED).build();
         } catch (UserAlreadyExistsException e) {
             log.warn("Registration failed - email already exists: {}", sanitizeEmail(request.email()));
             throw e;

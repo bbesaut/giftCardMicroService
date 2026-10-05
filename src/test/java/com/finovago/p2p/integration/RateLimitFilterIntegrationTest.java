@@ -63,7 +63,7 @@ class RateLimitFilterIntegrationTest extends AbstractIntegrationTest {
         refreshTokenRepository.deleteAll();
         userRepository.deleteAll();
         Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "merchant@example.com"));
-        userRepository.save(new User(EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant));
+        userRepository.save(TestUsers.verified(EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant));
     }
 
     @Test

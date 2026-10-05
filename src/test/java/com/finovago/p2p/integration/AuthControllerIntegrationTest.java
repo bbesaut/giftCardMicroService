@@ -92,9 +92,9 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         merchantRepository.deleteAll();
         Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "merchant@example.com"));
         merchantId = merchant.getId();
-        userRepository.save(new User(EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant));
-        userRepository.save(new User(VALID_EMAIL, passwordEncoder.encode(PASSWORD), Role.ADMIN, null));
-        ownerId = userRepository.save(new User(OWNER_EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant, true)).getId();
+        userRepository.save(TestUsers.verified(EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant));
+        userRepository.save(TestUsers.verified(VALID_EMAIL, passwordEncoder.encode(PASSWORD), Role.ADMIN, null));
+        ownerId = userRepository.save(TestUsers.verified(OWNER_EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant, true)).getId();
     }
 
     @Test
@@ -398,6 +398,13 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         assertNotEquals(refreshTokenFromCookie(result1), refreshTokenFromCookie(result2));
     }
 
+    /** Stands in for clicking the verification link, for tests that are not about verification itself. */
+    private void markEmailVerified(String email) {
+        User user = userRepository.findByEmail(email).orElseThrow();
+        user.markEmailVerified();
+        userRepository.save(user);
+    }
+
     private String loginAndGetAccessToken(String email, String password) throws Exception {
         MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -410,21 +417,25 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void should_registerAsPublicSignup_and_logOwnerInWithCookie() throws Exception {
+    void should_registerWithoutSession_and_refuseLoginUntilEmailIsVerified() throws Exception {
         String newEmail = "newuser@example.com";
         MvcResult result = mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"New Merchant\"}"))
                 .andExpect(status().isCreated())
-                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.accessToken", notNullValue()))
-                .andExpect(jsonPath("$.refreshToken").doesNotExist())
                 .andReturn();
 
-        assertRefreshCookieAttributes(result.getResponse().getHeader(SET_COOKIE), 604_800);
+        assertTrue(result.getResponse().getContentAsString().isEmpty(), "register must not return a body");
+        assertNull(result.getResponse().getHeader(SET_COOKIE), "register must not set a refresh cookie");
 
-        // Verify user was created
-        assertNotNull(userRepository.findByEmail(newEmail));
+        User created = userRepository.findByEmail(newEmail).orElseThrow();
+        assertFalse(created.isEmailVerified());
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Email Not Verified"));
     }
 
     @Test
@@ -493,9 +504,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
                         .header(AUTHORIZATION, "Bearer " + adminAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"New Merchant\"}"))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.accessToken", notNullValue()))
-                .andExpect(jsonPath("$.refreshToken").doesNotExist());
+                .andExpect(status().isCreated());
 
         User createdOwner = userRepository.findByEmail(newEmail).orElseThrow();
         assertEquals(Role.MERCHANT, createdOwner.getRole());
@@ -823,6 +832,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
                         .content("{\"email\":\"" + newOwnerEmail + "\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"Svc Deactivate Merchant\"}"))
                 .andExpect(status().isCreated());
 
+        markEmailVerified(newOwnerEmail);
         String newOwnerAccessToken = loginAndGetAccessToken(newOwnerEmail, PASSWORD);
         MvcResult keyResult = mockMvc.perform(post("/api/v1/auth/me/api-key")
                         .header(AUTHORIZATION, "Bearer " + newOwnerAccessToken))
@@ -918,6 +928,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + compliantEmployeeEmail + "\",\"password\":\"" + NEW_PASSWORD + "\"}"))
                 .andExpect(status().isCreated());
+        markEmailVerified(compliantEmployeeEmail);
         String employeeAccessToken = loginAndGetAccessToken(compliantEmployeeEmail, NEW_PASSWORD);
 
         mockMvc.perform(post("/api/v1/auth/me/password")

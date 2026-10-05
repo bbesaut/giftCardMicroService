@@ -61,7 +61,7 @@ class AuthValidationIntegrationTest extends AbstractIntegrationTest {
         giftCardRepository.deleteAll();
         merchantRepository.deleteAll();
         Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "merchant@example.com"));
-        userRepository.save(new User(VALID_EMAIL, passwordEncoder.encode(VALID_PASSWORD), Role.MERCHANT, merchant));
+        userRepository.save(TestUsers.verified(VALID_EMAIL, passwordEncoder.encode(VALID_PASSWORD), Role.MERCHANT, merchant));
     }
 
     // ==================== Login Validation Tests ====================

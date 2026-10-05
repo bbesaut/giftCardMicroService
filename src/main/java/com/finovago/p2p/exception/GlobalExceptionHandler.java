@@ -292,6 +292,18 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(EmailNotVerifiedException.class)
+    public ResponseEntity<Object> handleEmailNotVerifiedException(EmailNotVerifiedException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(Map.of(
+                    "error", "Email Not Verified",
+                    "message", ex.getMessage()
+                ));
+    }
+
     @ExceptionHandler(UserAlreadyExistsException.class)
     public ResponseEntity<Object> handleUserAlreadyExistsException(UserAlreadyExistsException ex) {
         log.warn(ex.getMessage());
@@ -366,6 +378,18 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(InvalidResetTokenException.class)
     public ResponseEntity<Object> handleInvalidResetTokenException(InvalidResetTokenException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(Map.of(
+                    "error", "Bad Request",
+                    "message", ex.getMessage()
+                ));
+    }
+
+    @ExceptionHandler(InvalidVerificationTokenException.class)
+    public ResponseEntity<Object> handleInvalidVerificationTokenException(InvalidVerificationTokenException ex) {
         log.warn(ex.getMessage());
 
         return ResponseEntity

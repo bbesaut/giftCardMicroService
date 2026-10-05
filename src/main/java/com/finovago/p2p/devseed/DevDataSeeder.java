@@ -71,7 +71,9 @@ class DevDataSeeder {
     }
 
     void seed() {
-        userRepository.save(new User(SeedCatalog.ADMIN_EMAIL, passwordEncoder.encode(SeedCatalog.ADMIN_PASSWORD), Role.ADMIN, null));
+        User admin = new User(SeedCatalog.ADMIN_EMAIL, passwordEncoder.encode(SeedCatalog.ADMIN_PASSWORD), Role.ADMIN, null);
+        admin.markEmailVerified();
+        userRepository.save(admin);
 
         // One BCrypt hash shared by every account using the default password - hashing is deliberately slow.
         String defaultPasswordHash = passwordEncoder.encode(SeedCatalog.DEFAULT_PASSWORD);
@@ -96,10 +98,13 @@ class DevDataSeeder {
         String ownerPasswordHash = SeedCatalog.DEFAULT_PASSWORD.equals(spec.ownerPassword())
                 ? defaultPasswordHash
                 : passwordEncoder.encode(spec.ownerPassword());
-        users.add(userRepository.save(new User(spec.ownerEmail(), ownerPasswordHash, Role.MERCHANT, merchant, true)));
+        User owner = new User(spec.ownerEmail(), ownerPasswordHash, Role.MERCHANT, merchant, true);
+        owner.markEmailVerified();
+        users.add(userRepository.save(owner));
 
         for (Employee employee : spec.employees()) {
             User user = new User(employee.email(), defaultPasswordHash, Role.MERCHANT, merchant);
+            user.markEmailVerified();
             user.setActive(employee.active());
             users.add(userRepository.save(user));
         }

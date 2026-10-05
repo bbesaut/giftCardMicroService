@@ -35,6 +35,7 @@ import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.MerchantUserResponse;
 import com.finovago.p2p.dto.RegisterRequest;
 import com.finovago.p2p.dto.UserStatusResponse;
+import com.finovago.p2p.exception.EmailNotVerifiedException;
 import com.finovago.p2p.exception.InactiveAccountException;
 import com.finovago.p2p.exception.InvalidRefreshTokenException;
 import com.finovago.p2p.exception.OwnerPrivilegeRequiredException;
@@ -52,6 +53,7 @@ import com.finovago.p2p.security.JwtService;
 import com.finovago.p2p.service.ApiKeyService;
 import com.finovago.p2p.service.AuthService;
 import com.finovago.p2p.service.AuthTokens;
+import com.finovago.p2p.service.EmailVerificationService;
 import com.finovago.p2p.service.RefreshTokenService;
 
 @ExtendWith(MockitoExtension.class)
@@ -75,6 +77,9 @@ class AuthServiceUnitTest {
     @Mock
     private ApiKeyService apiKeyService;
 
+    @Mock
+    private EmailVerificationService emailVerificationService;
+
     @InjectMocks
     private AuthService authService;
 
@@ -85,6 +90,7 @@ class AuthServiceUnitTest {
     @Test
     void should_returnBothTokens_when_loginSucceeds() {
         User user = new User("client@example.com", "hashed", Role.MERCHANT, merchant());
+        user.markEmailVerified();
         LoginRequest request = new LoginRequest("client@example.com", "password123");
 
         when(userRepository.findByEmail("client@example.com")).thenReturn(Optional.of(user));
@@ -96,6 +102,18 @@ class AuthServiceUnitTest {
 
         assertEquals("access-token", tokens.accessToken());
         assertEquals("refresh-token", tokens.refreshToken());
+    }
+
+    @Test
+    void should_throwEmailNotVerifiedAndIssueNoTokens_when_passwordIsCorrectButEmailUnverified() {
+        User user = new User("client@example.com", "hashed", Role.MERCHANT, merchant());
+        LoginRequest request = new LoginRequest("client@example.com", "password123");
+
+        when(userRepository.findByEmail("client@example.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password123", "hashed")).thenReturn(true);
+
+        assertThrows(EmailNotVerifiedException.class, () -> authService.login(request));
+        verifyNoInteractions(jwtService, refreshTokenService);
     }
 
     @Test
@@ -175,22 +193,21 @@ class AuthServiceUnitTest {
     }
 
     @Test
-    void should_returnOwnerBothTokens_when_registrationSucceeds() {
+    void should_createUnverifiedOwnerAndSendVerification_when_registrationSucceeds() {
         RegisterRequest request = new RegisterRequest("newuser@example.com", "password123", "Acme Corp");
 
         when(userRepository.findByEmail("newuser@example.com")).thenReturn(Optional.empty());
         when(merchantRepository.save(any(Merchant.class))).thenReturn(merchant());
         when(passwordEncoder.encode(any())).thenReturn("hashed");
-        when(jwtService.generateToken(eq("newuser@example.com"), anyList(), any(), any())).thenReturn("access-token");
-        when(refreshTokenService.createRefreshToken(any(User.class))).thenReturn("refresh-token");
 
-        AuthTokens tokens = authService.register(request);
+        authService.register(request);
 
-        assertEquals("access-token", tokens.accessToken());
-        assertEquals("refresh-token", tokens.refreshToken());
         verify(merchantRepository).save(any(Merchant.class));
-        verify(userRepository).save(argThat(saved -> saved.getEmail().equals("newuser@example.com") && saved.isOwner()));
+        verify(userRepository).save(argThat(saved -> saved.getEmail().equals("newuser@example.com")
+                && saved.isOwner() && !saved.isEmailVerified()));
         verify(userRepository, org.mockito.Mockito.times(1)).save(any(User.class));
+        verify(emailVerificationService).sendVerification(argThat(saved -> saved.getEmail().equals("newuser@example.com")));
+        verifyNoInteractions(jwtService, refreshTokenService);
     }
 
     @Test
@@ -286,6 +303,7 @@ class AuthServiceUnitTest {
         authService.addUserToOwnMerchant(1L, request);
 
         verify(userRepository).save(argThat(saved -> saved.getMerchant() == merchant && !saved.isOwner()));
+        verify(emailVerificationService).sendVerification(argThat(saved -> saved.getEmail().equals("employee@example.com")));
         verifyNoInteractions(jwtService, refreshTokenService);
     }
 
