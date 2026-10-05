@@ -292,6 +292,18 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(EmailNotVerifiedException.class)
+    public ResponseEntity<Object> handleEmailNotVerifiedException(EmailNotVerifiedException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(Map.of(
+                    "error", "Email Not Verified",
+                    "message", ex.getMessage()
+                ));
+    }
+
     @ExceptionHandler(UserAlreadyExistsException.class)
     public ResponseEntity<Object> handleUserAlreadyExistsException(UserAlreadyExistsException ex) {
         log.warn(ex.getMessage());

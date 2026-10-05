@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.finovago.p2p.dto.AddMerchantUserRequest;
 import com.finovago.p2p.dto.ApiKeyInfoResponse;
@@ -16,6 +17,7 @@ import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.MerchantUserResponse;
 import com.finovago.p2p.dto.RegisterRequest;
 import com.finovago.p2p.dto.UserStatusResponse;
+import com.finovago.p2p.exception.EmailNotVerifiedException;
 import com.finovago.p2p.exception.InactiveAccountException;
 import com.finovago.p2p.exception.InvalidRefreshTokenException;
 import com.finovago.p2p.exception.OwnerPrivilegeRequiredException;
@@ -43,6 +45,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
     private final ApiKeyService apiKeyService;
+    private final EmailVerificationService emailVerificationService;
 
     public AuthService(
             UserRepository userRepository,
@@ -50,13 +53,15 @@ public class AuthService {
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
             RefreshTokenService refreshTokenService,
-            ApiKeyService apiKeyService) {
+            ApiKeyService apiKeyService,
+            EmailVerificationService emailVerificationService) {
         this.userRepository = userRepository;
         this.merchantRepository = merchantRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.refreshTokenService = refreshTokenService;
         this.apiKeyService = apiKeyService;
+        this.emailVerificationService = emailVerificationService;
     }
 
     public AuthTokens login(LoginRequest request) {
@@ -83,6 +88,13 @@ public class AuthService {
         if (user.getMerchant() != null && !user.getMerchant().isActive()) {
             log.warn("Login failed - merchant deactivated for user: {}", user.getEmail());
             throw new BadCredentialsException("Invalid credentials");
+        }
+
+        // Checked after the password on purpose: the password is already proven at this point, so
+        // revealing "not verified" leaks nothing a guesser doesn't already know.
+        if (!user.isEmailVerified()) {
+            log.warn("Login failed - email not verified for user: {}", user.getEmail());
+            throw new EmailNotVerifiedException("Email address not verified. Check your inbox for the verification link.");
         }
 
         AuthTokens tokens = issueTokens(user);
@@ -156,6 +168,7 @@ public class AuthService {
         return apiKeyService.getStatus(caller.getMerchant());
     }
 
+    @Transactional
     public void addUserToOwnMerchant(Long callerId, AddMerchantUserRequest request) {
         User caller = requireOwner(callerId);
 
@@ -166,6 +179,7 @@ public class AuthService {
 
         User user = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, caller.getMerchant());
         userRepository.save(user);
+        emailVerificationService.sendVerification(user);
         log.info("Employee self-added by owner {} to merchantId: {}", caller.getEmail(), caller.getMerchant().getId());
     }
 
