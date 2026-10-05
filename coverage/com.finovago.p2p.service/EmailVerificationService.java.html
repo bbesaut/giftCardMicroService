@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EmailVerificationService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">p2p</a> &gt; <a href="index.source.html" class="el_package">com.finovago.p2p.service</a> &gt; <span class="el_source">EmailVerificationService.java</span></div><h1>EmailVerificationService.java</h1><pre class="source lang-java linenums">package com.finovago.p2p.service;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.finovago.p2p.exception.InvalidVerificationTokenException;
+import com.finovago.p2p.model.EmailVerificationToken;
+import com.finovago.p2p.model.User;
+import com.finovago.p2p.repository.EmailVerificationTokenRepository;
+import com.finovago.p2p.repository.UserRepository;
+
+import lombok.extern.slf4j.Slf4j;
+
+<span class="fc" id="L24">@Slf4j</span>
+@Service
+public class EmailVerificationService {
+
+    private final UserRepository userRepository;
+    private final EmailVerificationTokenRepository emailVerificationTokenRepository;
+    private final EmailSender emailSender;
+    private final long expirationMinutes;
+
+    public EmailVerificationService(
+            UserRepository userRepository,
+            EmailVerificationTokenRepository emailVerificationTokenRepository,
+            EmailSender emailSender,
+<span class="fc" id="L37">            @Value(&quot;${app.email-verification.expiration-minutes}&quot;) long expirationMinutes) {</span>
+<span class="fc" id="L38">        this.userRepository = userRepository;</span>
+<span class="fc" id="L39">        this.emailVerificationTokenRepository = emailVerificationTokenRepository;</span>
+<span class="fc" id="L40">        this.emailSender = emailSender;</span>
+<span class="fc" id="L41">        this.expirationMinutes = expirationMinutes;</span>
+<span class="fc" id="L42">    }</span>
+
+    /**
+     * Issues a fresh verification token and emails it. Any token still outstanding for this user is
+     * invalidated first, so at most one valid token exists per user at a time.
+     */
+    @Transactional
+    public void sendVerification(User user) {
+<span class="fc" id="L50">        invalidateOutstandingTokens(user);</span>
+
+<span class="fc" id="L52">        String rawToken = UUID.randomUUID().toString();</span>
+<span class="fc" id="L53">        Instant expiryDate = Instant.now().plusSeconds(expirationMinutes * 60);</span>
+<span class="fc" id="L54">        emailVerificationTokenRepository.save(new EmailVerificationToken(hash(rawToken), user, expiryDate));</span>
+
+<span class="fc" id="L56">        emailSender.send(</span>
+<span class="fc" id="L57">                user.getEmail(),</span>
+                &quot;Verify your email address&quot;,
+                &quot;Welcome! Please verify your email address with this token.\n\n&quot;
+                        + &quot;Verification token: &quot; + rawToken + &quot;\n\n&quot;
+                        + &quot;This token expires in &quot; + expirationMinutes + &quot; minutes.&quot;);
+
+<span class="fc" id="L63">        log.info(&quot;Email verification token issued for user: {}&quot;, user.getEmail());</span>
+<span class="fc" id="L64">    }</span>
+
+    /**
+     * Resends a verification email. Completes silently for unknown or already-verified emails, so the
+     * unauthenticated caller cannot use it to learn which accounts exist.
+     */
+    @Transactional
+    public void resendVerification(String email) {
+<span class="fc" id="L72">        Optional&lt;User&gt; userOpt = userRepository.findByEmail(email);</span>
+<span class="fc bfc" id="L73" title="All 4 branches covered.">        if (userOpt.isEmpty() || userOpt.get().isEmailVerified()) {</span>
+<span class="fc" id="L74">            log.debug(&quot;Verification resend requested for unknown or already verified email - no-op&quot;);</span>
+<span class="fc" id="L75">            return;</span>
+        }
+
+<span class="fc" id="L78">        sendVerification(userOpt.get());</span>
+<span class="fc" id="L79">    }</span>
+
+    @Transactional
+    public void verifyEmail(String rawToken) {
+<span class="fc" id="L83">        EmailVerificationToken verificationToken = emailVerificationTokenRepository.findByTokenHash(hash(rawToken))</span>
+<span class="fc" id="L84">                .orElseThrow(() -&gt; new InvalidVerificationTokenException(&quot;Invalid or expired verification token&quot;));</span>
+
+<span class="fc bfc" id="L86" title="All 4 branches covered.">        if (verificationToken.isUsed() || verificationToken.isExpired()) {</span>
+<span class="fc" id="L87">            log.warn(&quot;Email verification failed - token already used or expired for user: {}&quot;,</span>
+<span class="fc" id="L88">                    verificationToken.getUser().getEmail());</span>
+<span class="fc" id="L89">            throw new InvalidVerificationTokenException(&quot;Invalid or expired verification token&quot;);</span>
+        }
+
+<span class="fc" id="L92">        User user = verificationToken.getUser();</span>
+<span class="fc" id="L93">        user.markEmailVerified();</span>
+<span class="fc" id="L94">        userRepository.save(user);</span>
+
+<span class="fc" id="L96">        verificationToken.markUsed();</span>
+<span class="fc" id="L97">        emailVerificationTokenRepository.save(verificationToken);</span>
+
+<span class="fc" id="L99">        log.info(&quot;Email verified for user: {}&quot;, user.getEmail());</span>
+<span class="fc" id="L100">    }</span>
+
+    @Transactional
+    public int deleteExpired(Instant cutoff) {
+<span class="fc" id="L104">        List&lt;EmailVerificationToken&gt; expired = emailVerificationTokenRepository.findByExpiryDateBefore(cutoff);</span>
+<span class="fc" id="L105">        emailVerificationTokenRepository.deleteAll(expired);</span>
+<span class="fc" id="L106">        return expired.size();</span>
+    }
+
+    private void invalidateOutstandingTokens(User user) {
+<span class="fc" id="L110">        List&lt;EmailVerificationToken&gt; outstanding = emailVerificationTokenRepository.findByUserAndUsedFalse(user);</span>
+<span class="fc" id="L111">        outstanding.forEach(EmailVerificationToken::markUsed);</span>
+<span class="fc" id="L112">        emailVerificationTokenRepository.saveAll(outstanding);</span>
+<span class="fc" id="L113">    }</span>
+
+    private String hash(String rawToken) {
+        try {
+<span class="fc" id="L117">            MessageDigest digest = MessageDigest.getInstance(&quot;SHA-256&quot;);</span>
+<span class="fc" id="L118">            byte[] hashBytes = digest.digest(rawToken.getBytes(StandardCharsets.UTF_8));</span>
+<span class="fc" id="L119">            return HexFormat.of().formatHex(hashBytes);</span>
+<span class="nc" id="L120">        } catch (NoSuchAlgorithmException e) {</span>
+<span class="nc" id="L121">            throw new IllegalStateException(&quot;SHA-256 algorithm not available&quot;, e);</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

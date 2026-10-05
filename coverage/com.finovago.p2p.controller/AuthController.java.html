@@ -99,16 +99,13 @@ public class AuthController {
     @Operation(
         summary = &quot;Merchant registration&quot;,
         description = &quot;Public self-service signup: creates a new Merchant along with its human owner account (the submitted &quot;
-                    + &quot;email/password, which is the owner's login). The owner is logged in straight away: the access &quot;
-                    + &quot;token is returned in the body and the refresh token is set as the HttpOnly refresh_token cookie. &quot;
+                    + &quot;email/password, which is the owner's login). No session is issued: a verification email is sent &quot;
+                    + &quot;to the owner, and login is refused until the address is verified (see POST /api/v1/auth/email-verification/confirm). &quot;
                     + &quot;No automated/integration account is created here - the owner requests an API key explicitly later &quot;
                     + &quot;via POST /me/api-key. Unauthenticated, rate-limited per client IP.&quot;
     )
     @ApiResponses({
-        @ApiResponse(responseCode = &quot;201&quot;, description = &quot;Merchant and owner created, owner logged in&quot;,
-            headers = @Header(name = &quot;Set-Cookie&quot;, description = REFRESH_COOKIE_HEADER_DESCRIPTION,
-                schema = @Schema(type = &quot;string&quot;)),
-            content = @Content(schema = @Schema(implementation = AuthResponse.class))),
+        @ApiResponse(responseCode = &quot;201&quot;, description = &quot;Merchant and owner created, verification email sent (no session)&quot;),
         @ApiResponse(responseCode = &quot;400&quot;, description = &quot;Invalid request body (missing or invalid fields)&quot;,
             content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Bad Request\&quot;,\&quot;message\&quot;:\&quot;Email should be valid\&quot;}&quot;))),
         @ApiResponse(responseCode = &quot;409&quot;, description = &quot;Email already registered&quot;,
@@ -119,16 +116,16 @@ public class AuthController {
             content = @Content(mediaType = &quot;application/json&quot;, schema = @Schema(type = &quot;object&quot;, example = &quot;{\&quot;error\&quot;:\&quot;Internal Server Error\&quot;,\&quot;message\&quot;:\&quot;Database error occurred\&quot;}&quot;)))
     })
     @PostMapping(&quot;/register&quot;)
-    public ResponseEntity&lt;AuthResponse&gt; register(@Valid @RequestBody RegisterRequest request) {
-<span class="fc" id="L123">        log.info(&quot;Registration attempt for email: {}&quot;, sanitizeEmail(request.email()));</span>
+    public ResponseEntity&lt;Void&gt; register(@Valid @RequestBody RegisterRequest request) {
+<span class="fc" id="L120">        log.info(&quot;Registration attempt for email: {}&quot;, sanitizeEmail(request.email()));</span>
 
         try {
-<span class="fc" id="L126">            AuthTokens tokens = authService.register(request);</span>
-<span class="fc" id="L127">            log.info(&quot;Registration successful for email: {}&quot;, sanitizeEmail(request.email()));</span>
-<span class="fc" id="L128">            return sessionResponse(HttpStatus.CREATED, tokens);</span>
-<span class="fc" id="L129">        } catch (UserAlreadyExistsException e) {</span>
-<span class="fc" id="L130">            log.warn(&quot;Registration failed - email already exists: {}&quot;, sanitizeEmail(request.email()));</span>
-<span class="fc" id="L131">            throw e;</span>
+<span class="fc" id="L123">            authService.register(request);</span>
+<span class="fc" id="L124">            log.info(&quot;Registration successful for email: {}&quot;, sanitizeEmail(request.email()));</span>
+<span class="fc" id="L125">            return ResponseEntity.status(HttpStatus.CREATED).build();</span>
+<span class="fc" id="L126">        } catch (UserAlreadyExistsException e) {</span>
+<span class="fc" id="L127">            log.warn(&quot;Registration failed - email already exists: {}&quot;, sanitizeEmail(request.email()));</span>
+<span class="fc" id="L128">            throw e;</span>
         }
     }
 
@@ -154,7 +151,7 @@ public class AuthController {
     })
     @GetMapping(&quot;/me&quot;)
     public ResponseEntity&lt;CurrentUserResponse&gt; getCurrentUser() {
-<span class="fc" id="L157">        return ResponseEntity.ok(authService.getCurrentUser(currentUserContext.currentUserIdOrNull()));</span>
+<span class="fc" id="L154">        return ResponseEntity.ok(authService.getCurrentUser(currentUserContext.currentUserIdOrNull()));</span>
     }
 
     @Operation(
@@ -176,9 +173,9 @@ public class AuthController {
     })
     @PostMapping(&quot;/me/api-key&quot;)
     public ResponseEntity&lt;ApiKeyResponse&gt; generateApiKey() {
-<span class="fc" id="L179">        ApiKeyResponse response = authService.generateApiKey(currentUserContext.currentUserIdOrNull());</span>
-<span class="fc" id="L180">        log.info(&quot;API key generated/rotated via self-service&quot;);</span>
-<span class="fc" id="L181">        return ResponseEntity.ok(response);</span>
+<span class="fc" id="L176">        ApiKeyResponse response = authService.generateApiKey(currentUserContext.currentUserIdOrNull());</span>
+<span class="fc" id="L177">        log.info(&quot;API key generated/rotated via self-service&quot;);</span>
+<span class="fc" id="L178">        return ResponseEntity.ok(response);</span>
     }
 
     @Operation(
@@ -200,7 +197,7 @@ public class AuthController {
     })
     @GetMapping(&quot;/me/api-key&quot;)
     public ResponseEntity&lt;ApiKeyInfoResponse&gt; getApiKeyStatus() {
-<span class="fc" id="L203">        return ResponseEntity.ok(authService.getApiKeyStatus(currentUserContext.currentUserIdOrNull()));</span>
+<span class="fc" id="L200">        return ResponseEntity.ok(authService.getApiKeyStatus(currentUserContext.currentUserIdOrNull()));</span>
     }
 
     @Operation(
@@ -218,9 +215,9 @@ public class AuthController {
     })
     @PostMapping(&quot;/me/api-key/revoke&quot;)
     public ResponseEntity&lt;ApiKeyStatusResponse&gt; revokeApiKey() {
-<span class="fc" id="L221">        ApiKeyStatusResponse response = authService.revokeApiKey(currentUserContext.currentUserIdOrNull());</span>
-<span class="fc" id="L222">        log.info(&quot;API key revoked via self-service&quot;);</span>
-<span class="fc" id="L223">        return ResponseEntity.ok(response);</span>
+<span class="fc" id="L218">        ApiKeyStatusResponse response = authService.revokeApiKey(currentUserContext.currentUserIdOrNull());</span>
+<span class="fc" id="L219">        log.info(&quot;API key revoked via self-service&quot;);</span>
+<span class="fc" id="L220">        return ResponseEntity.ok(response);</span>
     }
 
     @Operation(
@@ -246,15 +243,15 @@ public class AuthController {
     })
     @PostMapping(&quot;/me/users&quot;)
     public ResponseEntity&lt;Void&gt; addUserToOwnMerchant(@Valid @RequestBody AddMerchantUserRequest request) {
-<span class="fc" id="L249">        log.info(&quot;Self-service add-user attempt for email: {}&quot;, sanitizeEmail(request.email()));</span>
+<span class="fc" id="L246">        log.info(&quot;Self-service add-user attempt for email: {}&quot;, sanitizeEmail(request.email()));</span>
 
         try {
-<span class="fc" id="L252">            authService.addUserToOwnMerchant(currentUserContext.currentUserIdOrNull(), request);</span>
-<span class="fc" id="L253">            log.info(&quot;Self-service user added successfully: {}&quot;, sanitizeEmail(request.email()));</span>
-<span class="fc" id="L254">            return ResponseEntity.status(HttpStatus.CREATED).build();</span>
-<span class="fc" id="L255">        } catch (UserAlreadyExistsException | OwnerPrivilegeRequiredException e) {</span>
-<span class="fc" id="L256">            log.warn(&quot;Self-service add-user failed: {}&quot;, e.getMessage());</span>
-<span class="fc" id="L257">            throw e;</span>
+<span class="fc" id="L249">            authService.addUserToOwnMerchant(currentUserContext.currentUserIdOrNull(), request);</span>
+<span class="fc" id="L250">            log.info(&quot;Self-service user added successfully: {}&quot;, sanitizeEmail(request.email()));</span>
+<span class="fc" id="L251">            return ResponseEntity.status(HttpStatus.CREATED).build();</span>
+<span class="fc" id="L252">        } catch (UserAlreadyExistsException | OwnerPrivilegeRequiredException e) {</span>
+<span class="fc" id="L253">            log.warn(&quot;Self-service add-user failed: {}&quot;, e.getMessage());</span>
+<span class="fc" id="L254">            throw e;</span>
         }
     }
 
@@ -274,9 +271,9 @@ public class AuthController {
     })
     @GetMapping(&quot;/me/users&quot;)
     public ResponseEntity&lt;List&lt;MerchantUserResponse&gt;&gt; listMyUsers() {
-<span class="fc" id="L277">        List&lt;MerchantUserResponse&gt; response = authService.listMyUsers(currentUserContext.currentUserIdOrNull());</span>
-<span class="fc" id="L278">        log.info(&quot;Listed {} users via self-service&quot;, response.size());</span>
-<span class="fc" id="L279">        return ResponseEntity.ok(response);</span>
+<span class="fc" id="L274">        List&lt;MerchantUserResponse&gt; response = authService.listMyUsers(currentUserContext.currentUserIdOrNull());</span>
+<span class="fc" id="L275">        log.info(&quot;Listed {} users via self-service&quot;, response.size());</span>
+<span class="fc" id="L276">        return ResponseEntity.ok(response);</span>
     }
 
     @Operation(
@@ -297,7 +294,7 @@ public class AuthController {
     })
     @PostMapping(&quot;/me/users/{userId}/deactivate&quot;)
     public ResponseEntity&lt;UserStatusResponse&gt; deactivateUser(@PathVariable Long userId) {
-<span class="fc" id="L300">        return setUserActive(userId, false);</span>
+<span class="fc" id="L297">        return setUserActive(userId, false);</span>
     }
 
     @Operation(
@@ -315,17 +312,17 @@ public class AuthController {
     })
     @PostMapping(&quot;/me/users/{userId}/activate&quot;)
     public ResponseEntity&lt;UserStatusResponse&gt; activateUser(@PathVariable Long userId) {
-<span class="fc" id="L318">        return setUserActive(userId, true);</span>
+<span class="fc" id="L315">        return setUserActive(userId, true);</span>
     }
 
     private ResponseEntity&lt;UserStatusResponse&gt; setUserActive(Long userId, boolean active) {
         try {
-<span class="fc" id="L323">            UserStatusResponse response = authService.setUserActive(currentUserContext.currentUserIdOrNull(), userId, active);</span>
-<span class="fc bfc" id="L324" title="All 2 branches covered.">            log.info(&quot;User {} {} via self-service&quot;, userId, active ? &quot;reactivated&quot; : &quot;deactivated&quot;);</span>
-<span class="fc" id="L325">            return ResponseEntity.ok(response);</span>
-<span class="fc" id="L326">        } catch (OwnerPrivilegeRequiredException | SelfDeactivationException | UserNotFoundException e) {</span>
-<span class="fc" id="L327">            log.warn(&quot;Self-service set-active failed for userId {}: {}&quot;, userId, e.getMessage());</span>
-<span class="fc" id="L328">            throw e;</span>
+<span class="fc" id="L320">            UserStatusResponse response = authService.setUserActive(currentUserContext.currentUserIdOrNull(), userId, active);</span>
+<span class="fc bfc" id="L321" title="All 2 branches covered.">            log.info(&quot;User {} {} via self-service&quot;, userId, active ? &quot;reactivated&quot; : &quot;deactivated&quot;);</span>
+<span class="fc" id="L322">            return ResponseEntity.ok(response);</span>
+<span class="fc" id="L323">        } catch (OwnerPrivilegeRequiredException | SelfDeactivationException | UserNotFoundException e) {</span>
+<span class="fc" id="L324">            log.warn(&quot;Self-service set-active failed for userId {}: {}&quot;, userId, e.getMessage());</span>
+<span class="fc" id="L325">            throw e;</span>
         }
     }
 
@@ -355,12 +352,12 @@ public class AuthController {
     @PostMapping(&quot;/me/password&quot;)
     public ResponseEntity&lt;Void&gt; changePassword(@Valid @RequestBody ChangePasswordRequest request) {
         try {
-<span class="fc" id="L358">            authService.changePassword(currentUserContext.currentUserIdOrNull(), request);</span>
-<span class="fc" id="L359">            log.info(&quot;Password changed via self-service&quot;);</span>
-<span class="fc" id="L360">            return ResponseEntity.noContent().build();</span>
-<span class="fc" id="L361">        } catch (BadCredentialsException | SamePasswordException | ServiceAccountNotAllowedException e) {</span>
-<span class="fc" id="L362">            log.warn(&quot;Self-service password change failed: {}&quot;, e.getMessage());</span>
-<span class="fc" id="L363">            throw e;</span>
+<span class="fc" id="L355">            authService.changePassword(currentUserContext.currentUserIdOrNull(), request);</span>
+<span class="fc" id="L356">            log.info(&quot;Password changed via self-service&quot;);</span>
+<span class="fc" id="L357">            return ResponseEntity.noContent().build();</span>
+<span class="fc" id="L358">        } catch (BadCredentialsException | SamePasswordException | ServiceAccountNotAllowedException e) {</span>
+<span class="fc" id="L359">            log.warn(&quot;Self-service password change failed: {}&quot;, e.getMessage());</span>
+<span class="fc" id="L360">            throw e;</span>
         }
     }
 
@@ -387,15 +384,15 @@ public class AuthController {
     @PostMapping(&quot;/refresh&quot;)
     public ResponseEntity&lt;AuthResponse&gt; refresh(
             @CookieValue(name = RefreshTokenCookieFactory.COOKIE_NAME, required = false) String refreshToken) {
-<span class="fc" id="L390">        log.debug(&quot;Refresh token attempt&quot;);</span>
+<span class="fc" id="L387">        log.debug(&quot;Refresh token attempt&quot;);</span>
 
         try {
-<span class="fc" id="L393">            AuthTokens tokens = authService.refresh(requireRefreshToken(refreshToken));</span>
-<span class="fc" id="L394">            log.info(&quot;Token refreshed successfully&quot;);</span>
-<span class="fc" id="L395">            return sessionResponse(HttpStatus.OK, tokens);</span>
-<span class="fc" id="L396">        } catch (Exception e) {</span>
-<span class="fc" id="L397">            log.warn(&quot;Refresh failed: {}&quot;, e.getMessage());</span>
-<span class="fc" id="L398">            throw e;</span>
+<span class="fc" id="L390">            AuthTokens tokens = authService.refresh(requireRefreshToken(refreshToken));</span>
+<span class="fc" id="L391">            log.info(&quot;Token refreshed successfully&quot;);</span>
+<span class="fc" id="L392">            return sessionResponse(HttpStatus.OK, tokens);</span>
+<span class="fc" id="L393">        } catch (Exception e) {</span>
+<span class="fc" id="L394">            log.warn(&quot;Refresh failed: {}&quot;, e.getMessage());</span>
+<span class="fc" id="L395">            throw e;</span>
         }
     }
 
@@ -422,40 +419,40 @@ public class AuthController {
     public ResponseEntity&lt;Void&gt; logout(
             @CookieValue(name = RefreshTokenCookieFactory.COOKIE_NAME, required = false) String refreshToken) {
         try {
-<span class="fc" id="L425">            authService.logout(requireRefreshToken(refreshToken));</span>
-<span class="fc" id="L426">            log.info(&quot;User logged out successfully&quot;);</span>
-<span class="fc" id="L427">            return ResponseEntity.noContent()</span>
-<span class="fc" id="L428">                    .header(HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.clear().toString())</span>
-<span class="fc" id="L429">                    .build();</span>
-<span class="fc" id="L430">        } catch (Exception e) {</span>
-<span class="fc" id="L431">            log.warn(&quot;Logout failed: {}&quot;, e.getMessage());</span>
-<span class="fc" id="L432">            throw e;</span>
+<span class="fc" id="L422">            authService.logout(requireRefreshToken(refreshToken));</span>
+<span class="fc" id="L423">            log.info(&quot;User logged out successfully&quot;);</span>
+<span class="fc" id="L424">            return ResponseEntity.noContent()</span>
+<span class="fc" id="L425">                    .header(HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.clear().toString())</span>
+<span class="fc" id="L426">                    .build();</span>
+<span class="fc" id="L427">        } catch (Exception e) {</span>
+<span class="fc" id="L428">            log.warn(&quot;Logout failed: {}&quot;, e.getMessage());</span>
+<span class="fc" id="L429">            throw e;</span>
         }
     }
 
     /** Access token in the JSON body; refresh token only in the HttpOnly refresh_token cookie. */
     private ResponseEntity&lt;AuthResponse&gt; sessionResponse(HttpStatus status, AuthTokens tokens) {
-<span class="fc" id="L438">        return ResponseEntity.status(status)</span>
-<span class="fc" id="L439">                .header(HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.create(tokens.refreshToken()).toString())</span>
-<span class="fc" id="L440">                .body(new AuthResponse(tokens.accessToken()));</span>
+<span class="fc" id="L435">        return ResponseEntity.status(status)</span>
+<span class="fc" id="L436">                .header(HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.create(tokens.refreshToken()).toString())</span>
+<span class="fc" id="L437">                .body(new AuthResponse(tokens.accessToken()));</span>
     }
 
     private String requireRefreshToken(String refreshToken) {
-<span class="fc bfc" id="L444" title="All 4 branches covered.">        if (refreshToken == null || refreshToken.isBlank()) {</span>
-<span class="fc" id="L445">            throw new MissingRefreshTokenException(&quot;Refresh token cookie is missing&quot;);</span>
+<span class="fc bfc" id="L441" title="All 4 branches covered.">        if (refreshToken == null || refreshToken.isBlank()) {</span>
+<span class="fc" id="L442">            throw new MissingRefreshTokenException(&quot;Refresh token cookie is missing&quot;);</span>
         }
-<span class="fc" id="L447">        return refreshToken;</span>
+<span class="fc" id="L444">        return refreshToken;</span>
     }
 
     private String sanitizeEmail(String email) {
-<span class="pc bpc" id="L451" title="2 of 4 branches missed.">        if (email == null || email.length() &lt; 3) {</span>
-<span class="nc" id="L452">            return &quot;***&quot;;</span>
+<span class="pc bpc" id="L448" title="2 of 4 branches missed.">        if (email == null || email.length() &lt; 3) {</span>
+<span class="nc" id="L449">            return &quot;***&quot;;</span>
         }
-<span class="fc" id="L454">        int atIndex = email.indexOf('@');</span>
-<span class="pc bpc" id="L455" title="1 of 2 branches missed.">        if (atIndex &lt;= 1) {</span>
-<span class="nc" id="L456">            return email.substring(0, 1) + &quot;***&quot;;</span>
+<span class="fc" id="L451">        int atIndex = email.indexOf('@');</span>
+<span class="pc bpc" id="L452" title="1 of 2 branches missed.">        if (atIndex &lt;= 1) {</span>
+<span class="nc" id="L453">            return email.substring(0, 1) + &quot;***&quot;;</span>
         }
-<span class="fc" id="L458">        return email.substring(0, 1) + &quot;***&quot; + email.substring(atIndex);</span>
+<span class="fc" id="L455">        return email.substring(0, 1) + &quot;***&quot; + email.substring(atIndex);</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

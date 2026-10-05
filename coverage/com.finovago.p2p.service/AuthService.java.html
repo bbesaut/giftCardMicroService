@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.finovago.p2p.dto.AddMerchantUserRequest;
 import com.finovago.p2p.dto.ApiKeyInfoResponse;
@@ -16,6 +17,7 @@ import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.MerchantUserResponse;
 import com.finovago.p2p.dto.RegisterRequest;
 import com.finovago.p2p.dto.UserStatusResponse;
+import com.finovago.p2p.exception.EmailNotVerifiedException;
 import com.finovago.p2p.exception.InactiveAccountException;
 import com.finovago.p2p.exception.InvalidRefreshTokenException;
 import com.finovago.p2p.exception.OwnerPrivilegeRequiredException;
@@ -33,7 +35,7 @@ import com.finovago.p2p.security.JwtService;
 
 import lombok.extern.slf4j.Slf4j;
 
-<span class="fc" id="L36">@Slf4j</span>
+<span class="fc" id="L38">@Slf4j</span>
 @Service
 public class AuthService {
 
@@ -43,6 +45,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
     private final ApiKeyService apiKeyService;
+    private final EmailVerificationService emailVerificationService;
 
     public AuthService(
             UserRepository userRepository,
@@ -50,155 +53,170 @@ public class AuthService {
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
             RefreshTokenService refreshTokenService,
-<span class="fc" id="L53">            ApiKeyService apiKeyService) {</span>
-<span class="fc" id="L54">        this.userRepository = userRepository;</span>
-<span class="fc" id="L55">        this.merchantRepository = merchantRepository;</span>
-<span class="fc" id="L56">        this.passwordEncoder = passwordEncoder;</span>
-<span class="fc" id="L57">        this.jwtService = jwtService;</span>
-<span class="fc" id="L58">        this.refreshTokenService = refreshTokenService;</span>
-<span class="fc" id="L59">        this.apiKeyService = apiKeyService;</span>
-<span class="fc" id="L60">    }</span>
+            ApiKeyService apiKeyService,
+<span class="fc" id="L57">            EmailVerificationService emailVerificationService) {</span>
+<span class="fc" id="L58">        this.userRepository = userRepository;</span>
+<span class="fc" id="L59">        this.merchantRepository = merchantRepository;</span>
+<span class="fc" id="L60">        this.passwordEncoder = passwordEncoder;</span>
+<span class="fc" id="L61">        this.jwtService = jwtService;</span>
+<span class="fc" id="L62">        this.refreshTokenService = refreshTokenService;</span>
+<span class="fc" id="L63">        this.apiKeyService = apiKeyService;</span>
+<span class="fc" id="L64">        this.emailVerificationService = emailVerificationService;</span>
+<span class="fc" id="L65">    }</span>
 
     public AuthTokens login(LoginRequest request) {
-<span class="fc" id="L63">        User user = userRepository.findByEmail(request.email())</span>
-<span class="fc" id="L64">                .orElseThrow(() -&gt; {</span>
-<span class="fc" id="L65">                    log.warn(&quot;Login failed - user not found for email&quot;);</span>
-<span class="fc" id="L66">                    return new BadCredentialsException(&quot;Invalid credentials&quot;);</span>
+<span class="fc" id="L68">        User user = userRepository.findByEmail(request.email())</span>
+<span class="fc" id="L69">                .orElseThrow(() -&gt; {</span>
+<span class="fc" id="L70">                    log.warn(&quot;Login failed - user not found for email&quot;);</span>
+<span class="fc" id="L71">                    return new BadCredentialsException(&quot;Invalid credentials&quot;);</span>
                 });
 
-<span class="fc" id="L69">        long start = System.nanoTime();</span>
-<span class="fc" id="L70">        boolean matches = passwordEncoder.matches(request.password(), user.getPassword());</span>
-<span class="fc" id="L71">        log.debug(&quot;BCrypt matches took {} ms&quot;, (System.nanoTime() - start) / 1_000_000);</span>
+<span class="fc" id="L74">        long start = System.nanoTime();</span>
+<span class="fc" id="L75">        boolean matches = passwordEncoder.matches(request.password(), user.getPassword());</span>
+<span class="fc" id="L76">        log.debug(&quot;BCrypt matches took {} ms&quot;, (System.nanoTime() - start) / 1_000_000);</span>
 
-<span class="fc bfc" id="L73" title="All 2 branches covered.">        if (!matches) {</span>
-<span class="fc" id="L74">            log.warn(&quot;Login failed - invalid password for user: {}&quot;, user.getEmail());</span>
-<span class="fc" id="L75">            throw new BadCredentialsException(&quot;Invalid credentials&quot;);</span>
-        }
-
-<span class="fc bfc" id="L78" title="All 2 branches covered.">        if (!user.isActive()) {</span>
-<span class="fc" id="L79">            log.warn(&quot;Login failed - account deactivated for user: {}&quot;, user.getEmail());</span>
+<span class="fc bfc" id="L78" title="All 2 branches covered.">        if (!matches) {</span>
+<span class="fc" id="L79">            log.warn(&quot;Login failed - invalid password for user: {}&quot;, user.getEmail());</span>
 <span class="fc" id="L80">            throw new BadCredentialsException(&quot;Invalid credentials&quot;);</span>
         }
 
-<span class="fc bfc" id="L83" title="All 4 branches covered.">        if (user.getMerchant() != null &amp;&amp; !user.getMerchant().isActive()) {</span>
-<span class="fc" id="L84">            log.warn(&quot;Login failed - merchant deactivated for user: {}&quot;, user.getEmail());</span>
+<span class="fc bfc" id="L83" title="All 2 branches covered.">        if (!user.isActive()) {</span>
+<span class="fc" id="L84">            log.warn(&quot;Login failed - account deactivated for user: {}&quot;, user.getEmail());</span>
 <span class="fc" id="L85">            throw new BadCredentialsException(&quot;Invalid credentials&quot;);</span>
         }
 
-<span class="fc" id="L88">        AuthTokens tokens = issueTokens(user);</span>
-<span class="fc" id="L89">        log.info(&quot;Tokens issued for user: {} (role: {})&quot;, user.getEmail(), user.getRole());</span>
-<span class="fc" id="L90">        return tokens;</span>
+<span class="fc bfc" id="L88" title="All 4 branches covered.">        if (user.getMerchant() != null &amp;&amp; !user.getMerchant().isActive()) {</span>
+<span class="fc" id="L89">            log.warn(&quot;Login failed - merchant deactivated for user: {}&quot;, user.getEmail());</span>
+<span class="fc" id="L90">            throw new BadCredentialsException(&quot;Invalid credentials&quot;);</span>
+        }
+
+        // Checked after the password on purpose: the password is already proven at this point, so
+        // revealing &quot;not verified&quot; leaks nothing a guesser doesn't already know.
+<span class="fc bfc" id="L95" title="All 2 branches covered.">        if (!user.isEmailVerified()) {</span>
+<span class="fc" id="L96">            log.warn(&quot;Login failed - email not verified for user: {}&quot;, user.getEmail());</span>
+<span class="fc" id="L97">            throw new EmailNotVerifiedException(&quot;Email address not verified. Check your inbox for the verification link.&quot;);</span>
+        }
+
+<span class="fc" id="L100">        AuthTokens tokens = issueTokens(user);</span>
+<span class="fc" id="L101">        log.info(&quot;Tokens issued for user: {} (role: {})&quot;, user.getEmail(), user.getRole());</span>
+<span class="fc" id="L102">        return tokens;</span>
     }
 
     public AuthTokens refresh(String refreshToken) {
         try {
-<span class="fc" id="L95">            User user = refreshTokenService.validateAndRotate(refreshToken);</span>
-<span class="pc bpc" id="L96" title="1 of 2 branches missed.">            if (!user.isActive()) {</span>
-<span class="nc" id="L97">                log.warn(&quot;Token rotation failed - account deactivated for user: {}&quot;, user.getEmail());</span>
-<span class="nc" id="L98">                throw new InvalidRefreshTokenException(&quot;Account has been deactivated&quot;);</span>
+<span class="fc" id="L107">            User user = refreshTokenService.validateAndRotate(refreshToken);</span>
+<span class="pc bpc" id="L108" title="1 of 2 branches missed.">            if (!user.isActive()) {</span>
+<span class="nc" id="L109">                log.warn(&quot;Token rotation failed - account deactivated for user: {}&quot;, user.getEmail());</span>
+<span class="nc" id="L110">                throw new InvalidRefreshTokenException(&quot;Account has been deactivated&quot;);</span>
             }
-<span class="pc bpc" id="L100" title="1 of 4 branches missed.">            if (user.getMerchant() != null &amp;&amp; !user.getMerchant().isActive()) {</span>
-<span class="fc" id="L101">                log.warn(&quot;Token rotation failed - merchant deactivated for user: {}&quot;, user.getEmail());</span>
-<span class="fc" id="L102">                throw new InvalidRefreshTokenException(&quot;Merchant has been deactivated&quot;);</span>
+<span class="pc bpc" id="L112" title="1 of 4 branches missed.">            if (user.getMerchant() != null &amp;&amp; !user.getMerchant().isActive()) {</span>
+<span class="fc" id="L113">                log.warn(&quot;Token rotation failed - merchant deactivated for user: {}&quot;, user.getEmail());</span>
+<span class="fc" id="L114">                throw new InvalidRefreshTokenException(&quot;Merchant has been deactivated&quot;);</span>
             }
-<span class="fc" id="L104">            log.info(&quot;Token rotation successful for user: {}&quot;, user.getEmail());</span>
-<span class="fc" id="L105">            return issueTokens(user);</span>
-<span class="fc" id="L106">        } catch (InvalidRefreshTokenException e) {</span>
-<span class="fc" id="L107">            log.warn(&quot;Token rotation failed: {}&quot;, e.getMessage());</span>
-<span class="fc" id="L108">            throw e;</span>
+<span class="fc" id="L116">            log.info(&quot;Token rotation successful for user: {}&quot;, user.getEmail());</span>
+<span class="fc" id="L117">            return issueTokens(user);</span>
+<span class="fc" id="L118">        } catch (InvalidRefreshTokenException e) {</span>
+<span class="fc" id="L119">            log.warn(&quot;Token rotation failed: {}&quot;, e.getMessage());</span>
+<span class="fc" id="L120">            throw e;</span>
         }
     }
 
     public void logout(String refreshToken) {
         try {
-<span class="fc" id="L114">            refreshTokenService.revoke(refreshToken);</span>
-<span class="fc" id="L115">            log.info(&quot;Logout successful - refresh token revoked&quot;);</span>
-<span class="fc" id="L116">        } catch (InvalidRefreshTokenException e) {</span>
-<span class="fc" id="L117">            log.warn(&quot;Logout failed - refresh token not found or invalid&quot;);</span>
-<span class="fc" id="L118">            throw e;</span>
-<span class="fc" id="L119">        }</span>
-<span class="fc" id="L120">    }</span>
+<span class="fc" id="L126">            refreshTokenService.revoke(refreshToken);</span>
+<span class="fc" id="L127">            log.info(&quot;Logout successful - refresh token revoked&quot;);</span>
+<span class="fc" id="L128">        } catch (InvalidRefreshTokenException e) {</span>
+<span class="fc" id="L129">            log.warn(&quot;Logout failed - refresh token not found or invalid&quot;);</span>
+<span class="fc" id="L130">            throw e;</span>
+<span class="fc" id="L131">        }</span>
+<span class="fc" id="L132">    }</span>
 
-    public AuthTokens register(RegisterRequest request) {
-<span class="fc bfc" id="L123" title="All 2 branches covered.">        if (userRepository.findByEmail(request.email()).isPresent()) {</span>
-<span class="fc" id="L124">            log.warn(&quot;Registration failed - email already exists: {}&quot;, request.email());</span>
-<span class="fc" id="L125">            throw new UserAlreadyExistsException(&quot;Email already registered&quot;);</span>
+    /**
+     * Creates the merchant and its owner, then emails a verification token. No session is issued: the owner
+     * can only log in once the address is verified (see login and EmailVerificationService).
+     */
+    @Transactional
+    public void register(RegisterRequest request) {
+<span class="fc bfc" id="L140" title="All 2 branches covered.">        if (userRepository.findByEmail(request.email()).isPresent()) {</span>
+<span class="fc" id="L141">            log.warn(&quot;Registration failed - email already exists: {}&quot;, request.email());</span>
+<span class="fc" id="L142">            throw new UserAlreadyExistsException(&quot;Email already registered&quot;);</span>
         }
 
-<span class="fc" id="L128">        Merchant merchant = merchantRepository.save(new Merchant(request.merchantName(), request.email()));</span>
+<span class="fc" id="L145">        Merchant merchant = merchantRepository.save(new Merchant(request.merchantName(), request.email()));</span>
 
         // The submitted credentials belong to the human owner: the account that can log in,
         // manage the merchant's other users, and use owner-only endpoints like /credit. Automated
         // integration access is a separate concept entirely (API key, see ApiKeyService) - the
         // owner requests one explicitly via POST /me/api-key whenever they actually need it.
-<span class="fc" id="L134">        User owner = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, merchant, true);</span>
-<span class="fc" id="L135">        userRepository.save(owner);</span>
+<span class="fc" id="L151">        User owner = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, merchant, true);</span>
+<span class="fc" id="L152">        userRepository.save(owner);</span>
+<span class="fc" id="L153">        emailVerificationService.sendVerification(owner);</span>
 
-<span class="fc" id="L137">        log.info(&quot;Merchant registered successfully: merchantId: {}, owner: {}&quot;, merchant.getId(), owner.getEmail());</span>
-
-<span class="fc" id="L139">        return issueTokens(owner);</span>
-    }
+<span class="fc" id="L155">        log.info(&quot;Merchant registered successfully: merchantId: {}, owner: {}&quot;, merchant.getId(), owner.getEmail());</span>
+<span class="fc" id="L156">    }</span>
 
     /** Generates the merchant's first API key, or rotates it (invalidating the old one) if it already has one. */
     public ApiKeyResponse generateApiKey(Long callerId) {
-<span class="fc" id="L144">        User caller = requireOwner(callerId);</span>
-<span class="fc" id="L145">        return apiKeyService.generateOrRotate(caller.getMerchant());</span>
+<span class="fc" id="L160">        User caller = requireOwner(callerId);</span>
+<span class="fc" id="L161">        return apiKeyService.generateOrRotate(caller.getMerchant());</span>
     }
 
     public ApiKeyStatusResponse revokeApiKey(Long callerId) {
-<span class="fc" id="L149">        User caller = requireOwner(callerId);</span>
-<span class="fc" id="L150">        return apiKeyService.revoke(caller.getMerchant());</span>
+<span class="fc" id="L165">        User caller = requireOwner(callerId);</span>
+<span class="fc" id="L166">        return apiKeyService.revoke(caller.getMerchant());</span>
     }
 
     /** Read-only status of the merchant's API key, for the key-management screen. */
     public ApiKeyInfoResponse getApiKeyStatus(Long callerId) {
-<span class="fc" id="L155">        User caller = requireOwner(callerId);</span>
-<span class="fc" id="L156">        return apiKeyService.getStatus(caller.getMerchant());</span>
+<span class="fc" id="L171">        User caller = requireOwner(callerId);</span>
+<span class="fc" id="L172">        return apiKeyService.getStatus(caller.getMerchant());</span>
     }
 
+    @Transactional
     public void addUserToOwnMerchant(Long callerId, AddMerchantUserRequest request) {
-<span class="fc" id="L160">        User caller = requireOwner(callerId);</span>
+<span class="fc" id="L177">        User caller = requireOwner(callerId);</span>
 
-<span class="pc bpc" id="L162" title="1 of 2 branches missed.">        if (userRepository.findByEmail(request.email()).isPresent()) {</span>
-<span class="nc" id="L163">            log.warn(&quot;Adding merchant user failed - email already exists: {}&quot;, request.email());</span>
-<span class="nc" id="L164">            throw new UserAlreadyExistsException(&quot;Email already registered&quot;);</span>
+<span class="pc bpc" id="L179" title="1 of 2 branches missed.">        if (userRepository.findByEmail(request.email()).isPresent()) {</span>
+<span class="nc" id="L180">            log.warn(&quot;Adding merchant user failed - email already exists: {}&quot;, request.email());</span>
+<span class="nc" id="L181">            throw new UserAlreadyExistsException(&quot;Email already registered&quot;);</span>
         }
 
-<span class="fc" id="L167">        User user = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, caller.getMerchant());</span>
-<span class="fc" id="L168">        userRepository.save(user);</span>
-<span class="fc" id="L169">        log.info(&quot;Employee self-added by owner {} to merchantId: {}&quot;, caller.getEmail(), caller.getMerchant().getId());</span>
-<span class="fc" id="L170">    }</span>
+<span class="fc" id="L184">        User user = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, caller.getMerchant());</span>
+<span class="fc" id="L185">        userRepository.save(user);</span>
+<span class="fc" id="L186">        emailVerificationService.sendVerification(user);</span>
+<span class="fc" id="L187">        log.info(&quot;Employee self-added by owner {} to merchantId: {}&quot;, caller.getEmail(), caller.getMerchant().getId());</span>
+<span class="fc" id="L188">    }</span>
 
     /** Lists the human user accounts of the caller's own merchant, for the owner's team-management page. */
     public List&lt;MerchantUserResponse&gt; listMyUsers(Long callerId) {
-<span class="fc" id="L174">        User caller = requireOwner(callerId);</span>
+<span class="fc" id="L192">        User caller = requireOwner(callerId);</span>
 
-<span class="fc" id="L176">        return userRepository.findAllByMerchant_IdOrderByIdAsc(caller.getMerchant().getId()).stream()</span>
-<span class="fc" id="L177">                .map(user -&gt; new MerchantUserResponse(user.getId(), user.getEmail(), user.isOwner(), user.isActive()))</span>
-<span class="fc" id="L178">                .toList();</span>
+<span class="fc" id="L194">        return userRepository.findAllByMerchant_IdOrderByIdAsc(caller.getMerchant().getId()).stream()</span>
+<span class="fc" id="L195">                .map(user -&gt; new MerchantUserResponse(user.getId(), user.getEmail(), user.isOwner(), user.isActive()))</span>
+<span class="fc" id="L196">                .toList();</span>
     }
 
     public UserStatusResponse setUserActive(Long callerId, Long userId, boolean active) {
-<span class="fc" id="L182">        User caller = requireOwner(callerId);</span>
+<span class="fc" id="L200">        User caller = requireOwner(callerId);</span>
 
-<span class="fc bfc" id="L184" title="All 4 branches covered.">        if (!active &amp;&amp; userId.equals(caller.getId())) {</span>
-<span class="fc" id="L185">            throw new SelfDeactivationException(&quot;An owner cannot deactivate their own account&quot;);</span>
+<span class="fc bfc" id="L202" title="All 4 branches covered.">        if (!active &amp;&amp; userId.equals(caller.getId())) {</span>
+<span class="fc" id="L203">            throw new SelfDeactivationException(&quot;An owner cannot deactivate their own account&quot;);</span>
         }
 
-<span class="fc" id="L188">        User target = userRepository.findByIdAndMerchant_Id(userId, caller.getMerchant().getId())</span>
-<span class="fc" id="L189">                .orElseThrow(() -&gt; new UserNotFoundException(&quot;User not found: &quot; + userId));</span>
+<span class="fc" id="L206">        User target = userRepository.findByIdAndMerchant_Id(userId, caller.getMerchant().getId())</span>
+<span class="fc" id="L207">                .orElseThrow(() -&gt; new UserNotFoundException(&quot;User not found: &quot; + userId));</span>
 
-<span class="fc" id="L191">        target.setActive(active);</span>
-<span class="fc" id="L192">        userRepository.save(target);</span>
+<span class="fc" id="L209">        target.setActive(active);</span>
+<span class="fc" id="L210">        userRepository.save(target);</span>
 
-<span class="fc bfc" id="L194" title="All 2 branches covered.">        if (!active) {</span>
-<span class="fc" id="L195">            refreshTokenService.revokeAllForUser(target);</span>
+<span class="fc bfc" id="L212" title="All 2 branches covered.">        if (!active) {</span>
+<span class="fc" id="L213">            refreshTokenService.revokeAllForUser(target);</span>
         }
 
-<span class="fc" id="L198">        log.info(&quot;User {} (id: {}) {} by owner {}&quot;, target.getEmail(), target.getId(),</span>
-<span class="fc bfc" id="L199" title="All 2 branches covered.">                active ? &quot;reactivated&quot; : &quot;deactivated&quot;, caller.getEmail());</span>
+<span class="fc" id="L216">        log.info(&quot;User {} (id: {}) {} by owner {}&quot;, target.getEmail(), target.getId(),</span>
+<span class="fc bfc" id="L217" title="All 2 branches covered.">                active ? &quot;reactivated&quot; : &quot;deactivated&quot;, caller.getEmail());</span>
 
-<span class="fc" id="L201">        return new UserStatusResponse(target.getId(), target.getEmail(), target.isActive());</span>
+<span class="fc" id="L219">        return new UserStatusResponse(target.getId(), target.getEmail(), target.isActive());</span>
     }
 
     /**
@@ -206,62 +224,62 @@ public class AuthService {
      * deactivated after their access token was issued is rejected here instead of lingering until expiry.
      */
     public CurrentUserResponse getCurrentUser(Long callerId) {
-<span class="fc bfc" id="L209" title="All 2 branches covered.">        if (callerId == null) {</span>
-<span class="fc" id="L210">            throw new ServiceAccountNotAllowedException(&quot;Current user profile is only available to a human account, not an API key&quot;);</span>
+<span class="fc bfc" id="L227" title="All 2 branches covered.">        if (callerId == null) {</span>
+<span class="fc" id="L228">            throw new ServiceAccountNotAllowedException(&quot;Current user profile is only available to a human account, not an API key&quot;);</span>
         }
 
-<span class="fc" id="L213">        User user = userRepository.findById(callerId)</span>
-<span class="fc" id="L214">                .filter(User::isActive)</span>
-<span class="fc" id="L215">                .orElseThrow(() -&gt; new InactiveAccountException(&quot;Account no longer exists or has been deactivated&quot;));</span>
+<span class="fc" id="L231">        User user = userRepository.findById(callerId)</span>
+<span class="fc" id="L232">                .filter(User::isActive)</span>
+<span class="fc" id="L233">                .orElseThrow(() -&gt; new InactiveAccountException(&quot;Account no longer exists or has been deactivated&quot;));</span>
 
-<span class="fc" id="L217">        Merchant merchant = user.getMerchant();</span>
+<span class="fc" id="L235">        Merchant merchant = user.getMerchant();</span>
         CurrentUserResponse.MerchantSummary merchantSummary =
-<span class="fc bfc" id="L219" title="All 2 branches covered.">                merchant == null ? null : new CurrentUserResponse.MerchantSummary(merchant.getId(), merchant.getName());</span>
+<span class="fc bfc" id="L237" title="All 2 branches covered.">                merchant == null ? null : new CurrentUserResponse.MerchantSummary(merchant.getId(), merchant.getName());</span>
 
-<span class="fc" id="L221">        return new CurrentUserResponse(user.getId(), user.getEmail(), user.getRole().name(), user.isOwner(), merchantSummary);</span>
+<span class="fc" id="L239">        return new CurrentUserResponse(user.getId(), user.getEmail(), user.getRole().name(), user.isOwner(), merchantSummary);</span>
     }
 
     /** Self-service password change for any active human user (not an API key). Logs out every other session. */
     public void changePassword(Long callerId, ChangePasswordRequest request) {
-<span class="fc bfc" id="L226" title="All 2 branches covered.">        User caller = callerId == null ? null : userRepository.findById(callerId).orElse(null);</span>
-<span class="fc bfc" id="L227" title="All 2 branches covered.">        if (caller == null) {</span>
-<span class="fc" id="L228">            throw new ServiceAccountNotAllowedException(&quot;Password change must be performed by a human account, not an API key&quot;);</span>
+<span class="fc bfc" id="L244" title="All 2 branches covered.">        User caller = callerId == null ? null : userRepository.findById(callerId).orElse(null);</span>
+<span class="fc bfc" id="L245" title="All 2 branches covered.">        if (caller == null) {</span>
+<span class="fc" id="L246">            throw new ServiceAccountNotAllowedException(&quot;Password change must be performed by a human account, not an API key&quot;);</span>
         }
 
-<span class="fc bfc" id="L231" title="All 2 branches covered.">        if (!passwordEncoder.matches(request.currentPassword(), caller.getPassword())) {</span>
-<span class="fc" id="L232">            log.warn(&quot;Password change failed - invalid current password for user: {}&quot;, caller.getEmail());</span>
-<span class="fc" id="L233">            throw new BadCredentialsException(&quot;Invalid credentials&quot;);</span>
+<span class="fc bfc" id="L249" title="All 2 branches covered.">        if (!passwordEncoder.matches(request.currentPassword(), caller.getPassword())) {</span>
+<span class="fc" id="L250">            log.warn(&quot;Password change failed - invalid current password for user: {}&quot;, caller.getEmail());</span>
+<span class="fc" id="L251">            throw new BadCredentialsException(&quot;Invalid credentials&quot;);</span>
         }
 
-<span class="fc bfc" id="L236" title="All 2 branches covered.">        if (request.newPassword().equals(request.currentPassword())) {</span>
-<span class="fc" id="L237">            throw new SamePasswordException(&quot;New password must be different from the current password&quot;);</span>
+<span class="fc bfc" id="L254" title="All 2 branches covered.">        if (request.newPassword().equals(request.currentPassword())) {</span>
+<span class="fc" id="L255">            throw new SamePasswordException(&quot;New password must be different from the current password&quot;);</span>
         }
 
-<span class="fc" id="L240">        caller.setPassword(passwordEncoder.encode(request.newPassword()));</span>
-<span class="fc" id="L241">        userRepository.save(caller);</span>
-<span class="fc" id="L242">        refreshTokenService.revokeAllForUser(caller);</span>
+<span class="fc" id="L258">        caller.setPassword(passwordEncoder.encode(request.newPassword()));</span>
+<span class="fc" id="L259">        userRepository.save(caller);</span>
+<span class="fc" id="L260">        refreshTokenService.revokeAllForUser(caller);</span>
 
-<span class="fc" id="L244">        log.info(&quot;Password changed successfully for user: {}&quot;, caller.getEmail());</span>
-<span class="fc" id="L245">    }</span>
+<span class="fc" id="L262">        log.info(&quot;Password changed successfully for user: {}&quot;, caller.getEmail());</span>
+<span class="fc" id="L263">    }</span>
 
     private User requireOwner(Long callerId) {
-<span class="pc bpc" id="L248" title="1 of 2 branches missed.">        User caller = callerId == null ? null : userRepository.findById(callerId).orElse(null);</span>
-<span class="pc bpc" id="L249" title="2 of 6 branches missed.">        if (caller == null || !caller.isOwner() || !caller.isActive()) {</span>
-<span class="fc" id="L250">            throw new OwnerPrivilegeRequiredException(&quot;Only the merchant's owner account can perform this action&quot;);</span>
+<span class="pc bpc" id="L266" title="1 of 2 branches missed.">        User caller = callerId == null ? null : userRepository.findById(callerId).orElse(null);</span>
+<span class="pc bpc" id="L267" title="2 of 6 branches missed.">        if (caller == null || !caller.isOwner() || !caller.isActive()) {</span>
+<span class="fc" id="L268">            throw new OwnerPrivilegeRequiredException(&quot;Only the merchant's owner account can perform this action&quot;);</span>
         }
-<span class="fc" id="L252">        return caller;</span>
+<span class="fc" id="L270">        return caller;</span>
     }
 
     private AuthTokens issueTokens(User user) {
-<span class="fc" id="L256">        String refreshToken = refreshTokenService.createRefreshToken(user);</span>
-<span class="fc" id="L257">        log.debug(&quot;New access and refresh tokens generated for user: {}&quot;, user.getEmail());</span>
-<span class="fc" id="L258">        return new AuthTokens(generateAccessToken(user), refreshToken);</span>
+<span class="fc" id="L274">        String refreshToken = refreshTokenService.createRefreshToken(user);</span>
+<span class="fc" id="L275">        log.debug(&quot;New access and refresh tokens generated for user: {}&quot;, user.getEmail());</span>
+<span class="fc" id="L276">        return new AuthTokens(generateAccessToken(user), refreshToken);</span>
     }
 
     private String generateAccessToken(User user) {
-<span class="fc" id="L262">        List&lt;String&gt; roles = List.of(user.getRole().name());</span>
-<span class="fc bfc" id="L263" title="All 2 branches covered.">        Long merchantId = user.getMerchant() != null ? user.getMerchant().getId() : null;</span>
-<span class="fc" id="L264">        return jwtService.generateToken(user.getEmail(), roles, merchantId, user.getId());</span>
+<span class="fc" id="L280">        List&lt;String&gt; roles = List.of(user.getRole().name());</span>
+<span class="fc bfc" id="L281" title="All 2 branches covered.">        Long merchantId = user.getMerchant() != null ? user.getMerchant().getId() : null;</span>
+<span class="fc" id="L282">        return jwtService.generateToken(user.getEmail(), roles, merchantId, user.getId());</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

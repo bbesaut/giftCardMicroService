@@ -16,45 +16,46 @@ import lombok.extern.slf4j.Slf4j;
  * works fine in dev/tests times out there - the HTTP API is Brevo's documented workaround. Uses a
  * separate API key from the SMTP one (Brevo dashboard: Settings -&gt; SMTP &amp; API -&gt; API Keys).
  */
-<span class="nc" id="L19">@Slf4j</span>
+<span class="fc" id="L19">@Slf4j</span>
 @Service
 @Profile(&quot;prod&quot;)
 public class BrevoApiEmailSender implements EmailSender {
 
-    private static final String BREVO_API_URL = &quot;https://api.brevo.com/v3/smtp/email&quot;;
-
     private final RestClient restClient;
+    private final String apiUrl;
     private final String apiKey;
     private final String fromAddress;
 
     public BrevoApiEmailSender(
+            @Value(&quot;${app.brevo.api-url:https://api.brevo.com/v3/smtp/email}&quot;) String apiUrl,
             @Value(&quot;${app.brevo.api-key}&quot;) String apiKey,
-<span class="nc" id="L32">            @Value(&quot;${app.mail.from}&quot;) String fromAddress) {</span>
+<span class="fc" id="L32">            @Value(&quot;${app.mail.from}&quot;) String fromAddress) {</span>
         // Built directly rather than injecting RestClient.Builder: that bean isn't autoconfigured
         // in this Spring Boot 4.1.0 setup, and this is the only caller - no need for a shared bean.
-<span class="nc" id="L35">        this.restClient = RestClient.create();</span>
-<span class="nc" id="L36">        this.apiKey = apiKey;</span>
-<span class="nc" id="L37">        this.fromAddress = fromAddress;</span>
-<span class="nc" id="L38">    }</span>
+<span class="fc" id="L35">        this.restClient = RestClient.create();</span>
+<span class="fc" id="L36">        this.apiUrl = apiUrl;</span>
+<span class="fc" id="L37">        this.apiKey = apiKey;</span>
+<span class="fc" id="L38">        this.fromAddress = fromAddress;</span>
+<span class="fc" id="L39">    }</span>
 
     @Override
     public void send(String to, String subject, String body) {
-<span class="nc" id="L42">        Map&lt;String, Object&gt; payload = Map.of(</span>
-<span class="nc" id="L43">                &quot;sender&quot;, Map.of(&quot;email&quot;, fromAddress),</span>
-<span class="nc" id="L44">                &quot;to&quot;, List.of(Map.of(&quot;email&quot;, to)),</span>
+<span class="fc" id="L43">        Map&lt;String, Object&gt; payload = Map.of(</span>
+<span class="fc" id="L44">                &quot;sender&quot;, Map.of(&quot;email&quot;, fromAddress),</span>
+<span class="fc" id="L45">                &quot;to&quot;, List.of(Map.of(&quot;email&quot;, to)),</span>
                 &quot;subject&quot;, subject,
                 &quot;textContent&quot;, body);
 
-<span class="nc" id="L48">        restClient.post()</span>
-<span class="nc" id="L49">                .uri(BREVO_API_URL)</span>
-<span class="nc" id="L50">                .header(&quot;api-key&quot;, apiKey)</span>
-<span class="nc" id="L51">                .header(&quot;Content-Type&quot;, &quot;application/json&quot;)</span>
-<span class="nc" id="L52">                .header(&quot;Accept&quot;, &quot;application/json&quot;)</span>
-<span class="nc" id="L53">                .body(payload)</span>
-<span class="nc" id="L54">                .retrieve()</span>
-<span class="nc" id="L55">                .toBodilessEntity();</span>
+<span class="fc" id="L49">        restClient.post()</span>
+<span class="fc" id="L50">                .uri(apiUrl)</span>
+<span class="fc" id="L51">                .header(&quot;api-key&quot;, apiKey)</span>
+<span class="fc" id="L52">                .header(&quot;Content-Type&quot;, &quot;application/json&quot;)</span>
+<span class="fc" id="L53">                .header(&quot;Accept&quot;, &quot;application/json&quot;)</span>
+<span class="fc" id="L54">                .body(payload)</span>
+<span class="fc" id="L55">                .retrieve()</span>
+<span class="fc" id="L56">                .toBodilessEntity();</span>
 
-<span class="nc" id="L57">        log.debug(&quot;Email sent via Brevo API to {} with subject: {}&quot;, to, subject);</span>
-<span class="nc" id="L58">    }</span>
+<span class="fc" id="L58">        log.debug(&quot;Email sent via Brevo API to {} with subject: {}&quot;, to, subject);</span>
+<span class="fc" id="L59">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
