@@ -388,6 +388,18 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(InvalidVerificationTokenException.class)
+    public ResponseEntity<Object> handleInvalidVerificationTokenException(InvalidVerificationTokenException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(Map.of(
+                    "error", "Bad Request",
+                    "message", ex.getMessage()
+                ));
+    }
+
     @ExceptionHandler(InactiveAccountException.class)
     public ResponseEntity<Object> handleInactiveAccountException(InactiveAccountException ex) {
         log.warn(ex.getMessage());

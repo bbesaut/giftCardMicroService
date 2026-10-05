@@ -100,7 +100,7 @@ public class AuthController {
         summary = "Merchant registration",
         description = "Public self-service signup: creates a new Merchant along with its human owner account (the submitted "
                     + "email/password, which is the owner's login). No session is issued: a verification email is sent "
-                    + "to the owner, and login is refused until the address is verified (see POST /verify-email). "
+                    + "to the owner, and login is refused until the address is verified (see POST /api/v1/auth/email-verification/confirm). "
                     + "No automated/integration account is created here - the owner requests an API key explicitly later "
                     + "via POST /me/api-key. Unauthenticated, rate-limited per client IP."
     )
