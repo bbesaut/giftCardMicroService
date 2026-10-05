@@ -19,9 +19,9 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.finovago.p2p.AbstractIntegrationTest;
+import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.config.PostgresTestcontainerInitializer;
 import com.finovago.p2p.dto.ApiKeyResponse;
-import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.model.GiftCard;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.model.Role;
@@ -94,17 +94,23 @@ class AdminMerchantControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     private String loginAndGetAccessToken(String email) throws Exception {
-        return login(email).accessToken();
-    }
-
-    private AuthResponse login(String email) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + email + "\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn();
 
-        return objectMapper.readValue(result.getResponse().getContentAsString(), AuthResponse.class);
+        return objectMapper.readValue(result.getResponse().getContentAsString(), AuthResponse.class).accessToken();
+    }
+
+    private String loginAndGetRefreshToken(String email) throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + email + "\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        return refreshTokenFromCookie(result);
     }
 
     @Test
@@ -231,21 +237,19 @@ class AdminMerchantControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_deactivateMerchant_and_revokeRefreshTokensForAllItsUsers() throws Exception {
-        AuthResponse ownerAuth = login(OWNER_EMAIL);
-        AuthResponse employeeAuth = login(EMPLOYEE_EMAIL);
+        String ownerRefreshToken = loginAndGetRefreshToken(OWNER_EMAIL);
+        String employeeRefreshToken = loginAndGetRefreshToken(EMPLOYEE_EMAIL);
         String adminToken = loginAndGetAccessToken(ADMIN_EMAIL);
 
         mockMvc.perform(post("/api/v1/admin/merchants/" + merchantAId + "/deactivate").header(AUTHORIZATION, "Bearer " + adminToken))
                 .andExpect(status().isOk());
 
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"" + ownerAuth.refreshToken() + "\"}"))
+                        .cookie(refreshCookie(ownerRefreshToken)))
                 .andExpect(status().isUnauthorized());
 
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"" + employeeAuth.refreshToken() + "\"}"))
+                        .cookie(refreshCookie(employeeRefreshToken)))
                 .andExpect(status().isUnauthorized());
     }
 

@@ -10,12 +10,10 @@ import com.finovago.p2p.dto.AddMerchantUserRequest;
 import com.finovago.p2p.dto.ApiKeyInfoResponse;
 import com.finovago.p2p.dto.ApiKeyResponse;
 import com.finovago.p2p.dto.ApiKeyStatusResponse;
-import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.dto.ChangePasswordRequest;
 import com.finovago.p2p.dto.CurrentUserResponse;
 import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.MerchantUserResponse;
-import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
 import com.finovago.p2p.dto.UserStatusResponse;
 import com.finovago.p2p.exception.InactiveAccountException;
@@ -61,7 +59,7 @@ public class AuthService {
         this.apiKeyService = apiKeyService;
     }
 
-    public AuthResponse login(LoginRequest request) {
+    public AuthTokens login(LoginRequest request) {
         User user = userRepository.findByEmail(request.email())
                 .orElseThrow(() -> {
                     log.warn("Login failed - user not found for email");
@@ -87,14 +85,14 @@ public class AuthService {
             throw new BadCredentialsException("Invalid credentials");
         }
 
-        AuthResponse response = issueTokens(user);
+        AuthTokens tokens = issueTokens(user);
         log.info("Tokens issued for user: {} (role: {})", user.getEmail(), user.getRole());
-        return response;
+        return tokens;
     }
 
-    public AuthResponse refresh(RefreshTokenRequest request) {
+    public AuthTokens refresh(String refreshToken) {
         try {
-            User user = refreshTokenService.validateAndRotate(request.refreshToken());
+            User user = refreshTokenService.validateAndRotate(refreshToken);
             if (!user.isActive()) {
                 log.warn("Token rotation failed - account deactivated for user: {}", user.getEmail());
                 throw new InvalidRefreshTokenException("Account has been deactivated");
@@ -111,9 +109,9 @@ public class AuthService {
         }
     }
 
-    public void logout(RefreshTokenRequest request) {
+    public void logout(String refreshToken) {
         try {
-            refreshTokenService.revoke(request.refreshToken());
+            refreshTokenService.revoke(refreshToken);
             log.info("Logout successful - refresh token revoked");
         } catch (InvalidRefreshTokenException e) {
             log.warn("Logout failed - refresh token not found or invalid");
@@ -121,7 +119,7 @@ public class AuthService {
         }
     }
 
-    public AuthResponse register(RegisterRequest request) {
+    public AuthTokens register(RegisterRequest request) {
         if (userRepository.findByEmail(request.email()).isPresent()) {
             log.warn("Registration failed - email already exists: {}", request.email());
             throw new UserAlreadyExistsException("Email already registered");
@@ -158,7 +156,7 @@ public class AuthService {
         return apiKeyService.getStatus(caller.getMerchant());
     }
 
-    public AuthResponse addUserToOwnMerchant(Long callerId, AddMerchantUserRequest request) {
+    public void addUserToOwnMerchant(Long callerId, AddMerchantUserRequest request) {
         User caller = requireOwner(callerId);
 
         if (userRepository.findByEmail(request.email()).isPresent()) {
@@ -169,7 +167,6 @@ public class AuthService {
         User user = new User(request.email(), passwordEncoder.encode(request.password()), Role.MERCHANT, caller.getMerchant());
         userRepository.save(user);
         log.info("Employee self-added by owner {} to merchantId: {}", caller.getEmail(), caller.getMerchant().getId());
-        return issueTokens(user);
     }
 
     /** Lists the human user accounts of the caller's own merchant, for the owner's team-management page. */
@@ -255,12 +252,15 @@ public class AuthService {
         return caller;
     }
 
-    private AuthResponse issueTokens(User user) {
-        List<String> roles = List.of(user.getRole().name());
-        Long merchantId = user.getMerchant() != null ? user.getMerchant().getId() : null;
-        String accessToken = jwtService.generateToken(user.getEmail(), roles, merchantId, user.getId());
+    private AuthTokens issueTokens(User user) {
         String refreshToken = refreshTokenService.createRefreshToken(user);
         log.debug("New access and refresh tokens generated for user: {}", user.getEmail());
-        return new AuthResponse(accessToken, refreshToken);
+        return new AuthTokens(generateAccessToken(user), refreshToken);
+    }
+
+    private String generateAccessToken(User user) {
+        List<String> roles = List.of(user.getRole().name());
+        Long merchantId = user.getMerchant() != null ? user.getMerchant().getId() : null;
+        return jwtService.generateToken(user.getEmail(), roles, merchantId, user.getId());
     }
 }

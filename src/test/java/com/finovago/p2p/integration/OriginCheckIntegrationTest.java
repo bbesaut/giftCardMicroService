@@ -2,7 +2,6 @@ package com.finovago.p2p.integration;
 
 import com.finovago.p2p.AbstractIntegrationTest;
 import com.finovago.p2p.config.PostgresTestcontainerInitializer;
-import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.model.Role;
 import com.finovago.p2p.model.User;
@@ -84,13 +83,10 @@ class OriginCheckIntegrationTest extends AbstractIntegrationTest {
                         .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn();
-        AuthResponse authResponse = objectMapper.readValue(loginResult.getResponse().getContentAsString(), AuthResponse.class);
-        return authResponse.refreshToken();
+        String setCookie = loginResult.getResponse().getHeader("Set-Cookie");
+        return setCookie.substring("refresh_token=".length(), setCookie.indexOf(';'));
     }
 
-    private String refreshBody(String refreshToken) {
-        return "{\"refreshToken\":\"" + refreshToken + "\"}";
-    }
 
     @Test
     @DisplayName("Should refresh when Origin is in the allowlist")
@@ -99,8 +95,7 @@ class OriginCheckIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(post("/api/v1/auth/refresh")
                         .header("Origin", ALLOWED_ORIGIN)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(refreshBody(refreshToken)))
+                        .cookie(refreshCookie(refreshToken)))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Access-Control-Allow-Origin", ALLOWED_ORIGIN))
                 .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
@@ -112,8 +107,7 @@ class OriginCheckIntegrationTest extends AbstractIntegrationTest {
         String refreshToken = loginAndGetRefreshToken();
 
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(refreshBody(refreshToken)))
+                        .cookie(refreshCookie(refreshToken)))
                 .andExpect(status().isOk());
     }
 
@@ -124,15 +118,13 @@ class OriginCheckIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(post("/api/v1/auth/refresh")
                         .header("Origin", FOREIGN_ORIGIN)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(refreshBody(refreshToken)))
+                        .cookie(refreshCookie(refreshToken)))
                 .andExpect(status().isForbidden());
 
         // The refused request must not have consumed the token: it still refreshes from an allowed origin.
         mockMvc.perform(post("/api/v1/auth/refresh")
                         .header("Origin", ALLOWED_ORIGIN)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(refreshBody(refreshToken)))
+                        .cookie(refreshCookie(refreshToken)))
                 .andExpect(status().isOk());
     }
 
@@ -143,14 +135,12 @@ class OriginCheckIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(post("/api/v1/auth/logout")
                         .header("Origin", FOREIGN_ORIGIN)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(refreshBody(refreshToken)))
+                        .cookie(refreshCookie(refreshToken)))
                 .andExpect(status().isForbidden());
 
         mockMvc.perform(post("/api/v1/auth/refresh")
                         .header("Origin", ALLOWED_ORIGIN)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(refreshBody(refreshToken)))
+                        .cookie(refreshCookie(refreshToken)))
                 .andExpect(status().isOk());
     }
 
@@ -161,8 +151,7 @@ class OriginCheckIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(post("/api/v1/auth/logout")
                         .header("Origin", ALLOWED_ORIGIN)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(refreshBody(refreshToken)))
+                        .cookie(refreshCookie(refreshToken)))
                 .andExpect(status().isNoContent());
     }
 

@@ -55,12 +55,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final String CHANGE_PASSWORD_PREFIX = "/api/v1/auth/me/password";
     private static final String PASSWORD_RESET_REQUEST_PREFIX = "/api/v1/auth/password-reset/request";
     private static final String PASSWORD_RESET_CONFIRM_PREFIX = "/api/v1/auth/password-reset/confirm";
+    private static final String REGISTER_PREFIX = "/api/v1/auth/register";
 
     // Unauthenticated endpoints with no identity but the caller's IP to key a bucket on.
     private static final Set<String> IP_KEYED_PREFIXES = Set.of(
         LOGIN_PREFIX,
         PASSWORD_RESET_REQUEST_PREFIX,
-        PASSWORD_RESET_CONFIRM_PREFIX
+        PASSWORD_RESET_CONFIRM_PREFIX,
+        REGISTER_PREFIX
     );
 
     private static final List<String> PROTECTED_PATH_PREFIXES = List.of(
@@ -68,6 +70,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         CHANGE_PASSWORD_PREFIX,
         PASSWORD_RESET_REQUEST_PREFIX,
         PASSWORD_RESET_CONFIRM_PREFIX,
+        REGISTER_PREFIX,
         "/api/v1/giftcards/lookup/",
         "/api/v1/giftcards/redeem",
         "/api/v1/giftcards/reserve",

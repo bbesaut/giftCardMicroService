@@ -9,9 +9,9 @@ import com.finovago.p2p.dto.ChangePasswordRequest;
 import com.finovago.p2p.dto.CurrentUserResponse;
 import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.MerchantUserResponse;
-import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
 import com.finovago.p2p.dto.UserStatusResponse;
+import com.finovago.p2p.exception.MissingRefreshTokenException;
 import com.finovago.p2p.exception.OwnerPrivilegeRequiredException;
 import com.finovago.p2p.exception.SamePasswordException;
 import com.finovago.p2p.exception.SelfDeactivationException;
@@ -20,6 +20,7 @@ import com.finovago.p2p.exception.UserAlreadyExistsException;
 import com.finovago.p2p.exception.UserNotFoundException;
 import com.finovago.p2p.security.CurrentUserContext;
 import com.finovago.p2p.service.AuthService;
+import com.finovago.p2p.service.AuthTokens;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -35,6 +36,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.List;
 
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.annotation.*;
@@ -63,8 +65,8 @@ public class AuthController {
 
     @Operation(
         summary = "User login",
-        description = "Authenticates a user with email and password, returning access and refresh tokens. "
-                    + "The refresh token is also set as an HttpOnly cookie named refresh_token, scoped to /api/v1/auth."
+        description = "Authenticates a user with email and password. Returns the access token in the body; the refresh "
+                    + "token is never in the body and is only set as an HttpOnly cookie named refresh_token, scoped to /api/v1/auth."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Login successful",
@@ -85,9 +87,9 @@ public class AuthController {
         log.info("Login attempt for email: {}", sanitizeEmail(request.email()));
 
         try {
-            AuthResponse response = authService.login(request);
+            AuthTokens tokens = authService.login(request);
             log.info("Login successful for email: {}", sanitizeEmail(request.email()));
-            return withRefreshTokenCookie(response);
+            return sessionResponse(HttpStatus.OK, tokens);
         } catch (BadCredentialsException e) {
             log.warn("Login failed - invalid credentials for email: {}", sanitizeEmail(request.email()));
             throw e;
@@ -96,22 +98,23 @@ public class AuthController {
 
     @Operation(
         summary = "Merchant registration",
-        description = "Creates a new Merchant along with its human owner account (the submitted email/password, "
-                    + "which can log in and manage the merchant's other users). No automated/integration account "
-                    + "is created here - the owner requests an API key explicitly later via POST /me/api-key, "
-                    + "whenever they actually need one. Requires authentication (JWT token) and ADMIN role."
+        description = "Public self-service signup: creates a new Merchant along with its human owner account (the submitted "
+                    + "email/password, which is the owner's login). The owner is logged in straight away: the access "
+                    + "token is returned in the body and the refresh token is set as the HttpOnly refresh_token cookie. "
+                    + "No automated/integration account is created here - the owner requests an API key explicitly later "
+                    + "via POST /me/api-key. Unauthenticated, rate-limited per client IP."
     )
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Registration successful",
+        @ApiResponse(responseCode = "201", description = "Merchant and owner created, owner logged in",
+            headers = @Header(name = "Set-Cookie", description = REFRESH_COOKIE_HEADER_DESCRIPTION,
+                schema = @Schema(type = "string")),
             content = @Content(schema = @Schema(implementation = AuthResponse.class))),
         @ApiResponse(responseCode = "400", description = "Invalid request body (missing or invalid fields)",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"Email should be valid\"}"))),
-        @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token",
-            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Full authentication is required to access this resource\"}"))),
-        @ApiResponse(responseCode = "403", description = "Insufficient permissions (ADMIN role required)",
-            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Forbidden\",\"message\":\"Access is denied\"}"))),
         @ApiResponse(responseCode = "409", description = "Email already registered",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Conflict\",\"message\":\"Email already registered\"}"))),
+        @ApiResponse(responseCode = "429", description = "Too Many Requests - Rate limit exceeded for this IP (max 10 attempts/minute)",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Too Many Requests\",\"message\":\"Too many requests. Please try again later.\"}"))),
         @ApiResponse(responseCode = "500", description = "Internal server error",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
     })
@@ -120,9 +123,9 @@ public class AuthController {
         log.info("Registration attempt for email: {}", sanitizeEmail(request.email()));
 
         try {
-            AuthResponse response = authService.register(request);
+            AuthTokens tokens = authService.register(request);
             log.info("Registration successful for email: {}", sanitizeEmail(request.email()));
-            return ResponseEntity.ok(response);
+            return sessionResponse(HttpStatus.CREATED, tokens);
         } catch (UserAlreadyExistsException e) {
             log.warn("Registration failed - email already exists: {}", sanitizeEmail(request.email()));
             throw e;
@@ -229,8 +232,7 @@ public class AuthController {
                     + "employee, not a service account)."
     )
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "User added successfully",
-            content = @Content(schema = @Schema(implementation = AuthResponse.class))),
+        @ApiResponse(responseCode = "201", description = "User created (no tokens returned - the new user logs in with the password the owner shared)"),
         @ApiResponse(responseCode = "400", description = "Invalid request body (missing or invalid fields)",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"Email should be valid\"}"))),
         @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token",
@@ -243,13 +245,13 @@ public class AuthController {
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
     })
     @PostMapping("/me/users")
-    public ResponseEntity<AuthResponse> addUserToOwnMerchant(@Valid @RequestBody AddMerchantUserRequest request) {
+    public ResponseEntity<Void> addUserToOwnMerchant(@Valid @RequestBody AddMerchantUserRequest request) {
         log.info("Self-service add-user attempt for email: {}", sanitizeEmail(request.email()));
 
         try {
-            AuthResponse response = authService.addUserToOwnMerchant(currentUserContext.currentUserIdOrNull(), request);
+            authService.addUserToOwnMerchant(currentUserContext.currentUserIdOrNull(), request);
             log.info("Self-service user added successfully: {}", sanitizeEmail(request.email()));
-            return ResponseEntity.ok(response);
+            return ResponseEntity.status(HttpStatus.CREATED).build();
         } catch (UserAlreadyExistsException | OwnerPrivilegeRequiredException e) {
             log.warn("Self-service add-user failed: {}", e.getMessage());
             throw e;
@@ -364,16 +366,17 @@ public class AuthController {
 
     @Operation(
         summary = "Refresh access token",
-        description = "Uses a valid refresh token to obtain a new access token and a rotated refresh token. "
-                    + "The old refresh token is automatically revoked after successful rotation."
+        description = "Uses the refresh_token cookie to obtain a new access token (in the body) and a rotated refresh "
+                    + "token (set back as the cookie). The old refresh token is automatically revoked after successful rotation. "
+                    + "No request body is accepted."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Token refreshed successfully",
             headers = @Header(name = "Set-Cookie", description = REFRESH_COOKIE_HEADER_DESCRIPTION,
                 schema = @Schema(type = "string")),
             content = @Content(schema = @Schema(implementation = AuthResponse.class))),
-        @ApiResponse(responseCode = "400", description = "Invalid request body (missing refresh token)",
-            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"Refresh token cannot be blank\"}"))),
+        @ApiResponse(responseCode = "400", description = "refresh_token cookie missing or blank",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"Refresh token cookie is missing\"}"))),
         @ApiResponse(responseCode = "401", description = "Refresh token expired, revoked, or invalid",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Refresh token has expired\"}"))),
         @ApiResponse(responseCode = "403", description = "Origin header present but not in the CORS allowlist (requests without Origin are not checked)",
@@ -382,13 +385,14 @@ public class AuthController {
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
     })
     @PostMapping("/refresh")
-    public ResponseEntity<AuthResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
+    public ResponseEntity<AuthResponse> refresh(
+            @CookieValue(name = RefreshTokenCookieFactory.COOKIE_NAME, required = false) String refreshToken) {
         log.debug("Refresh token attempt");
 
         try {
-            AuthResponse response = authService.refresh(request);
+            AuthTokens tokens = authService.refresh(requireRefreshToken(refreshToken));
             log.info("Token refreshed successfully");
-            return withRefreshTokenCookie(response);
+            return sessionResponse(HttpStatus.OK, tokens);
         } catch (Exception e) {
             log.warn("Refresh failed: {}", e.getMessage());
             throw e;
@@ -398,14 +402,15 @@ public class AuthController {
     @Operation(
         summary = "User logout",
         description = "Revokes the refresh token, invalidating any future token refresh attempts for this token. "
+                    + "The refresh token is read from the refresh_token cookie. No request body is accepted. "
                     + "Returns 204 No Content on success, and clears the refresh_token cookie."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "Logout successful - refresh token revoked, cookie cleared",
             headers = @Header(name = "Set-Cookie", description = "Expires the refresh_token cookie (Max-Age=0)",
                 schema = @Schema(type = "string"))),
-        @ApiResponse(responseCode = "400", description = "Invalid request body (missing refresh token)",
-            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"Refresh token cannot be blank\"}"))),
+        @ApiResponse(responseCode = "400", description = "refresh_token cookie missing or blank",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Bad Request\",\"message\":\"Refresh token cookie is missing\"}"))),
         @ApiResponse(responseCode = "401", description = "Refresh token not found or already revoked",
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Unauthorized\",\"message\":\"Refresh token not found\"}"))),
         @ApiResponse(responseCode = "403", description = "Origin header present but not in the CORS allowlist (requests without Origin are not checked)",
@@ -414,9 +419,10 @@ public class AuthController {
             content = @Content(mediaType = "application/json", schema = @Schema(type = "object", example = "{\"error\":\"Internal Server Error\",\"message\":\"Database error occurred\"}")))
     })
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(@Valid @RequestBody RefreshTokenRequest request) {
+    public ResponseEntity<Void> logout(
+            @CookieValue(name = RefreshTokenCookieFactory.COOKIE_NAME, required = false) String refreshToken) {
         try {
-            authService.logout(request);
+            authService.logout(requireRefreshToken(refreshToken));
             log.info("User logged out successfully");
             return ResponseEntity.noContent()
                     .header(HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.clear().toString())
@@ -427,11 +433,18 @@ public class AuthController {
         }
     }
 
-    /** Returns the tokens in the JSON body (transitional) and also sets the refresh token as an HttpOnly cookie. */
-    private ResponseEntity<AuthResponse> withRefreshTokenCookie(AuthResponse response) {
-        return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.create(response.refreshToken()).toString())
-                .body(response);
+    /** Access token in the JSON body; refresh token only in the HttpOnly refresh_token cookie. */
+    private ResponseEntity<AuthResponse> sessionResponse(HttpStatus status, AuthTokens tokens) {
+        return ResponseEntity.status(status)
+                .header(HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.create(tokens.refreshToken()).toString())
+                .body(new AuthResponse(tokens.accessToken()));
+    }
+
+    private String requireRefreshToken(String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank()) {
+            throw new MissingRefreshTokenException("Refresh token cookie is missing");
+        }
+        return refreshToken;
     }
 
     private String sanitizeEmail(String email) {

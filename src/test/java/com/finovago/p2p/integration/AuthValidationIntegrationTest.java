@@ -197,11 +197,10 @@ class AuthValidationIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("Refresh fails when refreshToken is null")
-    void should_returnBadRequest_when_refreshTokenIsNull() throws Exception {
+    @DisplayName("Refresh fails when the refresh_token cookie is null/empty")
+    void should_returnBadRequest_when_refreshCookieIsEmpty() throws Exception {
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":null}"))
+                        .cookie(refreshCookie("")))
                 .andExpect(status().isBadRequest());
     }
 
@@ -209,8 +208,7 @@ class AuthValidationIntegrationTest extends AbstractIntegrationTest {
     @DisplayName("Refresh fails with invalid token format")
     void should_returnUnauthorized_when_refreshTokenFormatIsInvalid() throws Exception {
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"@@@@invalid@@@@\"}"))
+                        .cookie(refreshCookie("@@@@invalid@@@@")))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -218,8 +216,7 @@ class AuthValidationIntegrationTest extends AbstractIntegrationTest {
     @DisplayName("Refresh fails with random UUID string")
     void should_returnUnauthorized_when_refreshTokenIsRandomUuid() throws Exception {
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"12345678-1234-1234-1234-123456789012\"}"))
+                        .cookie(refreshCookie("12345678-1234-1234-1234-123456789012")))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -227,8 +224,7 @@ class AuthValidationIntegrationTest extends AbstractIntegrationTest {
     @DisplayName("Refresh fails when refreshToken has leading/trailing spaces")
     void should_returnUnauthorized_when_refreshTokenHasSpaces() throws Exception {
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\" valid-token-with-spaces \"}"))
+                        .cookie(refreshCookie(" valid-token-with-spaces ")))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -244,11 +240,10 @@ class AuthValidationIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("Logout fails when refreshToken is null")
-    void should_returnBadRequest_when_logoutRefreshTokenIsNull() throws Exception {
+    @DisplayName("Logout fails when the refresh_token cookie is empty")
+    void should_returnBadRequest_when_logoutRefreshCookieIsEmpty() throws Exception {
         mockMvc.perform(post("/api/v1/auth/logout")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":null}"))
+                        .cookie(refreshCookie("")))
                 .andExpect(status().isBadRequest());
     }
 
@@ -256,8 +251,7 @@ class AuthValidationIntegrationTest extends AbstractIntegrationTest {
     @DisplayName("Logout fails with invalid token")
     void should_returnUnauthorized_when_logoutWithInvalidRefreshToken() throws Exception {
         mockMvc.perform(post("/api/v1/auth/logout")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"invalid-refresh-token\"}"))
+                        .cookie(refreshCookie("invalid-refresh-token")))
                 .andExpect(status().isUnauthorized());
     }
 
