@@ -21,18 +21,19 @@ import lombok.extern.slf4j.Slf4j;
 @Profile("prod")
 public class BrevoApiEmailSender implements EmailSender {
 
-    private static final String BREVO_API_URL = "https://api.brevo.com/v3/smtp/email";
-
     private final RestClient restClient;
+    private final String apiUrl;
     private final String apiKey;
     private final String fromAddress;
 
     public BrevoApiEmailSender(
+            @Value("${app.brevo.api-url:https://api.brevo.com/v3/smtp/email}") String apiUrl,
             @Value("${app.brevo.api-key}") String apiKey,
             @Value("${app.mail.from}") String fromAddress) {
         // Built directly rather than injecting RestClient.Builder: that bean isn't autoconfigured
         // in this Spring Boot 4.1.0 setup, and this is the only caller - no need for a shared bean.
         this.restClient = RestClient.create();
+        this.apiUrl = apiUrl;
         this.apiKey = apiKey;
         this.fromAddress = fromAddress;
     }
@@ -46,7 +47,7 @@ public class BrevoApiEmailSender implements EmailSender {
                 "textContent", body);
 
         restClient.post()
-                .uri(BREVO_API_URL)
+                .uri(apiUrl)
                 .header("api-key", apiKey)
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
