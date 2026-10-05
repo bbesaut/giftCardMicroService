@@ -24,9 +24,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Arrays;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -36,6 +38,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.http.HttpHeaders.AUTHORIZATION;
 import static org.springframework.http.HttpHeaders.SET_COOKIE;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -95,14 +98,15 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void should_loginSuccessfully_and_returnAccessAndRefreshTokens() throws Exception {
+    void should_loginSuccessfully_and_returnAccessTokenOnly_withRefreshTokenInCookie() throws Exception {
         mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.accessToken", notNullValue()))
-                .andExpect(jsonPath("$.refreshToken", notNullValue()));
+                .andExpect(jsonPath("$.refreshToken").doesNotExist())
+                .andExpect(header().string(SET_COOKIE, containsString("refresh_token=")));
     }
 
     @Test
@@ -154,150 +158,129 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void should_refreshTokenSuccessfully_and_returnNewTokens() throws Exception {
-        MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}"))
-                .andExpect(status().isOk())
-                .andReturn();
-
-        String loginResponse = loginResult.getResponse().getContentAsString();
-        AuthResponse authResponse = objectMapper.readValue(loginResponse, AuthResponse.class);
-        String refreshToken = authResponse.refreshToken();
+    void should_refreshFromCookie_and_returnNewAccessTokenOnly() throws Exception {
+        String refreshToken = loginAndGetRefreshToken(EMAIL, PASSWORD);
 
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"" + refreshToken + "\"}"))
+                        .cookie(refreshCookie(refreshToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken", notNullValue()))
-                .andExpect(jsonPath("$.refreshToken", notNullValue()));
+                .andExpect(jsonPath("$.refreshToken").doesNotExist());
     }
 
     @Test
-    void should_returnUnauthorized_when_refreshTokenIsInvalid() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"invalid-refresh-token\"}"))
-                .andExpect(status().isUnauthorized());
-    }
-
-    @Test
-    void should_returnBadRequest_when_refreshTokenIsBlank() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"\"}"))
+    void should_returnBadRequest_when_refreshCookieIsMissing() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh"))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
-    void should_logoutSuccessfully_and_returnNoContent() throws Exception {
-        MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}"))
-                .andExpect(status().isOk())
-                .andReturn();
-
-        String loginResponse = loginResult.getResponse().getContentAsString();
-        AuthResponse authResponse = objectMapper.readValue(loginResponse, AuthResponse.class);
-        String refreshToken = authResponse.refreshToken();
-
-        mockMvc.perform(post("/api/v1/auth/logout")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"" + refreshToken + "\"}"))
-                .andExpect(status().isNoContent());
-    }
-
-    @Test
-    void should_rejectRefreshToken_after_logout() throws Exception {
-        MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}"))
-                .andExpect(status().isOk())
-                .andReturn();
-
-        String loginResponse = loginResult.getResponse().getContentAsString();
-        AuthResponse authResponse = objectMapper.readValue(loginResponse, AuthResponse.class);
-        String refreshToken = authResponse.refreshToken();
-
-        mockMvc.perform(post("/api/v1/auth/logout")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"" + refreshToken + "\"}"))
-                .andExpect(status().isNoContent());
-
+    void should_returnBadRequest_when_refreshCookieIsBlank() throws Exception {
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"" + refreshToken + "\"}"))
-                .andExpect(status().isUnauthorized());
-    }
-
-    @Test
-    void should_returnUnauthorized_when_logoutWithInvalidToken() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/logout")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"invalid-token\"}"))
-                .andExpect(status().isUnauthorized());
-    }
-
-    @Test
-    void should_returnBadRequest_when_logoutWithBlankToken() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/logout")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"\"}"))
+                        .cookie(refreshCookie("")))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
-    void should_setRefreshTokenCookie_matchingJsonBody_when_loginSucceeds() throws Exception {
+    void should_returnBadRequest_when_refreshTokenIsOnlyInBody() throws Exception {
+        String refreshToken = loginAndGetRefreshToken(EMAIL, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + refreshToken + "\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void should_returnUnauthorized_when_refreshCookieIsInvalid() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .cookie(refreshCookie("invalid-refresh-token")))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_logoutFromCookie_and_returnNoContent() throws Exception {
+        String refreshToken = loginAndGetRefreshToken(EMAIL, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .cookie(refreshCookie(refreshToken)))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void should_rejectRefreshCookie_after_logout() throws Exception {
+        String refreshToken = loginAndGetRefreshToken(EMAIL, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .cookie(refreshCookie(refreshToken)))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .cookie(refreshCookie(refreshToken)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_returnUnauthorized_when_logoutCookieIsInvalid() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .cookie(refreshCookie("invalid-token")))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_returnBadRequest_when_logoutCookieIsMissing() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void should_returnBadRequest_when_logoutTokenIsOnlyInBody() throws Exception {
+        String refreshToken = loginAndGetRefreshToken(EMAIL, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + refreshToken + "\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void should_setRefreshTokenCookie_notBody_when_loginSucceeds() throws Exception {
         MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn();
 
-        AuthResponse authResponse = objectMapper.readValue(loginResult.getResponse().getContentAsString(), AuthResponse.class);
         String setCookie = loginResult.getResponse().getHeader(SET_COOKIE);
 
         assertNotNull(setCookie);
-        assertTrue(setCookie.startsWith("refresh_token=" + authResponse.refreshToken() + ";"));
+        assertTrue(setCookie.startsWith("refresh_token="));
         assertRefreshCookieAttributes(setCookie, 604_800);
+        assertFalse(loginResult.getResponse().getContentAsString().contains("refreshToken"));
     }
 
     @Test
     void should_rotateRefreshCookie_when_refreshSucceeds() throws Exception {
-        MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}"))
-                .andExpect(status().isOk())
-                .andReturn();
-        String oldRefreshToken = objectMapper.readValue(loginResult.getResponse().getContentAsString(), AuthResponse.class).refreshToken();
+        String oldRefreshToken = loginAndGetRefreshToken(EMAIL, PASSWORD);
 
         MvcResult refreshResult = mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"" + oldRefreshToken + "\"}"))
+                        .cookie(refreshCookie(oldRefreshToken)))
                 .andExpect(status().isOk())
                 .andReturn();
 
-        AuthResponse refreshed = objectMapper.readValue(refreshResult.getResponse().getContentAsString(), AuthResponse.class);
+        String newRefreshToken = refreshTokenFromCookie(refreshResult);
         String setCookie = refreshResult.getResponse().getHeader(SET_COOKIE);
 
-        assertNotNull(setCookie);
-        assertTrue(setCookie.startsWith("refresh_token=" + refreshed.refreshToken() + ";"));
-        assertNotEquals(oldRefreshToken, refreshed.refreshToken());
+        assertNotEquals(oldRefreshToken, newRefreshToken);
         assertRefreshCookieAttributes(setCookie, 604_800);
     }
 
     @Test
     void should_clearRefreshCookie_when_logoutSucceeds() throws Exception {
-        MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}"))
-                .andExpect(status().isOk())
-                .andReturn();
-        String refreshToken = objectMapper.readValue(loginResult.getResponse().getContentAsString(), AuthResponse.class).refreshToken();
+        String refreshToken = loginAndGetRefreshToken(EMAIL, PASSWORD);
 
         MvcResult logoutResult = mockMvc.perform(post("/api/v1/auth/logout")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"" + refreshToken + "\"}"))
+                        .cookie(refreshCookie(refreshToken)))
                 .andExpect(status().isNoContent())
                 .andReturn();
 
@@ -322,12 +305,20 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
     @Test
     void should_notTouchRefreshCookie_when_logoutFails() throws Exception {
         MvcResult result = mockMvc.perform(post("/api/v1/auth/logout")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"invalid-refresh-token\"}"))
+                        .cookie(refreshCookie("invalid-refresh-token")))
                 .andExpect(status().isUnauthorized())
                 .andReturn();
 
         assertNull(result.getResponse().getHeader(SET_COOKIE));
+    }
+
+    private String loginAndGetRefreshToken(String email, String password) throws Exception {
+        MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + email + "\",\"password\":\"" + password + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        return refreshTokenFromCookie(loginResult);
     }
 
     private void assertRefreshCookieAttributes(String setCookie, long maxAgeSeconds) {
@@ -346,7 +337,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
                             .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.accessToken", notNullValue()))
-                    .andExpect(jsonPath("$.refreshToken", notNullValue()));
+                    .andExpect(jsonPath("$.refreshToken").doesNotExist());
         }
     }
 
@@ -362,7 +353,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         AuthResponse adminAuthResponse = objectMapper.readValue(adminResponse, AuthResponse.class);
 
         assertNotNull(adminAuthResponse.accessToken());
-        assertNotNull(adminAuthResponse.refreshToken());
+        assertNotNull(refreshTokenFromCookie(adminLogin));
 
         MvcResult clientLogin = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -374,7 +365,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         AuthResponse clientAuthResponse = objectMapper.readValue(clientResponse, AuthResponse.class);
 
         assertNotNull(clientAuthResponse.accessToken());
-        assertNotNull(clientAuthResponse.refreshToken());
+        assertNotNull(refreshTokenFromCookie(clientLogin));
     }
 
     @Test
@@ -399,14 +390,12 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
         AuthResponse auth1 = objectMapper.readValue(response1, AuthResponse.class);
         AuthResponse auth2 = objectMapper.readValue(response2, AuthResponse.class);
 
-        // Each login should generate valid tokens
+        // Each login should generate a valid access token
         assertNotNull(auth1.accessToken());
-        assertNotNull(auth1.refreshToken());
         assertNotNull(auth2.accessToken());
-        assertNotNull(auth2.refreshToken());
 
-        // Refresh tokens should be different (they are UUIDs)
-        assertEquals(false, auth1.refreshToken().equals(auth2.refreshToken()));
+        // Refresh tokens travel in the cookie and should be different (they are UUIDs)
+        assertNotEquals(refreshTokenFromCookie(result1), refreshTokenFromCookie(result2));
     }
 
     private String loginAndGetAccessToken(String email, String password) throws Exception {
@@ -421,38 +410,29 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void should_registerSuccessfully_and_returnAccessAndRefreshTokens() throws Exception {
-        String adminAccessToken = loginAndGetAccessToken(VALID_EMAIL, PASSWORD);
+    void should_registerAsPublicSignup_and_logOwnerInWithCookie() throws Exception {
         String newEmail = "newuser@example.com";
-        mockMvc.perform(post("/api/v1/auth/register")
-                        .header(AUTHORIZATION, "Bearer " + adminAccessToken)
+        MvcResult result = mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"New Merchant\"}"))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.accessToken", notNullValue()))
-                .andExpect(jsonPath("$.refreshToken", notNullValue()));
+                .andExpect(jsonPath("$.refreshToken").doesNotExist())
+                .andReturn();
+
+        assertRefreshCookieAttributes(result.getResponse().getHeader(SET_COOKIE), 604_800);
 
         // Verify user was created
         assertNotNull(userRepository.findByEmail(newEmail));
     }
 
     @Test
-    void should_returnUnauthorized_when_registeringWithoutToken() throws Exception {
+    void should_returnBadRequest_when_publicRegisterPasswordIsBlank() throws Exception {
         mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"anonymous@example.com\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"New Merchant\"}"))
-                .andExpect(status().isUnauthorized());
-    }
-
-    @Test
-    void should_returnForbidden_when_registeringAsClient() throws Exception {
-        String clientAccessToken = loginAndGetAccessToken(EMAIL, PASSWORD);
-        mockMvc.perform(post("/api/v1/auth/register")
-                        .header(AUTHORIZATION, "Bearer " + clientAccessToken)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"blockedclient@example.com\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"New Merchant\"}"))
-                .andExpect(status().isForbidden());
+                        .content("{\"email\":\"anonymous@example.com\",\"password\":\"\",\"merchantName\":\"New Merchant\"}"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -513,9 +493,9 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
                         .header(AUTHORIZATION, "Bearer " + adminAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"New Merchant\"}"))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.accessToken", notNullValue()))
-                .andExpect(jsonPath("$.refreshToken", notNullValue()));
+                .andExpect(jsonPath("$.refreshToken").doesNotExist());
 
         User createdOwner = userRepository.findByEmail(newEmail).orElseThrow();
         assertEquals(Role.MERCHANT, createdOwner.getRole());
@@ -690,17 +670,20 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void should_selfServiceAddUser_and_returnAccessAndRefreshTokens_when_callerIsOwner() throws Exception {
+    void should_selfServiceAddUser_return201WithoutTokensOrCookie_when_callerIsOwner() throws Exception {
         String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
         String newEmail = "self-service-employee@example.com";
 
-        mockMvc.perform(post("/api/v1/auth/me/users")
+        MvcResult result = mockMvc.perform(post("/api/v1/auth/me/users")
                         .header(AUTHORIZATION, "Bearer " + ownerAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + newEmail + "\",\"password\":\"" + PASSWORD + "\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken", notNullValue()))
-                .andExpect(jsonPath("$.refreshToken", notNullValue()));
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        assertEquals(0, result.getResponse().getContentAsString().length());
+        // The owner's own browser session must not be touched by creating an employee
+        assertNull(result.getResponse().getHeader(SET_COOKIE));
 
         User createdUser = userRepository.findByEmail(newEmail).orElseThrow();
         assertEquals(merchantId, createdUser.getMerchant().getId());
@@ -751,7 +734,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
                         .header(AUTHORIZATION, "Bearer " + adminAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + otherMerchantOwnerEmail + "\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"Other Merchant\"}"))
-                .andExpect(status().isOk());
+                .andExpect(status().isCreated());
 
         String ownerAccessToken = loginAndGetAccessToken(OWNER_EMAIL, PASSWORD);
         MvcResult result = mockMvc.perform(get("/api/v1/auth/me/users")
@@ -838,7 +821,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
                         .header(AUTHORIZATION, "Bearer " + adminAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + newOwnerEmail + "\",\"password\":\"" + PASSWORD + "\",\"merchantName\":\"Svc Deactivate Merchant\"}"))
-                .andExpect(status().isOk());
+                .andExpect(status().isCreated());
 
         String newOwnerAccessToken = loginAndGetAccessToken(newOwnerEmail, PASSWORD);
         MvcResult keyResult = mockMvc.perform(post("/api/v1/auth/me/api-key")
@@ -886,6 +869,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
         AuthResponse loginResponse = objectMapper.readValue(loginResult.getResponse().getContentAsString(), AuthResponse.class);
+        String refreshTokenBeforeChange = refreshTokenFromCookie(loginResult);
 
         mockMvc.perform(post("/api/v1/auth/me/password")
                         .header(AUTHORIZATION, "Bearer " + loginResponse.accessToken())
@@ -907,8 +891,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
 
         // The refresh token issued before the change is revoked (other sessions logged out).
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"" + loginResponse.refreshToken() + "\"}"))
+                        .cookie(refreshCookie(refreshTokenBeforeChange)))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -934,7 +917,7 @@ class AuthControllerIntegrationTest extends AbstractIntegrationTest {
                         .header(AUTHORIZATION, "Bearer " + ownerAccessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + compliantEmployeeEmail + "\",\"password\":\"" + NEW_PASSWORD + "\"}"))
-                .andExpect(status().isOk());
+                .andExpect(status().isCreated());
         String employeeAccessToken = loginAndGetAccessToken(compliantEmployeeEmail, NEW_PASSWORD);
 
         mockMvc.perform(post("/api/v1/auth/me/password")

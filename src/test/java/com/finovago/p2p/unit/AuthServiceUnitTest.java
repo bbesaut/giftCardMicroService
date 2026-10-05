@@ -18,6 +18,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import org.springframework.security.authentication.BadCredentialsException;
@@ -28,12 +29,10 @@ import com.finovago.p2p.dto.AddMerchantUserRequest;
 import com.finovago.p2p.dto.ApiKeyInfoResponse;
 import com.finovago.p2p.dto.ApiKeyResponse;
 import com.finovago.p2p.dto.ApiKeyStatusResponse;
-import com.finovago.p2p.dto.AuthResponse;
 import com.finovago.p2p.dto.ChangePasswordRequest;
 import com.finovago.p2p.dto.CurrentUserResponse;
 import com.finovago.p2p.dto.LoginRequest;
 import com.finovago.p2p.dto.MerchantUserResponse;
-import com.finovago.p2p.dto.RefreshTokenRequest;
 import com.finovago.p2p.dto.RegisterRequest;
 import com.finovago.p2p.dto.UserStatusResponse;
 import com.finovago.p2p.exception.InactiveAccountException;
@@ -52,6 +51,7 @@ import com.finovago.p2p.repository.UserRepository;
 import com.finovago.p2p.security.JwtService;
 import com.finovago.p2p.service.ApiKeyService;
 import com.finovago.p2p.service.AuthService;
+import com.finovago.p2p.service.AuthTokens;
 import com.finovago.p2p.service.RefreshTokenService;
 
 @ExtendWith(MockitoExtension.class)
@@ -83,7 +83,7 @@ class AuthServiceUnitTest {
     }
 
     @Test
-    void should_returnAuthResponse_when_loginSucceeds() {
+    void should_returnBothTokens_when_loginSucceeds() {
         User user = new User("client@example.com", "hashed", Role.MERCHANT, merchant());
         LoginRequest request = new LoginRequest("client@example.com", "password123");
 
@@ -92,10 +92,10 @@ class AuthServiceUnitTest {
         when(jwtService.generateToken(eq("client@example.com"), anyList(), any(), any())).thenReturn("access-token");
         when(refreshTokenService.createRefreshToken(user)).thenReturn("refresh-token");
 
-        AuthResponse response = authService.login(request);
+        AuthTokens tokens = authService.login(request);
 
-        assertEquals("access-token", response.accessToken());
-        assertEquals("refresh-token", response.refreshToken());
+        assertEquals("access-token", tokens.accessToken());
+        assertEquals("refresh-token", tokens.refreshToken());
     }
 
     @Test
@@ -143,18 +143,17 @@ class AuthServiceUnitTest {
     }
 
     @Test
-    void should_returnNewAuthResponse_when_refreshSucceeds() {
+    void should_returnNewBothTokens_when_refreshSucceeds() {
         User user = new User("client@example.com", "hashed", Role.MERCHANT, merchant());
-        RefreshTokenRequest request = new RefreshTokenRequest("old-refresh-token");
 
         when(refreshTokenService.validateAndRotate("old-refresh-token")).thenReturn(user);
         when(jwtService.generateToken(eq("client@example.com"), anyList(), any(), any())).thenReturn("new-access-token");
         when(refreshTokenService.createRefreshToken(user)).thenReturn("new-refresh-token");
 
-        AuthResponse response = authService.refresh(request);
+        AuthTokens tokens = authService.refresh("old-refresh-token");
 
-        assertEquals("new-access-token", response.accessToken());
-        assertEquals("new-refresh-token", response.refreshToken());
+        assertEquals("new-access-token", tokens.accessToken());
+        assertEquals("new-refresh-token", tokens.refreshToken());
     }
 
     @Test
@@ -162,24 +161,21 @@ class AuthServiceUnitTest {
         Merchant merchant = merchant();
         merchant.setActive(false);
         User user = new User("client@example.com", "hashed", Role.MERCHANT, merchant);
-        RefreshTokenRequest request = new RefreshTokenRequest("old-refresh-token");
 
         when(refreshTokenService.validateAndRotate("old-refresh-token")).thenReturn(user);
 
-        assertThrows(InvalidRefreshTokenException.class, () -> authService.refresh(request));
+        assertThrows(InvalidRefreshTokenException.class, () -> authService.refresh("old-refresh-token"));
     }
 
     @Test
     void should_revokeToken_when_logoutCalled() {
-        RefreshTokenRequest request = new RefreshTokenRequest("some-refresh-token");
-
-        authService.logout(request);
+        authService.logout("some-refresh-token");
 
         verify(refreshTokenService).revoke("some-refresh-token");
     }
 
     @Test
-    void should_returnOwnerAuthResponse_when_registrationSucceeds() {
+    void should_returnOwnerBothTokens_when_registrationSucceeds() {
         RegisterRequest request = new RegisterRequest("newuser@example.com", "password123", "Acme Corp");
 
         when(userRepository.findByEmail("newuser@example.com")).thenReturn(Optional.empty());
@@ -188,10 +184,10 @@ class AuthServiceUnitTest {
         when(jwtService.generateToken(eq("newuser@example.com"), anyList(), any(), any())).thenReturn("access-token");
         when(refreshTokenService.createRefreshToken(any(User.class))).thenReturn("refresh-token");
 
-        AuthResponse response = authService.register(request);
+        AuthTokens tokens = authService.register(request);
 
-        assertEquals("access-token", response.accessToken());
-        assertEquals("refresh-token", response.refreshToken());
+        assertEquals("access-token", tokens.accessToken());
+        assertEquals("refresh-token", tokens.refreshToken());
         verify(merchantRepository).save(any(Merchant.class));
         verify(userRepository).save(argThat(saved -> saved.getEmail().equals("newuser@example.com") && saved.isOwner()));
         verify(userRepository, org.mockito.Mockito.times(1)).save(any(User.class));
@@ -278,7 +274,7 @@ class AuthServiceUnitTest {
     }
 
     @Test
-    void should_returnAuthResponse_when_ownerAddsUserToOwnMerchant() {
+    void should_createEmployeeWithoutIssuingTokens_when_ownerAddsUserToOwnMerchant() {
         Merchant merchant = merchant();
         User owner = owner(1L, merchant);
         AddMerchantUserRequest request = new AddMerchantUserRequest("employee@example.com", "password123");
@@ -286,13 +282,11 @@ class AuthServiceUnitTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
         when(userRepository.findByEmail("employee@example.com")).thenReturn(Optional.empty());
         when(passwordEncoder.encode("password123")).thenReturn("hashed");
-        when(jwtService.generateToken(eq("employee@example.com"), anyList(), any(), any())).thenReturn("access-token");
-        when(refreshTokenService.createRefreshToken(any(User.class))).thenReturn("refresh-token");
 
-        AuthResponse response = authService.addUserToOwnMerchant(1L, request);
+        authService.addUserToOwnMerchant(1L, request);
 
-        assertEquals("access-token", response.accessToken());
         verify(userRepository).save(argThat(saved -> saved.getMerchant() == merchant && !saved.isOwner()));
+        verifyNoInteractions(jwtService, refreshTokenService);
     }
 
     @Test

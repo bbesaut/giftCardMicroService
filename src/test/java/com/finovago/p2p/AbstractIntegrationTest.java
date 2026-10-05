@@ -1,9 +1,15 @@
 package com.finovago.p2p;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
+import jakarta.servlet.http.Cookie;
+
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.web.servlet.MvcResult;
 
 import com.finovago.p2p.config.MailHogTestcontainerInitializer;
 import com.finovago.p2p.config.PostgresTestcontainerInitializer;
@@ -30,4 +36,15 @@ import com.finovago.p2p.config.PostgresTestcontainerInitializer;
 @ActiveProfiles("test")
 @ContextConfiguration(initializers = {PostgresTestcontainerInitializer.class, MailHogTestcontainerInitializer.class})
 public abstract class AbstractIntegrationTest {
+
+    /** Extracts the raw refresh token from the refresh_token Set-Cookie header of a response. */
+    protected String refreshTokenFromCookie(MvcResult result) {
+        String setCookie = result.getResponse().getHeader(HttpHeaders.SET_COOKIE);
+        assertNotNull(setCookie);
+        return setCookie.substring("refresh_token=".length(), setCookie.indexOf(';'));
+    }
+
+    protected Cookie refreshCookie(String refreshToken) {
+        return new Cookie("refresh_token", refreshToken);
+    }
 }

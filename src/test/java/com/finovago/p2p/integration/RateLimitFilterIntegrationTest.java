@@ -122,8 +122,7 @@ class RateLimitFilterIntegrationTest extends AbstractIntegrationTest {
     void shouldNotRateLimit_unprotectedEndpoint() throws Exception {
         for (int i = 0; i < 5; i++) {
             mockMvc.perform(post("/api/v1/auth/refresh")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"refreshToken\":\"non-existent-token\"}"))
+                            .cookie(refreshCookie("non-existent-token")))
                     .andExpect(status().isUnauthorized());
         }
     }

@@ -90,7 +90,7 @@ class PasswordResetControllerIntegrationTest extends AbstractIntegrationTest {
     @Test
     void should_resetPasswordAndRevokeOtherSessions_when_tokenIsValid() throws Exception {
         MvcResult loginResult = performLogin(EMAIL, PASSWORD, status().isOk());
-        String oldRefreshToken = extractField(loginResult, "refreshToken");
+        String oldRefreshToken = refreshTokenFromCookie(loginResult);
 
         mockMvc.perform(post("/api/v1/auth/password-reset/request")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -110,8 +110,7 @@ class PasswordResetControllerIntegrationTest extends AbstractIntegrationTest {
 
         // The refresh token issued before the reset is revoked (other sessions logged out).
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"" + oldRefreshToken + "\"}"))
+                        .cookie(refreshCookie(oldRefreshToken)))
                 .andExpect(status().isUnauthorized());
 
         // The token is single-use: replaying it fails.
@@ -194,10 +193,5 @@ class PasswordResetControllerIntegrationTest extends AbstractIntegrationTest {
                 HttpRequest.newBuilder(URI.create(MailHogTestcontainerInitializer.httpApiBaseUrl() + "/api/v2/messages")).GET().build(),
                 HttpResponse.BodyHandlers.ofString());
         return objectMapper.readTree(response.body());
-    }
-
-    private String extractField(MvcResult result, String fieldName) throws Exception {
-        JsonNode root = objectMapper.readTree(result.getResponse().getContentAsString());
-        return root.get(fieldName).asText();
     }
 }

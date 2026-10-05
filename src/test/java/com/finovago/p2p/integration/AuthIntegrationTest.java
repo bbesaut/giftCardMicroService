@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.finovago.p2p.AbstractIntegrationTest;
@@ -88,40 +89,36 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_rotateRefreshTokenAndRejectOldToken_when_fullAuthFlowIsExercised() throws Exception {
-        String loginBody = mockMvc.perform(post("/api/v1/auth/login")
+        MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken", notNullValue()))
-                .andExpect(jsonPath("$.refreshToken", notNullValue()))
-                .andReturn().getResponse().getContentAsString();
+                .andExpect(jsonPath("$.refreshToken").doesNotExist())
+                .andReturn();
 
-        String firstRefreshToken = extractField(loginBody, "refreshToken");
+        String firstRefreshToken = refreshTokenFromCookie(loginResult);
 
-        String refreshBody = mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"" + firstRefreshToken + "\"}"))
+        MvcResult refreshResult = mockMvc.perform(post("/api/v1/auth/refresh")
+                        .cookie(refreshCookie(firstRefreshToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken", notNullValue()))
-                .andExpect(jsonPath("$.refreshToken", notNullValue()))
-                .andReturn().getResponse().getContentAsString();
+                .andExpect(jsonPath("$.refreshToken").doesNotExist())
+                .andReturn();
 
-        String secondRefreshToken = extractField(refreshBody, "refreshToken");
+        String secondRefreshToken = refreshTokenFromCookie(refreshResult);
         assert !firstRefreshToken.equals(secondRefreshToken) : "refresh token should rotate";
 
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"" + firstRefreshToken + "\"}"))
+                        .cookie(refreshCookie(firstRefreshToken)))
                 .andExpect(status().isUnauthorized());
 
         mockMvc.perform(post("/api/v1/auth/logout")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"" + secondRefreshToken + "\"}"))
+                        .cookie(refreshCookie(secondRefreshToken)))
                 .andExpect(status().isNoContent());
 
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"" + secondRefreshToken + "\"}"))
+                        .cookie(refreshCookie(secondRefreshToken)))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -144,12 +141,5 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
 
         assertTrue(refreshTokenRepository.findById(expired.getId()).isEmpty());
         assertTrue(refreshTokenRepository.findById(stillValid.getId()).isPresent());
-    }
-
-    private String extractField(String json, String field) {
-        String marker = "\"" + field + "\":\"";
-        int start = json.indexOf(marker) + marker.length();
-        int end = json.indexOf('"', start);
-        return json.substring(start, end);
     }
 }

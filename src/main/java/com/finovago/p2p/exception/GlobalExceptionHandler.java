@@ -219,6 +219,18 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(MissingRefreshTokenException.class)
+    public ResponseEntity<Object> handleMissingRefreshTokenException(MissingRefreshTokenException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(Map.of(
+                    "error", "Bad Request",
+                    "message", ex.getMessage()
+                ));
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Object> handleIllegalArgumentException(IllegalArgumentException ex) {
 
