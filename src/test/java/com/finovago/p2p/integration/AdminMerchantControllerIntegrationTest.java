@@ -88,9 +88,9 @@ class AdminMerchantControllerIntegrationTest extends AbstractIntegrationTest {
         merchantAId = merchantA.getId();
         merchantBId = merchantB.getId();
 
-        userRepository.save(new User(ADMIN_EMAIL, passwordEncoder.encode(PASSWORD), Role.ADMIN, null));
-        userRepository.save(new User(OWNER_EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchantA, true));
-        userRepository.save(new User(EMPLOYEE_EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchantA, false));
+        userRepository.save(TestUsers.verified(ADMIN_EMAIL, passwordEncoder.encode(PASSWORD), Role.ADMIN, null));
+        userRepository.save(TestUsers.verified(OWNER_EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchantA, true));
+        userRepository.save(TestUsers.verified(EMPLOYEE_EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchantA, false));
     }
 
     private String loginAndGetAccessToken(String email) throws Exception {

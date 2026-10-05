@@ -48,7 +48,7 @@ class ResponseTimeHeaderIntegrationTest extends AbstractIntegrationTest {
         refreshTokenRepository.deleteAll();
         userRepository.deleteAll();
         Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "merchant@example.com"));
-        userRepository.save(new User(TEST_EMAIL, passwordEncoder.encode(TEST_PASSWORD), Role.MERCHANT, merchant));
+        userRepository.save(TestUsers.verified(TEST_EMAIL, passwordEncoder.encode(TEST_PASSWORD), Role.MERCHANT, merchant));
     }
 
     @Test

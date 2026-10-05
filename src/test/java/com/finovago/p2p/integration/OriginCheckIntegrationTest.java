@@ -74,7 +74,7 @@ class OriginCheckIntegrationTest extends AbstractIntegrationTest {
         giftCardRepository.deleteAll();
         merchantRepository.deleteAll();
         Merchant merchant = merchantRepository.save(new Merchant("Origin Test Merchant", "origin-merchant@example.com"));
-        userRepository.save(new User(EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant));
+        userRepository.save(TestUsers.verified(EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant));
     }
 
     private String loginAndGetRefreshToken() throws Exception {

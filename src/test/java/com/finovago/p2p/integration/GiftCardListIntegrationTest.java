@@ -75,8 +75,8 @@ class GiftCardListIntegrationTest extends AbstractIntegrationTest {
 
         Merchant merchantA = merchantRepository.save(new Merchant("Merchant A", "a@example.com"));
         Merchant merchantB = merchantRepository.save(new Merchant("Merchant B", "b@example.com"));
-        userRepository.save(new User("usera@example.com", passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchantA));
-        userRepository.save(new User("userb@example.com", passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchantB));
+        userRepository.save(TestUsers.verified("usera@example.com", passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchantA));
+        userRepository.save(TestUsers.verified("userb@example.com", passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchantB));
 
         merchantAToken = loginAndGetAccessToken("usera@example.com");
         String merchantBToken = loginAndGetAccessToken("userb@example.com");
@@ -189,7 +189,7 @@ class GiftCardListIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_returnForbidden_whenCallerIsAdmin() throws Exception {
-        userRepository.save(new User("admin@example.com", passwordEncoder.encode(PASSWORD), Role.ADMIN, null));
+        userRepository.save(TestUsers.verified("admin@example.com", passwordEncoder.encode(PASSWORD), Role.ADMIN, null));
         String adminToken = loginAndGetAccessToken("admin@example.com");
 
         mockMvc.perform(get("/api/v1/giftcards").header(AUTHORIZATION, "Bearer " + adminToken))

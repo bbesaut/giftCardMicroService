@@ -1,17 +1,9 @@
 package com.finovago.p2p.integration;
 
 import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finovago.p2p.AbstractIntegrationTest;
-import com.finovago.p2p.config.MailHogTestcontainerInitializer;
 import com.finovago.p2p.config.PostgresTestcontainerInitializer;
 import com.finovago.p2p.model.Merchant;
 import com.finovago.p2p.model.Role;
@@ -32,8 +24,6 @@ import org.springframework.test.web.servlet.ResultMatcher;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -44,9 +34,6 @@ class PasswordResetControllerIntegrationTest extends AbstractIntegrationTest {
     private static final String PASSWORD = "securePassword123";
     private static final String NEW_PASSWORD = "NewStrongP@ssw0rd";
     private static final Pattern TOKEN_PATTERN = Pattern.compile("Reset token: ([0-9a-fA-F-]{36})");
-
-    private final HttpClient httpClient = HttpClient.newHttpClient();
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
     private MockMvc mockMvc;
@@ -82,9 +69,9 @@ class PasswordResetControllerIntegrationTest extends AbstractIntegrationTest {
         giftCardRepository.deleteAll();
         merchantRepository.deleteAll();
         Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "merchant@example.com"));
-        userRepository.save(new User(EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant));
+        userRepository.save(TestUsers.verified(EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant));
 
-        clearMailhogInbox();
+        MailHogInbox.clear();
     }
 
     @Test
@@ -97,7 +84,7 @@ class PasswordResetControllerIntegrationTest extends AbstractIntegrationTest {
                         .content("{\"email\":\"" + EMAIL + "\"}"))
                 .andExpect(status().isAccepted());
 
-        String rawToken = extractTokenFromLatestEmail();
+        String rawToken = MailHogInbox.tokenFromLatestEmail(TOKEN_PATTERN);
 
         mockMvc.perform(post("/api/v1/auth/password-reset/confirm")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -127,7 +114,7 @@ class PasswordResetControllerIntegrationTest extends AbstractIntegrationTest {
                         .content("{\"email\":\"unknown@example.com\"}"))
                 .andExpect(status().isAccepted());
 
-        assertEquals(0, mailhogMessageCount());
+        assertEquals(0, MailHogInbox.messageCount());
     }
 
     @Test
@@ -145,7 +132,7 @@ class PasswordResetControllerIntegrationTest extends AbstractIntegrationTest {
                         .content("{\"email\":\"" + EMAIL + "\"}"))
                 .andExpect(status().isAccepted());
 
-        String rawToken = extractTokenFromLatestEmail();
+        String rawToken = MailHogInbox.tokenFromLatestEmail(TOKEN_PATTERN);
 
         mockMvc.perform(post("/api/v1/auth/password-reset/confirm")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -167,31 +154,5 @@ class PasswordResetControllerIntegrationTest extends AbstractIntegrationTest {
                         .content("{\"email\":\"" + email + "\",\"password\":\"" + password + "\"}"))
                 .andExpect(expectedStatus)
                 .andReturn();
-    }
-
-    private void clearMailhogInbox() throws IOException, InterruptedException {
-        httpClient.send(HttpRequest.newBuilder(URI.create(MailHogTestcontainerInitializer.httpApiBaseUrl() + "/api/v1/messages"))
-                .DELETE()
-                .build(), HttpResponse.BodyHandlers.discarding());
-    }
-
-    private int mailhogMessageCount() throws IOException, InterruptedException {
-        return latestMessagesJson().get("total").asInt();
-    }
-
-    private String extractTokenFromLatestEmail() throws IOException, InterruptedException {
-        JsonNode root = latestMessagesJson();
-        String body = root.get("items").get(0).get("Content").get("Body").asText();
-        assertNotNull(body);
-        Matcher matcher = TOKEN_PATTERN.matcher(body);
-        assertTrue(matcher.find(), "No reset token found in email body: " + body);
-        return matcher.group(1);
-    }
-
-    private JsonNode latestMessagesJson() throws IOException, InterruptedException {
-        HttpResponse<String> response = httpClient.send(
-                HttpRequest.newBuilder(URI.create(MailHogTestcontainerInitializer.httpApiBaseUrl() + "/api/v2/messages")).GET().build(),
-                HttpResponse.BodyHandlers.ofString());
-        return objectMapper.readTree(response.body());
     }
 }

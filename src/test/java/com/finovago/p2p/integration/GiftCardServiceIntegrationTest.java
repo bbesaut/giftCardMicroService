@@ -79,7 +79,7 @@ class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
 
         Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "giftcard-service-test@example.com"));
         merchantId = merchant.getId();
-        userId = userRepository.save(new User("giftcard-service-test@example.com", "hashed", Role.MERCHANT, merchant)).getId();
+        userId = userRepository.save(TestUsers.verified("giftcard-service-test@example.com", "hashed", Role.MERCHANT, merchant)).getId();
 
         AuthenticatedUser authenticatedUser = new AuthenticatedUser("giftcard-service-test@example.com", "MERCHANT", merchantId, userId);
         SecurityContextHolder.getContext().setAuthentication(
@@ -157,7 +157,7 @@ class GiftCardServiceIntegrationTest extends AbstractIntegrationTest
         giftCardService.createGiftCard(new GiftCardCreateRequest(sharedCode, BigDecimal.valueOf(100.0), true, expirationDate));
 
         Merchant otherMerchant = merchantRepository.save(new Merchant("Other Merchant", "other@example.com"));
-        Long otherUserId = userRepository.save(new User("other@example.com", "hashed", Role.MERCHANT, otherMerchant)).getId();
+        Long otherUserId = userRepository.save(TestUsers.verified("other@example.com", "hashed", Role.MERCHANT, otherMerchant)).getId();
         AuthenticatedUser otherUser = new AuthenticatedUser("other@example.com", "MERCHANT", otherMerchant.getId(), otherUserId);
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(otherUser, null, List.of()));
