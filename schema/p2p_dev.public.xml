@@ -26,7 +26,33 @@
             <column ascending="true" name="merchant_id"/>
          </index>
       </table>
-      <table name="flyway_schema_history" numRows="31" remarks="" schema="public" type="TABLE">
+      <table name="email_verification_tokens" numRows="0" remarks="" schema="public" type="TABLE">
+         <column autoUpdated="true" defaultValue="null" digits="0" id="0" name="id" nullable="false" remarks="" size="19" type="int8" typeCode="-5"/>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="1" name="token_hash" nullable="false" remarks="" size="255" type="varchar" typeCode="12"/>
+         <column autoUpdated="false" defaultValue="null" digits="0" id="2" name="user_id" nullable="false" remarks="" size="19" type="int8" typeCode="-5">
+            <parent column="id" foreignKey="fk_email_verification_tokens_user" implied="false" onDeleteCascade="false" schema="public" table="users"/>
+         </column>
+         <column autoUpdated="false" defaultValue="null" digits="6" id="3" name="expiry_date" nullable="false" remarks="" size="29" type="timestamp" typeCode="93"/>
+         <column autoUpdated="false" defaultValue="false" digits="0" id="4" name="used" nullable="false" remarks="" size="1" type="bool" typeCode="-7"/>
+         <column autoUpdated="false" defaultValue="null" digits="6" id="5" name="created_at" nullable="false" remarks="" size="29" type="timestamp" typeCode="93"/>
+         <primaryKey column="id" sequenceNumberInPK="1"/>
+         <index name="email_verification_tokens_pkey" unique="true">
+            <column ascending="true" name="id"/>
+         </index>
+         <index name="email_verification_tokens_token_hash_key" unique="true">
+            <column ascending="true" name="token_hash"/>
+         </index>
+         <index name="idx_email_verification_tokens_expiry_date" unique="false">
+            <column ascending="true" name="expiry_date"/>
+         </index>
+         <index name="idx_email_verification_tokens_token_hash" unique="false">
+            <column ascending="true" name="token_hash"/>
+         </index>
+         <index name="idx_email_verification_tokens_user_id" unique="false">
+            <column ascending="true" name="user_id"/>
+         </index>
+      </table>
+      <table name="flyway_schema_history" numRows="33" remarks="" schema="public" type="TABLE">
          <column autoUpdated="false" defaultValue="null" digits="0" id="0" name="installed_rank" nullable="false" remarks="" size="10" type="int4" typeCode="4"/>
          <column autoUpdated="false" defaultValue="null" digits="0" id="1" name="version" nullable="true" remarks="" size="50" type="varchar" typeCode="12"/>
          <column autoUpdated="false" defaultValue="null" digits="0" id="2" name="description" nullable="false" remarks="" size="200" type="varchar" typeCode="12"/>
@@ -491,6 +517,7 @@
       </table>
       <table name="users" numRows="1" remarks="" schema="public" type="TABLE">
          <column autoUpdated="true" defaultValue="null" digits="0" id="0" name="id" nullable="false" remarks="" size="19" type="int8" typeCode="-5">
+            <child column="user_id" foreignKey="fk_email_verification_tokens_user" implied="false" onDeleteCascade="false" schema="public" table="email_verification_tokens"/>
             <child column="actor_user_id" foreignKey="gift_card_ledger_new_actor_user_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="gift_card_ledger"/>
             <child column="actor_user_id" foreignKey="gift_card_ledger_new_actor_user_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="gift_card_ledger_2026"/>
             <child column="actor_user_id" foreignKey="gift_card_ledger_new_actor_user_id_fkey" implied="false" onDeleteCascade="false" schema="public" table="gift_card_ledger_2027"/>
@@ -509,6 +536,7 @@
          </column>
          <column autoUpdated="false" defaultValue="false" digits="0" id="5" name="is_owner" nullable="false" remarks="" size="1" type="bool" typeCode="-7"/>
          <column autoUpdated="false" defaultValue="true" digits="0" id="6" name="active" nullable="false" remarks="" size="1" type="bool" typeCode="-7"/>
+         <column autoUpdated="false" defaultValue="false" digits="0" id="7" name="email_verified" nullable="false" remarks="" size="1" type="bool" typeCode="-7"/>
          <primaryKey column="id" sequenceNumberInPK="1"/>
          <index name="users_pkey" unique="true">
             <column ascending="true" name="id"/>

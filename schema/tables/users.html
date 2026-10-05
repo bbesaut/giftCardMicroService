@@ -112,6 +112,10 @@
                                     <td>
                                         <table border='0' cellspacing='0' cellpadding='0'>
                                             <tr>
+                                                <td title="email_verification_tokens.user_id references users.id via fk_email_verification_tokens_user"><a href='email_verification_tokens.html'>email_verification_tokens</a><span class='relatedKey'>.user_id</span></td>
+                                                <td class="constraint detail">fk_email_verification_tokens_user<span title='Restrict delete:&#10;Parent cannot be deleted if children exist'>R</span></td>
+                                            </tr>
+                                            <tr>
                                                 <td title="gift_card_ledger.actor_user_id references users.id via gift_card_ledger_new_actor_user_id_fkey"><a href='gift_card_ledger.html'>gift_card_ledger</a><span class='relatedKey'>.actor_user_id</span></td>
                                                 <td class="constraint detail">gift_card_ledger_new_actor_user_id_fkey<span title='Null on delete:&#10;Foreign key to parent set to NULL when parent deleted'>N</span></td>
                                             </tr>
@@ -261,6 +265,23 @@
                                     </td>
                                     <td></td>
                                 </tr>
+                                <tr>
+                                    <td><span id="email_verified">email_verified</span></td>
+                                    <td>bool</td>
+                                    <td>1</td>
+                                    <td title=''></td>
+                                    <td title=''></td>
+                                    <td>false</td>
+                                    <td>
+                                        <table border='0' cellspacing='0' cellpadding='0'>
+                                        </table>
+                                    </td>
+                                    <td>
+                                        <table border='0' cellspacing='0' cellpadding='0'>
+                                        </table>
+                                    </td>
+                                    <td></td>
+                                </tr>
                                 </tbody>
                             </table>
                         </div>
@@ -352,37 +373,39 @@
                                 <div class="tab-content no-padding">
                                     <div class="chart tab-pane active" id="oneDegreeImg-chart" style="position: relative; overflow-x:auto;">
                                         <map id="oneDegreeRelationshipsDiagram" name="oneDegreeRelationshipsDiagram">
-<area shape="rect" id="node1" href="gift_card_ledger.html" target="_top" title="gift_card_ledger" alt="" coords="623,5,845,269">
-<area shape="rect" id="node2" href="users.html" target="_top" title="users" alt="" coords="268,1115,539,1389">
-<area shape="rect" id="node3" href="merchants.html" target="_top" title="merchants" alt="" coords="5,1301,224,1419">
-<area shape="rect" id="node4" href="gift_card_ledger_2026.html" target="_top" title="gift_card_ledger_2026" alt="" coords="599,287,869,551">
-<area shape="rect" id="node5" href="gift_card_ledger_2027.html" target="_top" title="gift_card_ledger_2027" alt="" coords="599,568,869,832">
-<area shape="rect" id="node6" href="gift_card_ledger_2028.html" target="_top" title="gift_card_ledger_2028" alt="" coords="599,1295,869,1559">
-<area shape="rect" id="node7" href="gift_card_ledger_2029.html" target="_top" title="gift_card_ledger_2029" alt="" coords="599,1576,869,1840">
-<area shape="rect" id="node8" href="gift_card_ledger_default.html" target="_top" title="gift_card_ledger_default" alt="" coords="591,1857,877,2121">
-<area shape="rect" id="node9" href="gift_card_ledger_historical.html" target="_top" title="gift_card_ledger_historical" alt="" coords="583,2139,885,2403">
-<area shape="rect" id="node10" href="password_reset_tokens.html" target="_top" title="password_reset_tokens" alt="" coords="592,1072,876,1277">
-<area shape="rect" id="node11" href="refresh_tokens.html" target="_top" title="refresh_tokens" alt="" coords="627,849,841,1055">
+<area shape="rect" id="node1" href="email_verification_tokens.html" target="_top" title="email_verification_tokens" alt="" coords="602,849,898,1055">
+<area shape="rect" id="node2" href="users.html" target="_top" title="users" alt="" coords="268,1295,555,1599">
+<area shape="rect" id="node4" href="merchants.html" target="_top" title="merchants" alt="" coords="5,1496,224,1613">
+<area shape="rect" id="node3" href="gift_card_ledger.html" target="_top" title="gift_card_ledger" alt="" coords="639,5,861,269">
+<area shape="rect" id="node5" href="gift_card_ledger_2026.html" target="_top" title="gift_card_ledger_2026" alt="" coords="615,287,885,551">
+<area shape="rect" id="node6" href="gift_card_ledger_2027.html" target="_top" title="gift_card_ledger_2027" alt="" coords="615,568,885,832">
+<area shape="rect" id="node7" href="gift_card_ledger_2028.html" target="_top" title="gift_card_ledger_2028" alt="" coords="615,1517,885,1781">
+<area shape="rect" id="node8" href="gift_card_ledger_2029.html" target="_top" title="gift_card_ledger_2029" alt="" coords="615,1799,885,2063">
+<area shape="rect" id="node9" href="gift_card_ledger_default.html" target="_top" title="gift_card_ledger_default" alt="" coords="607,2080,893,2344">
+<area shape="rect" id="node10" href="gift_card_ledger_historical.html" target="_top" title="gift_card_ledger_historical" alt="" coords="599,2361,901,2625">
+<area shape="rect" id="node11" href="password_reset_tokens.html" target="_top" title="password_reset_tokens" alt="" coords="608,1072,892,1277">
+<area shape="rect" id="node12" href="refresh_tokens.html" target="_top" title="refresh_tokens" alt="" coords="643,1295,857,1500">
 </map>
                                         <a name='diagram'><img id="oneDegreeImg" src="../diagrams/tables/users.1degree.png" usemap="#oneDegreeRelationshipsDiagram" class="diagram" border="0" align="left"></a>
                                     </div>
                                     <div class="chart tab-pane " id="twodegreesDegreeImg-chart" style="position: relative; overflow-x:auto;">
                                         <map id="twoDegreesRelationshipsDiagram" name="twoDegreesRelationshipsDiagram">
-<area shape="rect" id="node1" href="api_keys.html" target="_top" title="api_keys" alt="" coords="323,699,484,787">
-<area shape="rect" id="node2" href="merchants.html" target="_top" title="merchants" alt="" coords="5,980,224,1097">
-<area shape="rect" id="node3" href="gift_card.html" target="_top" title="gift_card" alt="" coords="322,948,485,1036">
-<area shape="rect" id="node4" href="gift_card_hold.html" target="_top" title="gift_card_hold" alt="" coords="632,5,836,93">
-<area shape="rect" id="node5" href="gift_card_ledger.html" target="_top" title="gift_card_ledger" alt="" coords="623,111,845,375">
-<area shape="rect" id="node6" href="users.html" target="_top" title="users" alt="" coords="268,1125,539,1400">
-<area shape="rect" id="node7" href="gift_card_ledger_2026.html" target="_top" title="gift_card_ledger_2026" alt="" coords="599,673,869,937">
-<area shape="rect" id="node8" href="gift_card_ledger_2027.html" target="_top" title="gift_card_ledger_2027" alt="" coords="599,392,869,656">
-<area shape="rect" id="node9" href="gift_card_ledger_2028.html" target="_top" title="gift_card_ledger_2028" alt="" coords="599,955,869,1219">
-<area shape="rect" id="node10" href="gift_card_ledger_2029.html" target="_top" title="gift_card_ledger_2029" alt="" coords="599,1236,869,1500">
-<area shape="rect" id="node11" href="gift_card_ledger_default.html" target="_top" title="gift_card_ledger_default" alt="" coords="591,1517,877,1781">
-<area shape="rect" id="node12" href="gift_card_ledger_historical.html" target="_top" title="gift_card_ledger_historical" alt="" coords="583,1799,885,2063">
-<area shape="rect" id="node13" href="idempotency_key.html" target="_top" title="idempotency_key" alt="" coords="286,1489,521,1577">
-<area shape="rect" id="node14" href="password_reset_tokens.html" target="_top" title="password_reset_tokens" alt="" coords="592,2080,876,2285">
-<area shape="rect" id="node15" href="refresh_tokens.html" target="_top" title="refresh_tokens" alt="" coords="627,2303,841,2508">
+<area shape="rect" id="node1" href="api_keys.html" target="_top" title="api_keys" alt="" coords="331,719,492,807">
+<area shape="rect" id="node2" href="merchants.html" target="_top" title="merchants" alt="" coords="5,1000,224,1117">
+<area shape="rect" id="node3" href="email_verification_tokens.html" target="_top" title="email_verification_tokens" alt="" coords="602,2303,898,2508">
+<area shape="rect" id="node4" href="users.html" target="_top" title="users" alt="" coords="268,1253,555,1557">
+<area shape="rect" id="node5" href="gift_card.html" target="_top" title="gift_card" alt="" coords="330,968,493,1056">
+<area shape="rect" id="node6" href="gift_card_hold.html" target="_top" title="gift_card_hold" alt="" coords="648,5,852,93">
+<area shape="rect" id="node7" href="gift_card_ledger.html" target="_top" title="gift_card_ledger" alt="" coords="639,392,861,656">
+<area shape="rect" id="node8" href="gift_card_ledger_2026.html" target="_top" title="gift_card_ledger_2026" alt="" coords="615,111,885,375">
+<area shape="rect" id="node9" href="gift_card_ledger_2027.html" target="_top" title="gift_card_ledger_2027" alt="" coords="615,673,885,937">
+<area shape="rect" id="node10" href="gift_card_ledger_2028.html" target="_top" title="gift_card_ledger_2028" alt="" coords="615,955,885,1219">
+<area shape="rect" id="node11" href="gift_card_ledger_2029.html" target="_top" title="gift_card_ledger_2029" alt="" coords="615,1236,885,1500">
+<area shape="rect" id="node12" href="gift_card_ledger_default.html" target="_top" title="gift_card_ledger_default" alt="" coords="607,1517,893,1781">
+<area shape="rect" id="node13" href="gift_card_ledger_historical.html" target="_top" title="gift_card_ledger_historical" alt="" coords="599,1799,901,2063">
+<area shape="rect" id="node14" href="idempotency_key.html" target="_top" title="idempotency_key" alt="" coords="294,1647,529,1735">
+<area shape="rect" id="node15" href="password_reset_tokens.html" target="_top" title="password_reset_tokens" alt="" coords="608,2525,892,2731">
+<area shape="rect" id="node16" href="refresh_tokens.html" target="_top" title="refresh_tokens" alt="" coords="643,2080,857,2285">
 </map>
                                         <a name='diagram'><img id="twodegreesDegreeImg" src="../diagrams/tables/users.2degrees.png" usemap="#twoDegreesRelationshipsDiagram" class="diagram" border="0" align="left"></a>
                                     </div>

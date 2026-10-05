@@ -10,6 +10,7 @@ gift_card_hold
 refresh_tokens
 password_reset_tokens
 idempotency_key
+email_verification_tokens
 api_keys
 gift_card
 users
