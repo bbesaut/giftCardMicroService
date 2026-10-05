@@ -63,7 +63,7 @@ class RateLimitFilterIntegrationTest extends AbstractIntegrationTest {
         refreshTokenRepository.deleteAll();
         userRepository.deleteAll();
         Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "merchant@example.com"));
-        userRepository.save(new User(EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant));
+        userRepository.save(TestUsers.verified(EMAIL, passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchant));
     }
 
     @Test
@@ -122,8 +122,7 @@ class RateLimitFilterIntegrationTest extends AbstractIntegrationTest {
     void shouldNotRateLimit_unprotectedEndpoint() throws Exception {
         for (int i = 0; i < 5; i++) {
             mockMvc.perform(post("/api/v1/auth/refresh")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"refreshToken\":\"non-existent-token\"}"))
+                            .cookie(refreshCookie("non-existent-token")))
                     .andExpect(status().isUnauthorized());
         }
     }

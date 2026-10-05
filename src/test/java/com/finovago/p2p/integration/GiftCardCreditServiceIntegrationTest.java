@@ -105,7 +105,7 @@ class GiftCardCreditServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_credit_an_adjustment_with_reason_persisted_when_caller_is_human() {
-        User human = userRepository.save(new User("employee-credit-test@example.com", "hashed", Role.MERCHANT, merchant, false));
+        User human = userRepository.save(TestUsers.verified("employee-credit-test@example.com", "hashed", Role.MERCHANT, merchant, false));
         authenticateAs(human);
 
         giftCardService.createGiftCard(new GiftCardCreateRequest(CARD_CODE, BigDecimal.valueOf(50.0), true, LocalDate.now().plusYears(1)));
@@ -126,7 +126,7 @@ class GiftCardCreditServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_reject_credit_when_caller_is_authenticated_via_api_key() {
-        User human = userRepository.save(new User("employee-credit-test-2@example.com", "hashed", Role.MERCHANT, merchant, false));
+        User human = userRepository.save(TestUsers.verified("employee-credit-test-2@example.com", "hashed", Role.MERCHANT, merchant, false));
         authenticateAs(human);
         giftCardService.createGiftCard(new GiftCardCreateRequest(CARD_CODE, BigDecimal.valueOf(50.0), true, LocalDate.now().plusYears(1)));
 
@@ -142,12 +142,12 @@ class GiftCardCreditServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void should_throw_exception_when_crediting_another_merchants_card() {
-        User human = userRepository.save(new User("employee-credit-test-3@example.com", "hashed", Role.MERCHANT, merchant, false));
+        User human = userRepository.save(TestUsers.verified("employee-credit-test-3@example.com", "hashed", Role.MERCHANT, merchant, false));
         authenticateAs(human);
         giftCardService.createGiftCard(new GiftCardCreateRequest(CARD_CODE, BigDecimal.valueOf(50.0), true, LocalDate.now().plusYears(1)));
 
         Merchant otherMerchant = merchantRepository.save(new Merchant("Other Merchant", "other-credit-test@example.com"));
-        User otherHuman = userRepository.save(new User("other-credit-test@example.com", "hashed", Role.MERCHANT, otherMerchant, false));
+        User otherHuman = userRepository.save(TestUsers.verified("other-credit-test@example.com", "hashed", Role.MERCHANT, otherMerchant, false));
         AuthenticatedUser otherUser = new AuthenticatedUser(otherHuman.getEmail(), "MERCHANT", otherMerchant.getId(), otherHuman.getId());
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(otherUser, null, List.of()));

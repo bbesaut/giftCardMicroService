@@ -32,6 +32,7 @@ class CorsIntegrationTest extends AbstractIntegrationTest {
 
     private static final String ALLOWED_ORIGIN = "http://localhost:4200";
     private static final String OTHER_ORIGIN = "https://evil.example.com";
+    private static final String UNLISTED_LOCAL_ORIGIN = "http://localhost:3000";
 
     @Autowired
     private MockMvc mockMvc;
@@ -49,7 +50,7 @@ class CorsIntegrationTest extends AbstractIntegrationTest {
                 // Spring echoes the requested header names as the browser sent them (lowercase).
                 .andExpect(header().string("Access-Control-Allow-Headers", containsString("idempotency-key")))
                 .andExpect(header().string("Access-Control-Max-Age", "3600"))
-                .andExpect(header().doesNotExist("Access-Control-Allow-Credentials"));
+                .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
     }
 
     @Test
@@ -106,6 +107,26 @@ class CorsIntegrationTest extends AbstractIntegrationTest {
     void shouldNotApplyCors_outsideApiPath() throws Exception {
         mockMvc.perform(get("/swagger-ui.html").header("Origin", OTHER_ORIGIN))
                 .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
+    }
+
+    @Test
+    @DisplayName("Should reject a preflight from localhost:3000, which is not in the allowlist")
+    void shouldRejectPreflight_fromUnlistedLocalDevPort() throws Exception {
+        mockMvc.perform(options("/api/v1/giftcards/lookup/GC-1")
+                        .header("Origin", UNLISTED_LOCAL_ORIGIN)
+                        .header("Access-Control-Request-Method", "GET"))
+                .andExpect(status().isForbidden())
+                .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
+    }
+
+    @Test
+    @DisplayName("Should not grant credentialed CORS to localhost:3000 on gift card endpoints")
+    void shouldNotAllowCredentials_fromUnlistedLocalDevPort_onGiftCards() throws Exception {
+        mockMvc.perform(get("/api/v1/giftcards/lookup/GC-1")
+                        .header("Origin", UNLISTED_LOCAL_ORIGIN))
+                .andExpect(status().isForbidden())
+                .andExpect(header().doesNotExist("Access-Control-Allow-Origin"))
+                .andExpect(header().doesNotExist("Access-Control-Allow-Credentials"));
     }
 
     @Test

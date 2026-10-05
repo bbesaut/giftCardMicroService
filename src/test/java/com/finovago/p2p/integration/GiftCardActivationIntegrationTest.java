@@ -79,8 +79,8 @@ class GiftCardActivationIntegrationTest extends AbstractIntegrationTest {
         Merchant merchantA = merchantRepository.save(new Merchant("Merchant A", "a@example.com"));
         Merchant merchantB = merchantRepository.save(new Merchant("Merchant B", "b@example.com"));
 
-        userRepository.save(new User("usera@example.com", passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchantA));
-        userRepository.save(new User("userb@example.com", passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchantB));
+        userRepository.save(TestUsers.verified("usera@example.com", passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchantA));
+        userRepository.save(TestUsers.verified("userb@example.com", passwordEncoder.encode(PASSWORD), Role.MERCHANT, merchantB));
 
         merchantAToken = loginAndGetAccessToken("usera@example.com");
         merchantBToken = loginAndGetAccessToken("userb@example.com");

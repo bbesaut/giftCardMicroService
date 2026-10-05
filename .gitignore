@@ -35,3 +35,6 @@ build/
 .env
 .env.prod
 .claude/
+
+# Locally-trusted dev HTTPS keystore (see scripts/generate-dev-cert.ps1) - regenerated per machine.
+certs/

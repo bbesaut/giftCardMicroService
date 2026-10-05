@@ -85,7 +85,7 @@ class GiftCardRefundServiceIntegrationTest extends AbstractIntegrationTest {
 
         Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "giftcard-refund-test@example.com"));
         merchantId = merchant.getId();
-        userId = userRepository.save(new User("giftcard-refund-test@example.com", "hashed", Role.MERCHANT, merchant)).getId();
+        userId = userRepository.save(TestUsers.verified("giftcard-refund-test@example.com", "hashed", Role.MERCHANT, merchant)).getId();
 
         AuthenticatedUser authenticatedUser = new AuthenticatedUser("giftcard-refund-test@example.com", "MERCHANT", merchantId, userId);
         SecurityContextHolder.getContext().setAuthentication(
@@ -162,7 +162,7 @@ class GiftCardRefundServiceIntegrationTest extends AbstractIntegrationTest {
         Long redemptionEntryId = createCardAndRedeem(BigDecimal.valueOf(100.0), BigDecimal.valueOf(40.0));
 
         Merchant otherMerchant = merchantRepository.save(new Merchant("Other Merchant", "other-refund-test@example.com"));
-        Long otherUserId = userRepository.save(new User("other-refund-test@example.com", "hashed", Role.MERCHANT, otherMerchant)).getId();
+        Long otherUserId = userRepository.save(TestUsers.verified("other-refund-test@example.com", "hashed", Role.MERCHANT, otherMerchant)).getId();
         giftCardRepository.save(new GiftCard(otherMerchant, CARD_CODE, BigDecimal.valueOf(10.0), true, LocalDate.now().plusYears(1)));
 
         AuthenticatedUser otherUser = new AuthenticatedUser("other-refund-test@example.com", "MERCHANT", otherMerchant.getId(), otherUserId);
@@ -179,7 +179,7 @@ class GiftCardRefundServiceIntegrationTest extends AbstractIntegrationTest {
         createCardAndRedeem(BigDecimal.valueOf(100.0), BigDecimal.valueOf(40.0));
 
         Merchant otherMerchant = merchantRepository.save(new Merchant("Other Merchant 2", "other-refund-test-2@example.com"));
-        Long otherUserId = userRepository.save(new User("other-refund-test-2@example.com", "hashed", Role.MERCHANT, otherMerchant)).getId();
+        Long otherUserId = userRepository.save(TestUsers.verified("other-refund-test-2@example.com", "hashed", Role.MERCHANT, otherMerchant)).getId();
         AuthenticatedUser otherUser = new AuthenticatedUser("other-refund-test-2@example.com", "MERCHANT", otherMerchant.getId(), otherUserId);
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(otherUser, null, List.of()));

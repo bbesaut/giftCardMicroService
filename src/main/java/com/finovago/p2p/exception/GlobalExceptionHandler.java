@@ -219,6 +219,18 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(MissingRefreshTokenException.class)
+    public ResponseEntity<Object> handleMissingRefreshTokenException(MissingRefreshTokenException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(Map.of(
+                    "error", "Bad Request",
+                    "message", ex.getMessage()
+                ));
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Object> handleIllegalArgumentException(IllegalArgumentException ex) {
 
@@ -276,6 +288,18 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.FORBIDDEN)
                 .body(Map.of(
                     "error", "Forbidden",
+                    "message", ex.getMessage()
+                ));
+    }
+
+    @ExceptionHandler(EmailNotVerifiedException.class)
+    public ResponseEntity<Object> handleEmailNotVerifiedException(EmailNotVerifiedException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(Map.of(
+                    "error", "Email Not Verified",
                     "message", ex.getMessage()
                 ));
     }
@@ -354,6 +378,18 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(InvalidResetTokenException.class)
     public ResponseEntity<Object> handleInvalidResetTokenException(InvalidResetTokenException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(Map.of(
+                    "error", "Bad Request",
+                    "message", ex.getMessage()
+                ));
+    }
+
+    @ExceptionHandler(InvalidVerificationTokenException.class)
+    public ResponseEntity<Object> handleInvalidVerificationTokenException(InvalidVerificationTokenException ex) {
         log.warn(ex.getMessage());
 
         return ResponseEntity

@@ -35,6 +35,15 @@ class OpenApiGroupsIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("Should document the origin guard 403 on refresh and logout in the public-api group")
+    void shouldDocumentOriginGuardForbidden_onRefreshAndLogout_inPublicApiGroup() throws Exception {
+        mockMvc.perform(get("/api-docs/public-api"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paths['/api/v1/auth/refresh'].post.responses.403").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/auth/logout'].post.responses.403").exists());
+    }
+
+    @Test
     @DisplayName("Should document GET /auth/me in the admin-api group, since ADMIN can call it too")
     void shouldDocumentCurrentUserEndpoint_inAdminApiGroup() throws Exception {
         mockMvc.perform(get("/api-docs/admin-api"))

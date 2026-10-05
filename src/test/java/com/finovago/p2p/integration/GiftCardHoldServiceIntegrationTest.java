@@ -90,7 +90,7 @@ class GiftCardHoldServiceIntegrationTest extends AbstractIntegrationTest {
 
         Merchant merchant = merchantRepository.save(new Merchant("Test Merchant", "giftcard-hold-test@example.com"));
         merchantId = merchant.getId();
-        userId = userRepository.save(new User("giftcard-hold-test@example.com", "hashed", Role.MERCHANT, merchant)).getId();
+        userId = userRepository.save(TestUsers.verified("giftcard-hold-test@example.com", "hashed", Role.MERCHANT, merchant)).getId();
 
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(
