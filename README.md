@@ -4,7 +4,7 @@ REST API for issuing, looking up and redeeming gift cards, with multi-tenant sup
 
 ## Stack
 
-- Java 21 / Spring Boot 3.4.2
+- Java 21 / Spring Boot 4.1.0
 - PostgreSQL (docker-compose in dev, Testcontainers in tests, Neon in prod)
 - Flyway for migrations
 - JWT (JJWT), Spring Security
