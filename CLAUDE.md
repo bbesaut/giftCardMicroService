@@ -1,7 +1,7 @@
 # CLAUDE.md - Gift Card Service
 
 ## 📋 Stack
-- Spring Boot 3.4.2 + Java 21
+- Spring Boot 4.1.0 + Java 21
 - PostgreSQL everywhere (dev via docker-compose, test via Testcontainers, prod on Neon)
 - JWT authentication (JJWT)
 - JPA with Lombok
@@ -31,13 +31,13 @@ A plain self-signed cert (`keytool -genkeypair`) was deliberately not used: it's
 Two Maven profiles for different workflows:
 
 **Unit Tests (default)** - `mvn test`
-- 295 unit tests, pure Mockito (no database at all)
+- 303 unit tests, pure Mockito (no database at all)
 - Fast (~30s), no external dependencies
 - Best for: Local TDD, quick feedback loops
 - No Docker required
 
 **Integration Tests** - `mvn test -P integration-tests`
-- 498 tests with real PostgreSQL 17
+- 253 integration tests with real PostgreSQL 17
 - Validates Flyway migrations
 - Matches production database (Neon PostgreSQL 18.4)
 - Requires: Docker installed and running
